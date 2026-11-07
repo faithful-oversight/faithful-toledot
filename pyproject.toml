@@ -1,0 +1,131 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "faithful-toledot"
+version = "0.0.0"
+description = "AD Change Narrative: Turns exported Active Directory change events into a plain-language account of who changed what, when, and from where."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Faithful Oversight, LLC" }]
+keywords = ["active-directory", "audit", "event-logs", "change-tracking", "windows"]
+classifiers = [
+  "Development Status :: 1 - Planning",
+  "Environment :: Console",
+  "Intended Audience :: System Administrators",
+  "Intended Audience :: Information Technology",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Security",
+  "Topic :: System :: Systems Administration",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.scripts]
+toledot = "faithful_toledot.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/faithful-oversight/faithful-toledot"
+Documentation = "https://github.com/faithful-oversight/faithful-toledot/tree/main/docs"
+Issues = "https://github.com/faithful-oversight/faithful-toledot/issues"
+Changelog = "https://github.com/faithful-oversight/faithful-toledot/blob/main/CHANGELOG.md"
+Security = "https://github.com/faithful-oversight/faithful-toledot/blob/main/SECURITY.md"
+
+[dependency-groups]
+dev = [
+  "codespell>=2.4",
+  "cyclonedx-bom>=7",
+  "hypothesis>=6.100",
+  "mypy>=1.15",
+  "pip-audit>=2.9",
+  "pre-commit>=4",
+  "pymarkdownlnt>=0.9.30",
+  "pytest>=8.3",
+  "pytest-cov>=6",
+  "reuse>=5",
+  "ruff>=0.11",
+  "shellcheck-py>=0.10",
+  "twine>=6",
+  "vale>=3.9",
+  "yamllint>=1.37",
+  "zizmor>=1.14",
+  "actionlint-py>=1.7.7",
+]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "docs", "LICENSE", "NOTICE", "README.md", "CHANGELOG.md"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/faithful_toledot"]
+
+[tool.uv]
+required-version = ">=0.8"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "A", "ARG", "B", "BLE", "C4", "C90", "D", "DTZ", "E", "EM", "ERA", "F", "FBT", "FURB",
+  "I", "ISC", "LOG", "N", "PERF", "PGH", "PIE", "PL", "PT", "PTH", "RET", "RSE", "RUF",
+  "S", "SIM", "SLF", "T10", "T20", "TC", "TRY", "UP", "W",
+]
+ignore = [
+  "D203",  # conflicts with D211
+  "D213",  # conflicts with D212
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "PLR2004", "D103"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+files = ["src", "tests", "scripts"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = [
+  "--strict-markers",
+  "--strict-config",
+  "-ra",
+  "--cov=faithful_toledot",
+  "--cov-branch",
+  "--cov-report=term-missing",
+]
+xfail_strict = true
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+source = ["faithful_toledot"]
+branch = true
+
+[tool.coverage.report]
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
+
+[tool.codespell]
+skip = "uv.lock,LICENSE,LICENSES/*,.git,.venv,.vale"
+check-hidden = true

@@ -1,0 +1,40 @@
+# Fast checks before each commit. The full suite runs with scripts/check.sh all.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --locked --no-sync ruff format
+        language: system
+        types: [python]
+      - id: ruff-lint
+        name: ruff check
+        entry: uv run --locked --no-sync ruff check --fix --exit-non-zero-on-fix
+        language: system
+        types: [python]
+      - id: codespell
+        name: codespell
+        entry: uv run --locked --no-sync codespell
+        language: system
+        types: [text]
+      - id: yamllint
+        name: yamllint
+        entry: uv run --locked --no-sync yamllint --strict
+        language: system
+        types: [yaml]
+      - id: pymarkdown
+        name: pymarkdown
+        entry: uv run --locked --no-sync pymarkdown --config .pymarkdown.json scan
+        language: system
+        types: [markdown]
+      - id: gitleaks
+        name: gitleaks
+        entry: gitleaks git --pre-commit --staged --redact --no-banner
+        language: system
+        pass_filenames: false
+      - id: dco-sign-off
+        name: commit is signed off
+        entry: >-
+          bash -c 'grep -q "^Signed-off-by: " "$1" || { echo "Use git commit -s"; exit 1; }' --
+        language: system
+        stages: [commit-msg]

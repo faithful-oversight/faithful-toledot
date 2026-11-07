@@ -1,0 +1,4 @@
+rules:
+  self-repository:
+    # Keep the widely supported ./ form for reusable workflows in this repository.
+    disable: true
