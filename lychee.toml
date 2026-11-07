@@ -1,6 +1,7 @@
-# Link checking for documentation.
+# Link checking for documentation. CI runs lychee on every pull request
+# (local links only) and weekly (all links).
 accept = ["200..=299", "429"]
-exclude_path = [".venv", "LICENSES", "LICENSE"]
+exclude_path = ["\\.venv", "LICENSES", "^LICENSE$"]
 exclude = [
   # Private until public release.
   "^https://github\\.com/faithful-oversight/",
@@ -8,4 +9,3 @@ exclude = [
 ]
 max_retries = 3
 timeout = 20
-include_fragments = true

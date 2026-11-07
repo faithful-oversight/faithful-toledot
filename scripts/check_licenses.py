@@ -41,6 +41,8 @@ def runtime_requirements() -> list[str]:
         [  # noqa: S607 - uv is resolved from PATH by design
             "uv",
             "export",
+            "--color",
+            "never",
             "--locked",
             "--no-dev",
             "--no-emit-project",

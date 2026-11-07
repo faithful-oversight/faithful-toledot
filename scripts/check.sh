@@ -38,7 +38,7 @@ stage_workflows() {
 }
 stage_secrets()   { gitleaks git --redact --no-banner --exit-code 1 .; }
 stage_deps() {
-  uv export --locked --all-groups --no-emit-project --format requirements-txt \
+  uv export --color never --locked --all-groups --no-emit-project --format requirements-txt \
     > "${TMPDIR:-/tmp}/requirements-audit.txt"
   run pip-audit --strict --requirement "${TMPDIR:-/tmp}/requirements-audit.txt" --disable-pip
 }
