@@ -1,0 +1,228 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+  schedule:
+    # Weekly, to catch newly published vulnerabilities and broken links.
+    - cron: "17 9 * * 1"
+  workflow_call:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  UV_LOCKED: "1"
+  FORCE_COLOR: "1"
+
+jobs:
+  static:
+    name: Format, lint, and types
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+      - run: uv sync --locked
+      - run: scripts/check.sh format lint types
+
+  test:
+    name: Test (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python: ["3.11", "3.12", "3.13", "3.14"]
+        # Windows on every run. macOS minutes cost ten times Linux minutes on
+        # private repositories, so macOS runs on main, on schedule, and before
+        # releases, but not on pull requests.
+        include: >-
+          ${{ fromJSON(
+            (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+            && '[{"os": "windows-latest", "python": "3.13"}]'
+            || '[{"os": "windows-latest", "python": "3.13"}, {"os": "macos-latest", "python": "3.13"}]'
+          ) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked
+      - run: scripts/check.sh test
+
+  docs:
+    name: Docs, config, and workflow security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+      - run: uv sync --locked
+      - run: scripts/check.sh docs config reuse
+      - run: scripts/check.sh workflows
+        env:
+          # Only zizmor sees the token. It lets zizmor run its online audits,
+          # such as checks for known-vulnerable actions.
+          GH_TOKEN: ${{ github.token }}
+
+  links:
+    name: Links
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check local links
+        if: github.event_name != 'schedule'
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --config lychee.toml --no-progress --offline './**/*.md'
+          fail: true
+      - name: Check all links, including external ones
+        if: github.event_name == 'schedule'
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --config lychee.toml --no-progress './**/*.md'
+          fail: true
+
+  security:
+    name: Secrets, vulnerabilities, and licenses
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+      - run: |
+          scripts/install_gitleaks.sh "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: uv sync --locked
+      - run: scripts/check.sh secrets deps licenses
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+      - run: uv sync --locked
+      - run: scripts/check.sh build
+      - name: Smoke-test the built wheel in a clean environment
+        run: |
+          uv venv --clear "$RUNNER_TEMP/smoke"
+          uv pip install --python "$RUNNER_TEMP/smoke" dist/*.whl
+          "$RUNNER_TEMP/smoke/bin/toledot" --version
+
+  pull-request:
+    name: Pull request title and sign-off
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read # read the pull request title
+    steps:
+      - uses: amannn/action-semantic-pull-request@2252a14e810aa9b85c2d560bd7070c802206ecf6 # v6.1.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            test
+            refactor
+            perf
+            build
+            ci
+            chore
+            revert
+            security
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Check Developer Certificate of Origin sign-off
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/check_dco.sh "$BASE_SHA" "$HEAD_SHA"
+
+  dependency-review:
+    name: Dependency review
+    # Needs GitHub code security features, which are free once the repository is public.
+    if: github.event_name == 'pull_request' && vars.FO_PUBLIC == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: low
+          # Keep in sync with ALLOWED in scripts/check_licenses.py.
+          allow-licenses: >-
+            0BSD, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, MIT,
+            PSF-2.0, Python-2.0, Unlicense, Zlib
+
+  all-checks-passed:
+    name: All checks passed
+    if: always()
+    needs: [static, test, docs, links, security, build, pull-request, dependency-review]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Fail if any required job failed or was cancelled
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          if echo "$RESULTS" | grep -Eq '"(failure|cancelled)"'; then
+            echo "::error::one or more required jobs did not pass"
+            exit 1
+          fi

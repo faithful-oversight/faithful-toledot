@@ -1,0 +1,11 @@
+# Link checking for documentation.
+accept = ["200..=299", "429"]
+exclude_path = [".venv", "LICENSES", "LICENSE"]
+exclude = [
+  # Private until public release.
+  "^https://github\\.com/faithful-oversight/",
+  "^mailto:",
+]
+max_retries = 3
+timeout = 20
+include_fragments = true
