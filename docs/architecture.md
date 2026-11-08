@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status: planned.** This page describes the intended design. It changes as the design is decided and recorded in [architecture decision records](adr/).
+> **Status: planned.** This page describes the intended design. It changes as the design is decided and recorded in [architecture decision records](adr/index.md).
 
 ## Shape of the tool
 

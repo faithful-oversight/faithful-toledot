@@ -17,16 +17,19 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). 
 
 ## What the workflow does
 
-1. Confirms it runs on `main`, that the version has a dated changelog section, that no tag for the version exists on another commit, and that the **All checks passed** check succeeded on the commit.
-2. Runs the full check suite again.
-3. Builds the wheel and source distribution.
-4. Creates a CycloneDX software bill of materials and a `SHA256SUMS` file.
-5. When the repository is public, publishes to PyPI through trusted publishing.
-6. Creates the `vX.Y.Z` tag on the release commit and a GitHub release with the changelog section as release notes and all artifacts attached. When the repository is public, it also creates build provenance attestations.
+1. **Preflight.** Confirms it runs on `main`, that the version has a dated changelog section, that no tag for the version exists on another commit, and that the **All checks passed** check succeeded on the commit. If CI is still running, for example right after a merge, preflight waits for it, up to 20 minutes.
+2. **Checks.** Runs the full check suite again.
+3. **Build.** Builds the wheel and source distribution once, with the pinned, hash-verified build backend in `requirements-build.txt`, then installs that exact wheel in a clean environment and runs the example end to end. Every later step publishes these same bytes; nothing is rebuilt. Builds are reproducible, so the same commit gives the same bytes.
+4. **Evidence.** Writes a CycloneDX software bill of materials and a `SHA256SUMS` file with `scripts/release_evidence.sh`. The bill of materials takes its timestamp from the commit and has no random serial number. The check suite then builds everything a second time and stops unless every byte, bill of materials included, matches. Because the output depends only on the commit, a rerun of the workflow produces the files a draft already holds.
+5. **Draft.** Creates a draft GitHub release, or reuses the existing draft, and uploads any missing assets. An asset that already exists must have the same SHA-256 as the build. When the repository is public, it also creates build provenance attestations.
+6. **PyPI.** When the repository is public, publishes through trusted publishing, then checks that PyPI holds exactly these bytes.
+7. **Publish.** Checks that the draft targets the release commit and holds every asset with matching digests, then publishes it, which creates the `vX.Y.Z` tag.
+
+The steps that publish are in `scripts/publish_release.py`, which has its own tests.
 
 ## If a release fails partway
 
-Run the workflow again on the same commit. Steps that already finished are skipped: PyPI ignores files it already has, and the tag and release are reused if they exist on that commit.
+Run the workflow again on the same commit. Each step checks the real state rather than assuming it: missing uploads are added, existing files are verified against the build, and the release is published only when complete. If anything already published differs from the build, the workflow stops and says what differs. It never replaces or ignores a difference.
 
 ## Verifying a release
 

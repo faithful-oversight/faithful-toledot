@@ -46,3 +46,12 @@ HTML
 XML
 CLI
 ShellCheck
+Sphinx
+MyST
+Furo
+Zensical
+MkDocs
+PowerShell
+TOML
+CHANGELOG
+[Mm]isspelled

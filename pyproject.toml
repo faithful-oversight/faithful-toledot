@@ -44,8 +44,10 @@ Security = "https://github.com/faithful-oversight/faithful-toledot/blob/main/SEC
 dev = [
   "codespell>=2.4",
   "cyclonedx-bom>=7",
+  "furo>=2025.12.19",
   "hypothesis>=6.100",
   "mypy>=1.15",
+  "myst-parser>=5",
   "pip-audit>=2.9",
   "pre-commit>=4",
   "pymarkdownlnt>=0.9.30",
@@ -54,6 +56,7 @@ dev = [
   "reuse>=5",
   "ruff>=0.11",
   "shellcheck-py>=0.10",
+  "sphinx>=9",
   "twine>=6",
   "vale>=3.9",
   "yamllint>=1.37",
@@ -62,7 +65,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "docs", "LICENSE", "NOTICE", "README.md", "CHANGELOG.md"]
+include = ["src", "tests", "docs", "examples", "LICENSE", "NOTICE", "README.md", "CHANGELOG.md"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/faithful_toledot"]
@@ -87,7 +90,16 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "PLR2004", "D103"]
+"tests/**" = [
+  "S101",     # assert is how pytest checks
+  "PLR2004",  # literal values are clearer in tests
+  "D102",     # test doubles mirror documented interfaces
+  "D103",     # test names describe the test
+  "D107",
+  "ARG002",   # test doubles accept arguments they ignore
+  "EM101",    # short messages in test doubles
+  "TRY003",
+]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
