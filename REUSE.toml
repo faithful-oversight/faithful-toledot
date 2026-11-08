@@ -17,6 +17,9 @@ path = [
   "NOTICE",
   "uv.lock",
   "src/**/py.typed",
+  "**/*.png",
+  "**/*.csv",
+  "**/*.html",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Faithful Oversight, LLC"

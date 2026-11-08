@@ -3,3 +3,4 @@
 *.jpg binary
 *.gz binary
 uv.lock linguist-generated=true
+examples/*/sample-report/** -text

@@ -16,7 +16,7 @@ Every commit must be signed off to certify the [Developer Certificate of Origin]
 Signed-off-by: Your Name <you@example.com>
 ```
 
-The name and email must match the commit author. Continuous integration rejects commits without a valid sign-off.
+The name and email must match the commit author. Continuous integration rejects commits without a valid sign-off. Merge commits are not checked, because pull requests are squash-merged and merge commits never reach `main`. Resolve conflicts by rebasing rather than merging when you can.
 
 ## Set up
 
@@ -49,15 +49,16 @@ Run one stage at a time with `scripts/check.sh <stage>`:
 | `format` | Code formatting (Ruff) |
 | `lint` | Code lint rules, including security rules (Ruff) |
 | `types` | Strict static typing (mypy) |
-| `test` | Unit and property-based tests, with a coverage threshold (pytest, Hypothesis) |
+| `test` | Unit and property-based tests, with at least 95% combined line and branch coverage (pytest, Hypothesis) |
 | `docs` | Markdown structure (PyMarkdown), spelling (codespell), and wording (Vale) |
+| `site` | Documentation site build, with warnings treated as errors (Sphinx) |
 | `config` | YAML style (yamllint), workflow correctness (actionlint), and shell scripts (ShellCheck) |
 | `workflows` | Workflow security (zizmor) |
 | `secrets` | Committed secrets across the full history (Gitleaks) |
 | `deps` | Known vulnerabilities in locked dependencies (pip-audit) |
 | `licenses` | Dependency licenses against the allow list |
 | `reuse` | Copyright and license information on every file (REUSE) |
-| `build` | Package build and metadata (uv, twine) |
+| `build` | Package build with the pinned backend, metadata check, and an end-to-end test of the built wheel (uv, twine) |
 
 ## Commit messages and pull request titles
 

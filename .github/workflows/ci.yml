@@ -85,7 +85,7 @@ jobs:
         with:
           enable-cache: false
       - run: uv sync --locked
-      - run: scripts/check.sh docs config reuse
+      - run: scripts/check.sh docs site config reuse
       - run: scripts/check.sh workflows
         env:
           # Only zizmor sees the token. It lets zizmor run its online audits,
@@ -150,11 +150,6 @@ jobs:
           enable-cache: false
       - run: uv sync --locked
       - run: scripts/check.sh build
-      - name: Smoke-test the built wheel in a clean environment
-        run: |
-          uv venv --clear "$RUNNER_TEMP/smoke"
-          uv pip install --python "$RUNNER_TEMP/smoke" dist/*.whl
-          "$RUNNER_TEMP/smoke/bin/toledot" --version
 
   pull-request:
     name: Pull request title and sign-off
@@ -214,14 +209,15 @@ jobs:
     needs: [static, test, docs, links, security, build, pull-request, dependency-review]
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions: {}
+    permissions:
+      contents: read
     steps:
-      - name: Fail if any required job failed or was cancelled
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Require success from core jobs; allow only intended skips
+        # Core jobs must succeed. Only these may be skipped: pull-request (runs on
+        # pull requests only) and dependency-review (needs a public repository).
         env:
-          RESULTS: ${{ toJSON(needs.*.result) }}
-        run: |
-          echo "$RESULTS"
-          if echo "$RESULTS" | grep -Eq '"(failure|cancelled)"'; then
-            echo "::error::one or more required jobs did not pass"
-            exit 1
-          fi
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 scripts/check_needs.py
