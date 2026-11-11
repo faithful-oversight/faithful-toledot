@@ -268,7 +268,7 @@ def test_a_bad_header_is_an_input_error(
 
 
 def test_unreadable_and_oversized_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    with pytest.raises(InputError, match="cannot read missing.jsonl"):
+    with pytest.raises(InputError, match=r"cannot read missing\.jsonl"):
         next(read_bundle(tmp_path / "missing.jsonl", OPTIONS))
     monkeypatch.setattr(bundle, "MAX_LINE", 2000)
     long_event = replace(member_added(), data={"A": "x" * 5000})

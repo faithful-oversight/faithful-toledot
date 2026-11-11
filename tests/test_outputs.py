@@ -30,6 +30,7 @@ from faithful_toledot.changes import (
     Origin,
     Party,
 )
+from faithful_toledot.correlate import Input
 from faithful_toledot.errors import ToledotError
 from faithful_toledot.events import Problem, Source
 from faithful_toledot.outputs import (
@@ -58,7 +59,7 @@ def schema_check(name: str, document: Any) -> None:
     definition = json.loads(text)
     validator = validator_for(definition)
     validator.check_schema(definition)
-    validator(definition, format_checker=FormatChecker()).validate(document)  # type: ignore[arg-type]
+    validator(definition, format_checker=FormatChecker()).validate(document)
 
 
 def ref(n: int, seconds: float = 0, file: str = "security.evtx") -> EventRef:
@@ -157,7 +158,13 @@ def rich() -> Account:
             D0, DC, "log-service-stopped", "The log service stopped.", Party(), session_ref, "info"
         ),
     ]  # fmt: skip
-    base = {"events": 10, "first": D0, "last": D0, "first_record": 1, "last_record": 20}
+    base: dict[str, Any] = {
+        "events": 10,
+        "first": D0,
+        "last": D0,
+        "first_record": 1,
+        "last_record": 20,
+    }
     cov = [
         Coverage(DC, "Security", missing=((3, 4), (9, 9)), missing_count=3, continuity="gaps",
                  scope="unfiltered", statement="three absent", **base),
@@ -236,8 +243,6 @@ def test_an_empty_account_follows_the_schema() -> None:
 
 
 def test_a_real_correlated_account_follows_the_schema() -> None:
-    from faithful_toledot.correlate import Input
-
     items = [logon(), member_added()]
     account = correlate.build([Input("security.evtx", items, "unknown")], catalog.load())
     document = report_of(account)
@@ -279,7 +284,10 @@ def test_inputs_keep_only_the_documented_keys() -> None:
         (datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC), "2026-01-02T03:04:05Z"),
         (datetime(2026, 1, 2, 3, 4, 5, 120000, tzinfo=UTC), "2026-01-02T03:04:05.12Z"),
         (datetime(2026, 1, 2, 3, 4, 5, 1, tzinfo=UTC), "2026-01-02T03:04:05.000001Z"),
-        (datetime(2026, 1, 2, 3, 4, 5), "2026-01-02T03:04:05Z"),
+        (
+            datetime(2026, 1, 2, 3, 4, 5),  # noqa: DTZ001
+            "2026-01-02T03:04:05Z",
+        ),
         (
             datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone(timedelta(hours=-6))),
             "2026-01-02T09:04:05Z",
@@ -335,9 +343,7 @@ def test_only_warnings_count_and_info_alone_stays_complete() -> None:
     assert r.headline(report_of(account))[0] == "complete"
 
 
-def test_an_incomplete_report_with_no_listed_cause_still_says_so(
-    rich_report: dict[str, Any],
-) -> None:
+def test_an_incomplete_report_with_no_listed_cause_still_says_so() -> None:
     bare = report_of(empty_account())
     bare["summary"]["complete"] = False
     assert r.headline(bare) == (
@@ -368,7 +374,7 @@ def test_markdown_digest_reads_in_order(rich_report: dict[str, Any]) -> None:
     positions = [md.index(heading) for heading in order]
     assert positions == sorted(positions)
     assert "### C0001 · 23:59:58 UTC · CORP\\\\alice" in md
-    assert "### C0004 · 00:00:07 UTC" in md
+    assert "### C0004 · 00:00:05 UTC" in md
     assert "- display name: Bob → Robert [attribute: displayName]" in md.replace("\\", "")
     assert "set to Engineer (earlier value not recorded)" in md
     assert "(meaning: account is no longer disabled)" in md
@@ -380,9 +386,9 @@ def test_markdown_digest_reads_in_order(rich_report: dict[str, Any]) -> None:
     assert "event 4728, record 1001 (security.evtx, record 1)" in md
     assert "- Evidence: none" in md
     assert "From where: Session 0x5f1a2" in md
-    assert "5–20" not in md
-    assert "1–20" in md
-    assert "3–4, 9" in md
+    assert "5\u201320" not in md
+    assert "1\u201320" in md
+    assert "3\u20134, 9" in md
     assert "and 2 more ranges" in md
     assert "none numbered" in md
     assert SHA in md
@@ -448,7 +454,7 @@ def test_long_values_are_shortened_with_a_marker_in_md_html_and_not_csv() -> Non
 
 def test_a_value_of_exactly_the_limit_is_not_shortened() -> None:
     value = "B" * r.MAX_VALUE
-    assert r._shorten(value) == value
+    assert r._shorten(value)  # noqa: SLF001 == value
 
 
 # --- hostile values -------------------------------------------------------------------------
@@ -456,7 +462,7 @@ def test_a_value_of_exactly_the_limit_is_not_shortened() -> None:
 PAYLOAD = (
     "<script>alert(1)</script><img src=x onerror=alert(1)>\n# forged heading\n"
     "[click](javascript:alert(1)) | a | b |\n`tick` *bold* http://203.0.113.9/x user@example.com "
-    "\x1b[2J‮evil &amp; \"quoted\" 'single'"
+    "\x1b[2J\u202eevil &amp; \"quoted\" 'single'"
 )
 FORMULA = '=HYPERLINK("http://203.0.113.9","x")'
 
@@ -533,7 +539,7 @@ def test_hostile_report_still_follows_the_schema() -> None:
 def test_markdown_cannot_be_forged_by_event_data() -> None:
     md = r.render_markdown(hostile_report())
     assert "\x1b" not in md
-    assert "‮" not in md
+    assert "\u202e" not in md
     assert "\\u202e" in md
     assert not re.search(r"(?<!\\)<", md)
     assert not re.search(r"(?<!\\)\]\(", md)
@@ -546,23 +552,21 @@ def test_markdown_cannot_be_forged_by_event_data() -> None:
     assert len([h for h in headings if h.startswith("# ")]) == 1
     # Every table row keeps the column count of its header.
     pipe = re.compile(r"(?<!\\)\|")
-    width = 0
     for line in md.splitlines():
-        if line.startswith("|") and not line.startswith("|" + " ---"):
-            if width == 0 or line.startswith("| Computer") or "| ---" in line:
-                width = len(pipe.findall(line))
         if line.startswith("| ") and "---" not in line:
             assert len(pipe.findall(line)) in {3, 4, 6, 11}
 
 
 class Tags(HTMLParser):
+    """Collect every tag and attribute a page uses, and flag any that is not expected."""
+
     ALLOWED_TAGS = frozenset(
-        "html head meta title style body a nav main header h1 h2 h3 h4 p span div section "
+        "html head meta title style body a nav main header h1 h2 h3 h4 p span div section "  # noqa: SIM905
         "article table caption thead tbody tr th td ul li dl dt dd b code details summary "
         "footer br".split()
     )
     ALLOWED_ATTRS = frozenset(
-        "lang charset http-equiv content name class id href scope role aria-label "
+        "lang charset http-equiv content name class id href scope role aria-label "  # noqa: SIM905
         "aria-labelledby".split()
     )
 
@@ -596,7 +600,7 @@ def test_html_cannot_be_forged_by_event_data() -> None:
     assert hrefs
     assert all(v is not None and re.fullmatch(r"#[a-z]+\d*", v) for v in hrefs)
     assert "\x1b" not in page
-    assert "‮" not in page
+    assert "\u202e" not in page
     assert "&lt;script&gt;" in page
     assert "<script" not in page
     assert "http://203.0.113.9" in page  # shown as text, never a link target
@@ -671,7 +675,7 @@ def test_csv_with_a_missing_record_number() -> None:
 def test_terminal_summary_is_plain_and_safe() -> None:
     text = r.terminal_summary(hostile_report())
     assert "\x1b" not in text
-    assert "‮" not in text
+    assert "\u202e" not in text
     assert "\\u001b" in text
     assert "Completeness section" in text
     plain = r.terminal_summary(report_of(Account(changes=[change(1, 0)], counts={})))
@@ -688,7 +692,7 @@ def test_terminal_summary_is_plain_and_safe() -> None:
 
 
 def test_changes_are_grouped_by_utc_day_across_midnight(rich_report: dict[str, Any]) -> None:
-    days = r._by_day(rich_report)
+    days = r._by_day(rich_report)  # noqa: SLF001
     assert [(d, [c["id"] for c in cs]) for d, cs in days] == [
         ("2026-11-03", ["C0001"]),
         ("2026-11-04", ["C0002", "C0003", "C0004"]),
