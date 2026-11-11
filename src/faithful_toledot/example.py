@@ -21,6 +21,8 @@ DOMAIN_SID = "S-1-5-21-1111111111-2222222222-3333333333"
 START = datetime(2026, 11, 2, 8, 0, 0, tzinfo=UTC)
 FILES = ("dc01-events.jsonl", "dc02-events.jsonl")
 _PROVIDER = "Microsoft-Windows-Security-Auditing"
+_LOG_PROVIDER = "Microsoft-Windows-Eventlog"  # writes 1100-1108 into the Security log
+_LOG_SERVICE_IDS = range(1100, 1109)
 _PEOPLE = {
     "alice.admin": ("1104", "192.0.2.44", "ADMIN-PC7"),
     "helpdesk.sam": ("1131", "192.0.2.61", "HELPDESK-03"),
@@ -67,7 +69,7 @@ class _Log:
                 time=START + timedelta(minutes=minutes),
                 computer=self.computer,
                 channel="Security",
-                provider=_PROVIDER,
+                provider=_LOG_PROVIDER if event_id in _LOG_SERVICE_IDS else _PROVIDER,
                 record_id=self.record,
                 data=data,
                 source=Source("example", f"record {self.record}"),

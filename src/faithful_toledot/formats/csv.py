@@ -399,17 +399,18 @@ class _Converter:
         except NaiveTimestampError:
             msg = (
                 f"{self.name} has times with no UTC offset, such as {text.strip()[:40]!r}. "
-                "Pass the UTC offset those local times use (the local_offset option, for "
-                "example -05:00; note that one fixed offset is wrong across a daylight "
-                "saving change), or re-export with ISO 8601 times that carry an offset, "
-                "for example $_.TimeCreated.ToString('o')"
+                "Pass the UTC offset those local times use (--local-offset -05:00 on the "
+                "command line, local_offset in Python; note that one fixed offset is "
+                "wrong across a daylight saving change), or re-export with ISO 8601 "
+                "times that carry an offset, for example $_.TimeCreated.ToString('o')"
             )
             raise _OptionError(msg) from None
         except AmbiguousDateError:
             msg = (
                 f"{self.name} has dates such as {text.strip()[:40]!r} where the day and "
-                "month could be either way round. Pass the day_first option (true if "
-                "the day comes first, as in 10/11/2026 for 10 November), or re-export "
+                "month could be either way round. Say which comes first (--date-order "
+                "day-first or month-first on the command line, day_first in Python), "
+                "or re-export "
                 "with ISO 8601 times"
             )
             raise _OptionError(msg) from None

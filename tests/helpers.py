@@ -47,7 +47,11 @@ def event(  # noqa: PLR0913 - one argument per event field a test may set
         time=at(seconds),
         computer=computer,
         channel=channel,
-        provider="Microsoft-Windows-Security-Auditing",
+        provider=(
+            "Microsoft-Windows-Eventlog"
+            if 1100 <= event_id <= 1108 or event_id == 104
+            else "Microsoft-Windows-Security-Auditing"
+        ),
         record_id=number,
         data=data,
         source=Source(file, f"record {number}"),

@@ -91,7 +91,8 @@ class Detail:
 
     Attributes:
         label: What was changed, in plain words, such as ``display name``.
-        kind: ``set`` (a new value, old one not recorded), ``changed`` (old and new
+        kind: ``initial`` (a value given to a newly created object), ``set`` (a new
+            value, old one not recorded), ``changed`` (old and new
             recorded), ``added`` or ``removed`` (one value of a list), or ``info``
             (a recorded fact that is not a value change).
         old: The earlier value, when recorded.

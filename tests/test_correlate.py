@@ -588,6 +588,7 @@ def test_a_new_accounts_unset_attributes_are_not_listed() -> None:
     labels = [d.label for d in change.details]
     assert "SAM account name" in labels
     assert "display name" not in labels
+    assert {d.kind for d in change.details if d.label == "SAM account name"} == {"initial"}
     cleared = account(user_changed(DisplayName="%%1793")).changes[0]
     assert [d.new for d in cleared.details] == ["%%1793"]  # on a change, it was cleared
 
@@ -614,6 +615,63 @@ def test_routine_log_events_are_information_not_warnings(
     assert notice.severity == severity
     assert ("Events may be missing" in notice.text) is (severity == "warning")
     assert result.complete is complete
+
+
+@pytest.mark.parametrize(
+    ("data", "text"),
+    [
+        (
+            {"PreviousTime": "2026-11-03T14:00:00Z", "NewTime": "2026-11-03T18:00:00Z"},
+            "The system time was changed from 2026-11-03T14:00:00Z to 2026-11-03T18:00:00Z.",
+        ),
+        (
+            {"PreviousDate": "\u200e11/\u200e3/2026", "PreviousTime": "2:00:00 PM",
+             "NewDate": "11/3/2026", "NewTime": "6:00:00 PM"},
+            "The system time was changed from 11/3/2026 2:00:00 PM to 11/3/2026 6:00:00 PM.",
+        ),
+        ({"NewTime": "2026-11-03T18:00:00Z"}, "The system time was changed."),
+    ],
+)  # fmt: skip
+def test_a_time_change_says_from_and_to(data: dict[str, str], text: str) -> None:
+    (notice,) = account(event(4616, {**SUBJECT, **data})).notices
+    assert notice.text.startswith(text)
+    (service,) = account(event(4616, {**SUBJECT, **data, "SubjectUserSid": "S-1-5-19"})).notices
+    assert service.text == text.replace(
+        "The system time was changed", "A Windows service account adjusted the system time"
+    )
+
+
+def test_dropped_events_carry_their_undocumented_reason() -> None:
+    (notice,) = account(event(1101, {"Reason": "0"})).notices
+    assert notice.text.startswith(
+        "Windows dropped audit events before they were written (reason code 0, not documented"
+    )
+    (bare,) = account(event(1101, {})).notices
+    assert bare.text.startswith("Windows dropped audit events before they were written. ")
+
+
+@pytest.mark.parametrize(
+    ("provider", "channel", "kept"),
+    [
+        ("Microsoft-Windows-Eventlog", "Security", True),
+        ("Eventlog", "", True),
+        ("", "", True),
+        (".NET Runtime Optimization Service", "", False),
+        (".NET Runtime Optimization Service", "Security", False),
+    ],
+)
+def test_an_event_id_counts_only_from_its_own_provider(
+    provider: str, channel: str, *, kept: bool
+) -> None:
+    other = replace(
+        event(1101, {"param1": "failed to compile"}), provider=provider, channel=channel
+    )
+    assert bool(account(other).notices) is kept
+
+
+def test_event_viewer_display_names_match_their_providers() -> None:
+    shown = replace(member_added(), provider="Microsoft Windows security auditing.", channel="")
+    assert len(account(shown).changes) == 1
 
 
 def test_code_lists_in_other_fields_are_put_in_words_only_when_all_are_known() -> None:

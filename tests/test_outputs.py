@@ -112,6 +112,7 @@ def rich() -> Account:
             details=(
                 Detail("display name", "changed", "Bob", "Robert", None, "displayName"),
                 Detail("title", "set", None, "Engineer", None, "title"),
+                Detail("department", "initial", None, "Sales", None, "department"),
             ),
             events=(ref(2, 5), ref(3, 5)),
             origin=Origin("local", logon_id="0x3e7"),
@@ -377,6 +378,7 @@ def test_markdown_digest_reads_in_order(rich_report: dict[str, Any]) -> None:
     assert "### C0004 · 00:00:05 UTC" in md
     assert "- display name: Bob → Robert [attribute: displayName]" in md.replace("\\", "")
     assert "set to Engineer (earlier value not recorded)" in md
+    assert "- department: created as Sales [attribute: department]" in md.replace("\\", "")
     assert "(meaning: account is no longer disabled)" in md
     assert "added SeDebugPrivilege" in md
     assert "removed SeBackupPrivilege" in md
@@ -648,7 +650,7 @@ def test_csv_neutralises_formulas_and_keeps_full_values() -> None:
 
 def test_csv_rows_cover_details_events_and_missing_parts(rich_report: dict[str, Any]) -> None:
     rows = list(csv.DictReader(io.StringIO(r.render_csv(rich_report), newline="")))
-    assert len(rows) == 1 + 2 + 1 + 4 + 1
+    assert len(rows) == 1 + 3 + 1 + 4 + 1
     first = rows[0]
     assert first["detail_label"] == ""
     assert first["origin_address"] == "192.0.2.44"
@@ -727,6 +729,7 @@ def test_html_is_one_self_contained_accessible_page(rich_report: dict[str, Any])
     assert "Notices that bear on completeness" in page
     assert "attribute: <code>displayName</code>" in page
     assert "(earlier value not recorded)" in page
+    assert 'created as <span class="chg"><span class="val">Sales</span></span>' in page
     assert page.count("<h1>") == 1
     ok = r.render_html(report_of(Account(changes=[change(1, 0)], counts={})))
     assert "✔ Complete" in ok

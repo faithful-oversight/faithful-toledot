@@ -58,6 +58,12 @@ def resolve(reference: str) -> str:
     return value
 
 
+def remember(secret: str) -> None:
+    """Remove ``secret`` from text from now on, as for a resolved secret."""
+    if secret:
+        _resolved.add(secret)
+
+
 def redact(text: str) -> str:
     """Remove every secret resolved in this process from ``text``.
 

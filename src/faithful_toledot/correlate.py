@@ -234,10 +234,34 @@ def _take_facts(state: _State, facts: LogFacts) -> None:
         log.overwritten_before = facts.oldest_time
 
 
+def _provider_key(name: str) -> str:
+    """Reduce a provider's name or Event Viewer display text to comparable letters.
+
+    ``Microsoft-Windows-Security-Auditing`` and Event Viewer's ``Microsoft Windows
+    security auditing.`` both become ``securityauditing``.
+    """
+    text = name.casefold().rstrip(".")
+    for prefix in ("microsoft-windows-", "microsoft windows "):
+        text = text.removeprefix(prefix)
+    return "".join(character for character in text if character.isalnum())
+
+
+def _lookup(state: _State, event: Event) -> EventInfo | None:
+    """The catalog entry for an event, or ``None`` when another provider reuses the id.
+
+    Event ids are only unique within a provider: ``.NET Runtime Optimization Service``
+    also writes event 1101, and an Event Viewer CSV export has no channel to tell them apart.
+    """
+    info = state.catalog.event(event.event_id, event.channel or None)
+    if info is None or not event.provider:
+        return info
+    return info if _provider_key(event.provider) == _provider_key(info.provider) else None
+
+
 def _take(state: _State, event: Event, scope: str) -> None:
     """File one event: count it, check for a duplicate, and keep it if it matters."""
     computer = event.computer.casefold()
-    info = state.catalog.event(event.event_id, event.channel or None)
+    info = _lookup(state, event)
     if info is not None and info.category != "logon" and event.record_id is not None:
         key = (computer, event.channel.casefold(), event.record_id)
         digest = _fingerprint(event)
@@ -540,13 +564,38 @@ def _notice(state: _State, event: Event, info: EventInfo) -> Notice:
     else:
         kind, text = info.action, _NOTICE_KINDS.get(info.action, info.title)
     routine = kind in _ROUTINE_NOTICES
-    if kind == "time-changed" and actor.sid in _SERVICE_SIDS:
-        # Windows time synchronisation corrects the clock under a service account.
-        routine, text = True, "The system time was adjusted by a Windows service account."
+    if kind == "time-changed":
+        text = _clock_text(event)
+        if actor.sid in _SERVICE_SIDS:
+            # Windows time synchronisation corrects the clock under a service account.
+            routine = True
+            text = text.replace(
+                "The system time was changed", "A Windows service account adjusted the system time"
+            )
+    elif kind == "events-dropped" and event.data.get("Reason"):
+        text = f"{text[:-1]} (reason code {event.data['Reason']}, not documented by Microsoft)."
     if not routine:
         text += _MISSING
     severity = "info" if routine else "warning"
     return Notice(event.time, event.computer, kind, text, actor, _ref(event), severity)
+
+
+def _clock_text(event: Event) -> str:
+    """Words for a time change, with the old and new times when the event records them.
+
+    Version 1 records ISO 8601 UTC times; version 0 records a local date and a local
+    time as separate text, which is quoted as written.
+    """
+    data = event.data
+
+    def when(prefix: str) -> str:
+        parts = (data.get(f"{prefix}Date", ""), data.get(f"{prefix}Time", ""))
+        return " ".join(part.replace("\u200e", "").strip() for part in parts if part).strip()
+
+    before, after = when("Previous"), when("New")
+    if before and after:
+        return f"The system time was changed from {before} to {after}."
+    return "The system time was changed."
 
 
 # --- details ---------------------------------------------------------------------------
@@ -581,7 +630,7 @@ def _details(state: _State, event: Event, info: EventInfo) -> list[Detail]:
             continue  # nothing changed, or a new object's attribute that has no value
         if attribute.kind == "uac-control" and {"uac-old", "uac-new"} <= uac.keys():
             continue  # the old and new values say the same, without a code table
-        out.append(_attribute_detail(state, attribute, value))
+        out.append(_attribute_detail(state, attribute, value, created=info.action == "created"))
     if {"uac-old", "uac-new"} <= uac.keys() and uac["uac-old"] != uac["uac-new"]:
         out.append(_flags_detail(state, uac["uac-old"], uac["uac-new"], sam=True))
     privileges = info.roles.get("privileges")
@@ -596,11 +645,12 @@ def _details(state: _State, event: Event, info: EventInfo) -> list[Detail]:
     return out
 
 
-def _attribute_detail(state: _State, attribute: Attribute, value: str) -> Detail:
+def _attribute_detail(state: _State, attribute: Attribute, value: str, *, created: bool) -> Detail:
     meaning, confirmed = _meaning(state, value)
     if meaning is not None and not confirmed:
         meaning += _UNDOCUMENTED
-    return Detail(attribute.label, "set", new=value, meaning=meaning, attribute=attribute.field)
+    kind = "initial" if created else "set"
+    return Detail(attribute.label, kind, new=value, meaning=meaning, attribute=attribute.field)
 
 
 def _flags_detail(state: _State, old: str, new: str, *, sam: bool) -> Detail:

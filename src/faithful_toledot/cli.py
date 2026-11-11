@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from faithful_toledot import __version__, catalog, example, outputs, pipeline
+from faithful_toledot.arguments import moment
 from faithful_toledot.collect import cli as collect_cli
 from faithful_toledot.collect.secrets import redact
 from faithful_toledot.errors import InputError, ToledotError
@@ -40,21 +41,6 @@ class ExitCode(IntEnum):
     USAGE = 2
     INPUT_ERROR = 3
     INTERNAL_ERROR = 4
-
-
-def _moment(text: str) -> datetime:
-    """Parse ``--since`` or ``--until``: a date and time that says its UTC offset."""
-    try:
-        value = datetime.fromisoformat(text)
-    except ValueError:
-        value = None
-    if value is None or value.tzinfo is None:
-        msg = (
-            f"{text!r} is not a time with a UTC offset; write it like "
-            "2026-11-03T14:00:00Z or 2026-11-03T08:00:00-06:00"
-        )
-        raise argparse.ArgumentTypeError(msg)
-    return value.astimezone(UTC)
 
 
 def _offset(text: str) -> timedelta:
@@ -106,9 +92,9 @@ def build_parser() -> argparse.ArgumentParser:
         "-f", "--format", type=_formats, default=list(FORMATS), metavar="LIST",
         help="report formats, separated by commas: json, md, html, csv (default: all)",
     )  # fmt: skip
-    report.add_argument("--since", type=_moment, metavar="TIME", help="leave out earlier changes")
+    report.add_argument("--since", type=moment, metavar="TIME", help="leave out earlier changes")
     report.add_argument(
-        "--until", type=_moment, metavar="TIME", help="leave out changes at or after this time"
+        "--until", type=moment, metavar="TIME", help="leave out changes at or after this time"
     )
     report.add_argument(
         "--whole-logs", action="store_true",
@@ -218,11 +204,24 @@ def _example(args: argparse.Namespace) -> int:
     return int(ExitCode.OK)
 
 
+def _join_offsets(argv: Sequence[str]) -> list[str]:
+    """Let ``--local-offset -06:00`` work: argparse would read ``-06:00`` as an option."""
+    joined: list[str] = []
+    waiting = False
+    for item in argv:
+        if waiting and item.startswith("-") and item[1:2].isdigit():
+            joined[-1] = f"--local-offset={item}"
+        else:
+            joined.append(item)
+        waiting = item == "--local-offset"
+    return joined
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the command line and return an exit code."""
     parser = build_parser()
     try:
-        args = parser.parse_args(argv)
+        args = parser.parse_args(_join_offsets(sys.argv[1:] if argv is None else argv))
     except SystemExit as exc:
         code = exc.code
         return int(code) if isinstance(code, int) else int(ExitCode.USAGE)

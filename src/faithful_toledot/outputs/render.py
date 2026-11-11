@@ -144,7 +144,9 @@ def _detail_words(d: dict[str, Any]) -> str:
     """One detail as plain words: what changed, from what, to what."""
     old, new = _shown(d["old"]), _shown(d["new"])
     kind = d["kind"]
-    if kind == "set":
+    if kind == "initial":
+        text = f"created as {new}"
+    elif kind == "set":
         text = f"set to {new} (earlier value not recorded)"
     elif kind == "changed":
         text = f"{old} → {new}"
@@ -521,7 +523,9 @@ def _table(caption: str, head: tuple[str, ...], rows: Iterable[Iterable[str]]) -
 def _h_detail(d: dict[str, Any]) -> str:
     kind = d["kind"]
     old, new = _hv(d["old"]), _hv(d["new"])
-    if kind == "set":
+    if kind == "initial":
+        value = f'created as <span class="chg">{new}</span>'
+    elif kind == "set":
         value = (
             f'set to <span class="chg">{new}</span> '
             '<span class="muted">(earlier value not recorded)</span>'

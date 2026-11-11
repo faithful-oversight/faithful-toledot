@@ -3566,11 +3566,11 @@ action = "events-dropped"
 source = "https://learn.microsoft.com/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/other-events"
 confirmed = false
 userdata = true
-notes = "NO MICROSOFT LEARN PAGE FOUND. The 'Other Events' page and the event-1xxx pages do not list 1101. Title is the standard message text; provider and an empty field list match public sample logs only. Treat as a gap marker, not as a documented schema."
+notes = "NO MICROSOFT LEARN PAGE FOUND. The 'Other Events' page and the event-1xxx pages do not list 1101. Title is the standard message text; the provider and the single Reason element match public sample logs only, and the meaning of Reason values is not documented. Treat as a gap marker, not as a documented schema. Other providers (such as .NET Runtime Optimization Service) also use event id 1101; only Microsoft-Windows-Eventlog's is this event."
 
 [[event.version]]
 version = 0
-fields = []
+fields = ["Reason"]
 
 [[event]]
 id = 1104
@@ -3619,7 +3619,11 @@ action = "time-changed"
 source = "https://learn.microsoft.com/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4616"
 confirmed = true
 labels_complete = true
-notes = "The page documents versions 0 and 1 (version 1 added the process fields) but its sample XML is version 1, so only version 1 is listed: the version 0 element list is not shown and is therefore absent (readers get no field names for version 0). Normal clock corrections are made by LOCAL SERVICE."
+notes = "The page documents versions 0 and 1 but its sample XML is version 1. The version 0 element list is taken from public sample logs, not from Microsoft: it splits each time into a local date and a local time (PreviousDate, PreviousTime, NewDate, NewTime) and also carries the process fields. Normal clock corrections are made by LOCAL SERVICE."
+
+[[event.version]]
+version = 0
+fields = ["SubjectUserSid", "SubjectUserName", "SubjectDomainName", "SubjectLogonId", "PreviousDate", "PreviousTime", "NewDate", "NewTime", "ProcessId", "ProcessName"]
 
 [[event.version]]
 version = 1

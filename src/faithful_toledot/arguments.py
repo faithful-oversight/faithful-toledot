@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: 2026 Faithful Oversight, LLC
+# SPDX-License-Identifier: Apache-2.0
+"""Argument types shared by the commands."""
+
+from __future__ import annotations
+
+import argparse
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+
+def moment(text: str) -> datetime:
+    """Parse a date and time that states its UTC offset, and return it in UTC.
+
+    A time without an offset is refused: read on another computer it would mean
+    another moment.
+    """
+    try:
+        value = datetime.fromisoformat(text)
+    except ValueError:
+        value = None
+    if value is None or value.tzinfo is None:
+        msg = (
+            f"{text!r} is not a time with a UTC offset; write it like "
+            "2026-11-03T14:00:00Z or 2026-11-03T08:00:00-06:00"
+        )
+        raise argparse.ArgumentTypeError(msg)
+    return value.astimezone(UTC)
+
+
+def bounded(low: int, high: int, what: str) -> Callable[[str], int]:
+    """Return an argument type that accepts a whole number from ``low`` to ``high``."""
+
+    def check(text: str) -> int:
+        if not text.isdigit() or not low <= int(text) <= high:
+            msg = f"give {what} from {low} to {high}"
+            raise argparse.ArgumentTypeError(msg)
+        return int(text)
+
+    check.__name__ = what
+    return check
