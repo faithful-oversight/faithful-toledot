@@ -138,8 +138,7 @@ jobs:
       - run: |
           scripts/install_gitleaks.sh "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      # Every optional extra ships to users who ask for it, so its licenses are checked too.
-      - run: uv sync --locked --all-extras
+      - run: uv sync --locked
       - run: scripts/check.sh secrets deps licenses
 
   build:

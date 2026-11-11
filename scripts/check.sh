@@ -71,7 +71,11 @@ stage_deps() {
     > "${TMPDIR:-/tmp}/requirements-audit.txt"
   run pip-audit --strict --requirement "${TMPDIR:-/tmp}/requirements-audit.txt" --disable-pip
 }
-stage_licenses()  { run python scripts/check_licenses.py; }
+stage_licenses() {
+  # Optional extras are dependencies too; install them so their licenses can be read.
+  uv sync --quiet --locked --all-extras
+  run python scripts/check_licenses.py
+}
 stage_reuse()     { run reuse lint; }
 stage_build() {
   rm -rf dist
