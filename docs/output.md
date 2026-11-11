@@ -35,7 +35,7 @@ The headline at the top says one of three things, matching the account's complet
 
 The report also records when it was generated, the toledot version, and the period (`--since` and `--until`). All times are UTC.
 
-The Markdown and HTML reports shorten any value longer than 300 characters and say how long it was. They list at most 25 notices, 25 problems, 20 routine log events, and 100 rows of the coverage table and of the other-events table, then say how many more the JSON report holds. The JSON report and the CSV file always hold full values.
+The Markdown and HTML reports shorten any value longer than 300 characters and say how long it was, but only when the JSON report is written too (it is by default). With `--format` leaving `json` out, they keep every value whole, because nothing else would hold it. They list at most 25 notices, 25 problems, 20 routine log events, and 100 rows of the coverage table and of the other-events table, then say how many more the JSON report holds. The JSON report and the CSV file always hold full values.
 
 ## What complete means
 

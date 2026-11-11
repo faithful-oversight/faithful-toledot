@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import copy
 import csv
 import hashlib
 import io
@@ -476,6 +477,79 @@ def test_long_values_are_shortened_with_a_marker_in_md_html_and_not_csv() -> Non
     assert row["old_value"] == blob
     assert row["new_value"] == blob + "B"
     assert json.loads(render_json(report))["changes"][0]["details"][0]["old"] == blob
+
+
+def long_values_report(rich_report: dict[str, Any]) -> dict[str, Any]:
+    """A report with a value over the limit in a detail, a notice, a problem and a statement."""
+    account = Account(
+        changes=[
+            change(
+                1, 0, details=(Detail("description", "changed", "old", "N" * 300 + "DETAILEND"),)
+            )
+        ],
+        counts={},
+    )
+    report = report_of(account)
+    notice = copy.deepcopy(rich_report["notices"][0])
+    notice["text"] = "A" * 300 + "NOTICEEND"
+    routine = copy.deepcopy(rich_report["notices"][1])
+    routine["text"] = "I" * 300 + "INFOEND"
+    report["notices"] = [notice, routine]
+    report["problems"] = [
+        {
+            "file": "bad.csv",
+            "position": "line 4",
+            "record_id": None,
+            "reason": "P" * 300 + "PROBLEMEND",
+        }
+    ]
+    report["coverage"] = [dict(rich_report["coverage"][0], statement="S" * 300 + "STATEMENTEND")]
+    return report
+
+
+ENDS = ("DETAILEND", "NOTICEEND", "INFOEND", "PROBLEMEND", "STATEMENTEND")
+
+
+@pytest.mark.parametrize(
+    "formats", [["html"], ["md"], ["html", "md"], ["html", "csv"], ["md", "csv"]]
+)
+def test_without_the_json_report_nothing_is_shortened_and_nothing_points_to_it(
+    tmp_path: Path, rich_report: dict[str, Any], formats: list[str]
+) -> None:
+    write_reports(tmp_path, long_values_report(rich_report), formats, force=False)
+    for name in ("toledot-report.html", "toledot-report.md"):
+        path = tmp_path / name
+        if path.exists():
+            text = path.read_text(encoding="utf-8")
+            assert "full value in the JSON report" not in text
+            assert all(end in text for end in ENDS), name
+    assert not (tmp_path / "toledot-report.json").exists()
+
+
+@pytest.mark.parametrize(
+    "formats", [["html", "json"], ["md", "json"], ["json", "md", "html", "csv"]]
+)
+def test_with_the_json_report_long_values_are_shortened_and_the_json_holds_them(
+    tmp_path: Path, rich_report: dict[str, Any], formats: list[str]
+) -> None:
+    write_reports(tmp_path, long_values_report(rich_report), formats, force=False)
+    for name in ("toledot-report.html", "toledot-report.md"):
+        path = tmp_path / name
+        if path.exists():
+            text = path.read_text(encoding="utf-8")
+            assert text.count("full value in the JSON report") == len(ENDS), name
+            assert not any(end in text for end in ENDS), name
+    document = (tmp_path / "toledot-report.json").read_text(encoding="utf-8")
+    assert all(end in document for end in ENDS)
+
+
+def test_the_renderers_shorten_by_default_and_not_when_told_not_to(
+    rich_report: dict[str, Any],
+) -> None:
+    report = long_values_report(rich_report)
+    for render in (r.render_markdown, r.render_html):
+        assert not any(end in render(report) for end in ENDS)
+        assert all(end in render(report, shorten=False) for end in ENDS)
 
 
 def test_a_value_of_exactly_the_limit_is_not_shortened() -> None:

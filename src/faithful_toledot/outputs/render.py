@@ -7,7 +7,8 @@ from event data are untrusted: Markdown is escaped so a value cannot forge a
 heading, link, table, or HTML tag; the HTML page escapes everything, forbids
 scripts and network access, and never puts a value in a URL; CSV cells are
 protected against formula injection. Long values are shortened in Markdown and
-HTML with a visible marker. CSV and JSON keep full values.
+HTML with a visible marker when the JSON report is written beside them, and kept
+whole otherwise. CSV and JSON always keep full values.
 
 The CSV is UTF-8 without a byte order mark and uses ``\r\n`` line ends. A
 spreadsheet that guesses the encoding wrongly can be told it
@@ -116,17 +117,21 @@ def _clock(time: str) -> str:
     return time[11:19] + " UTC"
 
 
-def _shorten(value: str) -> str:
-    """Cut a long value, saying how long it is. The JSON report keeps it whole."""
-    if len(value) <= MAX_VALUE:
+def _shorten(value: str, *, shorten: bool = True) -> str:
+    """Cut a long value, saying how long it is. The JSON report keeps it whole.
+
+    With ``shorten`` false the value is returned whole: the report format that is being
+    written is then the only place the value is, so it must not point elsewhere.
+    """
+    if not shorten or len(value) <= MAX_VALUE:
         return value
     return f"{value[:MAX_VALUE]}… ({len(value)} characters; full value in the JSON report)"
 
 
-def _shown(value: str | None) -> str:
+def _shown(value: str | None, *, shorten: bool = True) -> str:
     if value is None:
         return ""
-    return _shorten(value) if value else "(empty)"
+    return _shorten(value, shorten=shorten) if value else "(empty)"
 
 
 def _span(report: Report) -> str:
@@ -152,9 +157,9 @@ def _records(c: dict[str, Any]) -> str:
     return f"{c['first_record']}\u2013{c['last_record']}"
 
 
-def _detail_words(d: dict[str, Any]) -> str:
+def _detail_words(d: dict[str, Any], *, shorten: bool = True) -> str:
     """One detail as plain words: what changed, from what, to what."""
-    old, new = _shown(d["old"]), _shown(d["new"])
+    old, new = _shown(d["old"], shorten=shorten), _shown(d["new"], shorten=shorten)
     kind = d["kind"]
     if kind == "initial":
         text = f"created as {new}"
@@ -210,15 +215,15 @@ def _split_notices(report: Report) -> tuple[list[dict[str, Any]], list[dict[str,
     )
 
 
-def _md_notice(n: dict[str, Any]) -> str:
+def _md_notice(n: dict[str, Any], *, shorten: bool) -> str:
     return (
         f"- {_md(n['time'])} on {_md(n['computer'])}: {_md(n['kind'])}: "
-        f"{_md(_shorten(n['text']))} By {_md(n['actor']['display'])}. "
+        f"{_md(_shorten(n['text'], shorten=shorten))} By {_md(n['actor']['display'])}. "
         f"Evidence: {_md(_evidence(n['event']))}."
     )
 
 
-def _md_completeness(report: Report) -> list[str]:
+def _md_completeness(report: Report, *, shorten: bool) -> list[str]:
     state, text = headline(report)
     lines = ["## Completeness", "", f"**{_STATE_WORDS[state]}.** {_md(text)}", ""]
     warnings, infos = _split_notices(report)
@@ -230,7 +235,7 @@ def _md_completeness(report: Report) -> list[str]:
             ),
             "",
         ]
-        lines += [_md_notice(n) for n in warnings[:MAX_LISTED]]
+        lines += [_md_notice(n, shorten=shorten) for n in warnings[:MAX_LISTED]]
         if len(warnings) > MAX_LISTED:
             lines.append(f"- {_md(_more(len(warnings), MAX_LISTED))}")
         lines.append("")
@@ -241,7 +246,7 @@ def _md_completeness(report: Report) -> list[str]:
             (
                 c["computer"], c["channel"], c["events"], c["first"] or "", c["last"] or "",
                 _records(c), c["continuity"], c["scope"], _ranges(c["missing"]),
-                _shorten(c["statement"]),
+                _shorten(c["statement"], shorten=shorten),
             )
             for c in coverage[:MAX_ROWS]
         ]  # fmt: skip
@@ -266,7 +271,7 @@ def _md_completeness(report: Report) -> list[str]:
             record = f", record {p['record_id']}" if p["record_id"] is not None else ""
             lines.append(
                 f"- {_md(p['file'])}, {_md(p['position'])}{_md(record)}: "
-                f"{_md(_shorten(p['reason']))}"
+                f"{_md(_shorten(p['reason'], shorten=shorten))}"
             )
         if len(problems) > MAX_LISTED:
             lines.append(f"- {_md(_more(len(problems), MAX_LISTED))}")
@@ -278,7 +283,7 @@ def _md_completeness(report: Report) -> list[str]:
             "These do not suggest missing events.",
             "",
         ]
-        lines += [_md_notice(n) for n in infos[:MAX_INFO]]
+        lines += [_md_notice(n, shorten=shorten) for n in infos[:MAX_INFO]]
         if len(infos) > MAX_INFO:
             lines.append(f"- {_md(_more(len(infos), MAX_INFO))}")
         lines.append("")
@@ -321,7 +326,7 @@ def _md_summary(report: Report) -> list[str]:
     return lines
 
 
-def _md_change(c: dict[str, Any]) -> list[str]:
+def _md_change(c: dict[str, Any], *, shorten: bool) -> list[str]:
     lines = [
         f"### {_md(c['id'])} · {_md(_clock(c['time']))} · {_md(c['sentence'])}",
         "",
@@ -329,7 +334,7 @@ def _md_change(c: dict[str, Any]) -> list[str]:
     ]
     for d in c["details"]:
         attribute = f" [attribute: {d['attribute']}]" if d["attribute"] else ""
-        lines.append(f"- {_md(d['label'])}: {_md(_detail_words(d) + attribute)}")
+        lines.append(f"- {_md(d['label'])}: {_md(_detail_words(d, shorten=shorten) + attribute)}")
     lines.append(f"- From where: {_md(c['origin']['statement'])}")
     if c["related"]:
         lines.append(f"- Related changes: {_md(', '.join(c['related']))}")
@@ -339,8 +344,14 @@ def _md_change(c: dict[str, Any]) -> list[str]:
     return [*lines, ""]
 
 
-def render_markdown(report: Report) -> str:
-    """Render a Markdown digest to read top to bottom or paste into a ticket."""
+def render_markdown(report: Report, *, shorten: bool = True) -> str:
+    """Render a Markdown digest to read top to bottom or paste into a ticket.
+
+    Args:
+        report: The report dictionary.
+        shorten: Cut values over :data:`MAX_VALUE` characters and point to the JSON
+            report. Pass false when the JSON report is not written, so nothing is cut.
+    """
     _, text = headline(report)
     lines = [
         f"# {TITLE}",
@@ -353,7 +364,7 @@ def render_markdown(report: Report) -> str:
         ),
         "",
     ]
-    lines += _md_completeness(report)
+    lines += _md_completeness(report, shorten=shorten)
     lines += _md_summary(report)
     days = _by_day(report)
     if not days:
@@ -361,7 +372,7 @@ def render_markdown(report: Report) -> str:
     for day, changes in days:
         lines += [f"## Changes on {_md(day)} (UTC): {len(changes)}", ""]
         for change in changes:
-            lines += _md_change(change)
+            lines += _md_change(change, shorten=shorten)
     others = report["other_events"]
     if others:
         lines += [
@@ -514,8 +525,8 @@ def _h(value: object) -> str:
     return html.escape(visible(str(value)), quote=True)
 
 
-def _hv(value: str | None) -> str:
-    return f'<span class="val">{_h(_shown(value))}</span>'
+def _hv(value: str | None, *, shorten: bool) -> str:
+    return f'<span class="val">{_h(_shown(value, shorten=shorten))}</span>'
 
 
 def _table(caption: str, head: tuple[str, ...], rows: Iterable[Iterable[str]]) -> str:
@@ -532,9 +543,9 @@ def _table(caption: str, head: tuple[str, ...], rows: Iterable[Iterable[str]]) -
     )
 
 
-def _h_detail(d: dict[str, Any]) -> str:
+def _h_detail(d: dict[str, Any], *, shorten: bool) -> str:
     kind = d["kind"]
-    old, new = _hv(d["old"]), _hv(d["new"])
+    old, new = _hv(d["old"], shorten=shorten), _hv(d["new"], shorten=shorten)
     if kind == "initial":
         value = f'created as <span class="chg">{new}</span>'
     elif kind == "set":
@@ -547,9 +558,9 @@ def _h_detail(d: dict[str, Any]) -> str:
     elif kind == "added":
         value = f'added <span class="chg">{new}</span>'
     elif kind == "removed":
-        value = f'removed <span class="chg">{_hv(d["old"] or d["new"])}</span>'
+        value = f'removed <span class="chg">{_hv(d["old"] or d["new"], shorten=shorten)}</span>'
     else:
-        value = _hv(d["new"] or d["old"])
+        value = _hv(d["new"] or d["old"], shorten=shorten)
     if d["meaning"]:
         value += f' <span class="muted">(meaning: {_h(d["meaning"])})</span>'
     if d["attribute"]:
@@ -559,8 +570,8 @@ def _h_detail(d: dict[str, Any]) -> str:
     return f"<dt>{_h(d['label'])}</dt><dd>{value}</dd>"
 
 
-def _h_change(c: dict[str, Any], index: int, anchors: dict[str, str]) -> str:
-    details = "".join(_h_detail(d) for d in c["details"])
+def _h_change(c: dict[str, Any], index: int, anchors: dict[str, str], *, shorten: bool) -> str:
+    details = "".join(_h_detail(d, shorten=shorten) for d in c["details"])
     related = ", ".join(
         f'<a href="#{anchors[r]}">{_h(r)}</a>' if r in anchors else _h(r) for r in c["related"]
     )
@@ -582,15 +593,15 @@ def _h_change(c: dict[str, Any], index: int, anchors: dict[str, str]) -> str:
     )
 
 
-def _h_notice(n: dict[str, Any]) -> str:
+def _h_notice(n: dict[str, Any], *, shorten: bool) -> str:
     return (
         f"<li><b>{_h(n['kind'])}</b> at {_h(n['time'])} on {_h(n['computer'])}: "
-        f"{_h(_shorten(n['text']))} By {_h(n['actor']['display'])}. "
+        f"{_h(_shorten(n['text'], shorten=shorten))} By {_h(n['actor']['display'])}. "
         f'<span class="muted small">{_h(_evidence(n["event"]))}</span></li>'
     )
 
 
-def _h_completeness(report: Report) -> str:
+def _h_completeness(report: Report, *, shorten: bool) -> str:
     state, text = headline(report)
     icon = "✔" if state == "complete" else "⚠"
     parts = [
@@ -605,17 +616,19 @@ def _h_completeness(report: Report) -> str:
         extra = (
             f"<li>{_h(_more(len(warnings), MAX_LISTED))}</li>" if len(warnings) > MAX_LISTED else ""
         )
+        items = "".join(_h_notice(n, shorten=shorten) for n in warnings[:MAX_LISTED])
         parts.append(
             "<h3>Notices that bear on completeness</h3><p>These events bear on whether the log "
             "can be trusted to be whole.</p>"
-            f'<ul class="list">{"".join(_h_notice(n) for n in warnings[:MAX_LISTED])}{extra}</ul>'
+            f'<ul class="list">{items}{extra}</ul>'
         )
     if infos:
         extra = f"<li>{_h(_more(len(infos), MAX_INFO))}</li>" if len(infos) > MAX_INFO else ""
+        items = "".join(_h_notice(n, shorten=shorten) for n in infos[:MAX_INFO])
         parts.append(
             f"<details><summary>Routine log events ({len(infos)})</summary>"
             "<p>These do not suggest missing events.</p>"
-            f'<ul class="list">{"".join(_h_notice(n) for n in infos[:MAX_INFO])}{extra}</ul>'
+            f'<ul class="list">{items}{extra}</ul>'
             "</details>"
         )
     parts.append("<h3>What each log holds</h3>")
@@ -631,7 +644,7 @@ def _h_completeness(report: Report) -> str:
                 _h(c["continuity"]),
                 _h(c["scope"]),
                 _h(_ranges(c["missing"])),
-                _h(_shorten(c["statement"])),
+                _h(_shorten(c["statement"], shorten=shorten)),
             )
             for c in coverage[:MAX_ROWS]
         ]
@@ -645,7 +658,7 @@ def _h_completeness(report: Report) -> str:
         items = "".join(
             f"<li><code>{_h(p['file'])}</code>, {_h(p['position'])}"
             + (f", record {_h(p['record_id'])}" if p["record_id"] is not None else "")
-            + f": {_h(_shorten(p['reason']))}</li>"
+            + f": {_h(_shorten(p['reason'], shorten=shorten))}</li>"
             for p in problems[:MAX_LISTED]
         )
         extra = (
@@ -715,8 +728,14 @@ def _h_summary(report: Report) -> str:
     return "".join(parts)
 
 
-def render_html(report: Report) -> str:
-    """Render one self-contained page: no scripts, no external requests, no URLs from data."""
+def render_html(report: Report, *, shorten: bool = True) -> str:
+    """Render one self-contained page: no scripts, no external requests, no URLs from data.
+
+    Args:
+        report: The report dictionary.
+        shorten: Cut values over :data:`MAX_VALUE` characters and point to the JSON
+            report. Pass false when the JSON report is not written, so nothing is cut.
+    """
     anchors = {c["id"]: f"c{i}" for i, c in enumerate(report["changes"], start=1)}
     days = _by_day(report)
     if days:
@@ -730,7 +749,7 @@ def render_html(report: Report) -> str:
             cards = []
             for c in items:
                 counter += 1
-                cards.append(_h_change(c, counter, anchors))
+                cards.append(_h_change(c, counter, anchors, shorten=shorten))
             sections.append(
                 f'<section aria-labelledby="dayh{i}"><h3 id="day{i}"><span id="dayh{i}">'
                 f"{_h(day)} (UTC)</span> "
@@ -793,7 +812,7 @@ def render_html(report: Report) -> str:
 <p class="muted">Generated {_h(report["generated_at"])} by toledot {version}. \
 {_h(_span(report))} All times are UTC.</p>
 </header>
-{_h_completeness(report)}
+{_h_completeness(report, shorten=shorten)}
 {_h_summary(report)}
 <h2 id="changes">Changes by day</h2>
 {changes}

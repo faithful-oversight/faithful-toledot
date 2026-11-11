@@ -13,6 +13,7 @@ import hashlib
 import json
 from collections import Counter
 from datetime import UTC, datetime
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from faithful_toledot import narrative
@@ -25,7 +26,7 @@ from faithful_toledot.outputs.render import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Callable, Mapping, Sequence
     from pathlib import Path
 
     from faithful_toledot.changes import Account, EventRef, Party
@@ -317,6 +318,9 @@ def write_reports(
     whatever order ``formats`` gives. The manifest ``toledot-manifest.json`` goes
     last and lists the size and SHA-256 of each file and of each input.
 
+    Markdown and HTML shorten values over 300 characters, and point to the JSON report,
+    only when ``json`` is among ``formats``. Otherwise they hold every value whole.
+
     Raises:
         ToledotError: No format was chosen, a format is unknown, a file exists and
             ``force`` is false, or writing failed. Nothing is left half written.
@@ -328,10 +332,13 @@ def write_reports(
     if not formats:
         msg = "no report format chosen"
         raise ToledotError(msg)
-    renderers = {
+    # Markdown and HTML shorten a long value only to point at the JSON report, so they
+    # do so only when that report is one of the files written.
+    shorten = "json" in formats
+    renderers: dict[str, Callable[[Report], str]] = {
         "json": render_json,
-        "md": render_markdown,
-        "html": render_html,
+        "md": partial(render_markdown, shorten=shorten),
+        "html": partial(render_html, shorten=shorten),
         "csv": render_csv,
     }
     outputs = {FILE_NAMES[f]: renderers[f](report) for f in FILE_NAMES if f in formats}
