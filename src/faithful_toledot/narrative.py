@@ -76,22 +76,37 @@ def party(who: Party | None, *, nothing: str = "an account the event does not na
     return f"{base} ({'; '.join(extras)})" if extras else base
 
 
+_UNLINKED = {
+    "none": "The event names no logon session, so where it came from is not recorded.",
+    "local": "Made by the computer's own system session ({id}).",
+    "restarted": (
+        "Session {id} was logged on before Windows restarted or its log service stopped. "
+        "Logon IDs are only unique between restarts, so that logon is not taken as where "
+        "this change came from."
+    ),
+    "conflicting": (
+        "The input holds two different logons for session {id} at the same moment, so "
+        "where this change came from is not known."
+    ),
+    "other-account": (
+        "The logon recorded for session {id} was for a different account from the one "
+        "that made this change, so it is not taken as where the change came from."
+    ),
+    "ended": (
+        "Session {id} had ended with a logoff before this change, and no later logon with "
+        "that ID is in the input, so where it came from is not known."
+    ),
+    "not-in-input": (
+        "The logon event for session {id} is not in the input, so where it came from is not known."
+    ),
+}
+"""Words for every origin status except ``session``."""
+
+
 def origin(where: Origin) -> str:
     """Say where the actor's session came from, or exactly why that is not known."""
-    if where.status == "none":
-        return "The event names no logon session, so where it came from is not recorded."
-    if where.status == "local":
-        return f"Made by the computer's own system session ({where.logon_id})."
-    if where.status == "ended":
-        return (
-            f"Session {where.logon_id} had ended with a logoff before this change, and no "
-            "later logon with that ID is in the input, so where it came from is not known."
-        )
-    if where.status == "not-in-input":
-        return (
-            f"The logon event for session {where.logon_id} is not in the input, so where "
-            "it came from is not known."
-        )
+    if where.status in _UNLINKED:
+        return _UNLINKED[where.status].format(id=where.logon_id)
     kind = where.logon_type_name or (
         f"logon type {where.logon_type}" if where.logon_type else "a logon of unrecorded type"
     )

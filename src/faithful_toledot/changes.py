@@ -65,6 +65,12 @@ class Origin:
             the change names a session whose logon event is not in the input;
             ``ended`` when the input holds only a logoff of that session before the
             change, so the logon that was in use is not in the input;
+            ``restarted`` when Windows started, or its log service stopped, between
+            the logon and the change: logon IDs are unique only between reboots;
+            ``conflicting`` when the input holds two different logons for the session
+            at the same moment;
+            ``other-account`` when the logon was for a different account from the one
+            that made the change;
             ``none`` when the change event names no session.
         logon_id: The session's logon ID, as recorded.
         address: The source network address of the logon, if it recorded one.
@@ -140,7 +146,9 @@ class Change:
         origin: Where the actor's session came from.
         events: The events it is built from, in order.
         related: Identifiers of other changes by the same session within moments of
-            this one. They are likely parts of one administrative action.
+            this one. They are likely parts of one administrative action. At most
+            the 20 nearest in time are listed.
+        related_total: How many such changes there are, listed or not.
         notes: Anything a reader needs in order not to over-read the change.
         sentence: The change as one plain sentence.
     """
@@ -158,6 +166,7 @@ class Change:
     origin: Origin
     events: tuple[EventRef, ...]
     related: tuple[str, ...] = ()
+    related_total: int = 0
     notes: tuple[str, ...] = ()
     sentence: str = ""
 

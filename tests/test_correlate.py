@@ -127,6 +127,84 @@ def test_a_session_that_logged_off_before_the_change_is_not_its_origin() -> None
     assert "had ended with a logoff before this change" in narrative.origin(origin)
 
 
+@pytest.mark.parametrize("order", [1, -1])
+def test_two_different_logons_for_one_session_give_no_origin(order: int) -> None:
+    first = logon(address="192.0.2.44")
+    second = replace(logon(address="203.0.113.99"), record_id=first.record_id)
+    result = build(
+        [Input("a", [first, second][::order]), Input("b", [member_added()])], catalog.load()
+    )
+    (change,) = result.changes
+    assert change.origin.status == "conflicting"
+    assert "two different logons" in narrative.origin(change.origin)
+    (problem,) = result.problems  # the same record number with different content
+    assert "more than once with different content" in problem.reason
+
+
+def test_two_unnumbered_logons_that_disagree_also_give_no_origin() -> None:
+    one = replace(logon(address="192.0.2.44"), record_id=None)
+    two = replace(logon(address="203.0.113.99"), record_id=None)
+    assert account(one, two, member_added()).changes[0].origin.status == "conflicting"
+
+
+def test_identical_copies_of_a_logon_count_once_and_keep_the_origin() -> None:
+    copy = logon()
+    result = build([Input("a", [copy]), Input("b", [copy, member_added()])], catalog.load())
+    assert result.changes[0].origin.status == "session"
+    assert (result.counts["context"], result.counts["duplicates"]) == (1, 1)
+
+
+@pytest.mark.parametrize("boundary", [1100, 4608])
+def test_a_logon_before_a_restart_is_not_the_origin_of_a_later_change(boundary: int) -> None:
+    stop = event(boundary, {}, seconds=-30)
+    result = account(logon(seconds=-60), stop, member_added())
+    origin = result.changes[0].origin
+    assert origin.status == "restarted"
+    assert "only unique between restarts" in narrative.origin(origin)
+    assert result.notices[0].severity == "info"  # restarts are routine on their own
+
+
+def test_a_logon_after_the_restart_is_used() -> None:
+    result = account(logon(seconds=-90), event(4608, {}, seconds=-60), logon(seconds=-30),
+                     member_added())  # fmt: skip
+    assert result.changes[0].origin.status == "session"
+
+
+def test_a_restart_on_another_computer_does_not_matter() -> None:
+    elsewhere = replace(event(4608, {}, seconds=-30), computer="DC02.corp.example")
+    assert account(logon(), elsewhere, member_added()).changes[0].origin.status == "session"
+
+
+def test_a_logon_for_another_account_is_not_the_origin() -> None:
+    bobs = logon()
+    bobs = replace(bobs, data={**bobs.data, "TargetUserSid": BOB, "TargetUserName": "bob"})
+    origin = account(bobs, member_added()).changes[0].origin
+    assert origin.status == "other-account"
+    assert "different account" in narrative.origin(origin)
+
+
+def test_the_same_fields_in_another_order_are_the_same_event() -> None:
+    added = member_added()
+    reordered = replace(added, data=dict(reversed(list(added.data.items()))))
+    result = build([Input("a", [added]), Input("b", [reordered])], catalog.load())
+    assert len(result.changes) == 1
+    assert (result.counts["duplicates"], result.problems) == (1, [])
+    unnumbered = [replace(e, record_id=None) for e in (added, reordered)]
+    result = build([Input("a", unnumbered[:1]), Input("b", unnumbered[1:])], catalog.load())
+    assert len(result.changes) == 1
+
+
+def test_a_burst_of_changes_lists_a_bounded_number_of_related_ones() -> None:
+    burst = [member_added(i / 1000) for i in range(300)]
+    result = account(logon(), *burst)
+    assert len(result.changes) == 300
+    assert max(len(c.related) for c in result.changes) == correlate.MAX_RELATED
+    assert {c.related_total for c in result.changes} == {299}
+    middle = result.changes[150]
+    assert middle.id not in middle.related
+    assert sum(len(c.related) for c in result.changes) <= 300 * correlate.MAX_RELATED
+
+
 def test_a_logoff_at_the_same_moment_as_the_change_may_have_come_after_it() -> None:
     # Event Viewer CSV times have whole seconds, so equal times do not show the order.
     result = account(logon(seconds=-60), logoff(seconds=0), member_added())

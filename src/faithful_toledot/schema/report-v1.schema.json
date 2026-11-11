@@ -528,6 +528,9 @@
                   "local",
                   "not-in-input",
                   "ended",
+                  "restarted",
+                  "conflicting",
+                  "other-account",
                   "none"
                 ]
               },

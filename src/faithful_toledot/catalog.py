@@ -103,6 +103,7 @@ ACTIONS = frozenset(
         "special-privileges",
         "log-cleared",
         "log-service-stopped",
+        "system-started",
         "log-full",
         "log-backed-up",
         "events-dropped",

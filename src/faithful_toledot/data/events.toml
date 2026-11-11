@@ -3557,6 +3557,21 @@ version = 0
 fields = []
 
 [[event]]
+id = 4608
+channel = "Security"
+provider = "Microsoft-Windows-Security-Auditing"
+title = "Windows is starting up"
+category = "integrity"
+action = "system-started"
+source = "https://learn.microsoft.com/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4608"
+confirmed = true
+notes = "Logged when LSASS starts and the auditing subsystem is initialized, so once per boot. The sample XML has an empty EventData. Logon IDs are only unique between reboots, so toledot does not link a change to a logon from before a 4608 on the same computer."
+
+[[event.version]]
+version = 0
+fields = []
+
+[[event]]
 id = 1101
 channel = "Security"
 provider = "Microsoft-Windows-Eventlog"

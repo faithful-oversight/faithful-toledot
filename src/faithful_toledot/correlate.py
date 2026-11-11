@@ -71,8 +71,14 @@ _NOTICE_KINDS = {
     "log-full": "The log was full.",
     "log-backed-up": "The log was archived and a new one started.",
     "time-changed": "The system time was changed.",
+    "system-started": "Windows started.",
 }
-_ROUTINE_NOTICES = frozenset({"log-service-stopped", "log-backed-up"})
+_ROUTINE_NOTICES = frozenset({"log-service-stopped", "log-backed-up", "system-started"})
+_BOUNDARIES = frozenset({"log-service-stopped", "system-started"})
+"""Actions after which a logon ID may name a different session: Microsoft documents logon
+IDs as unique only between reboots, and a stopped log service may mean a restart."""
+MAX_RELATED = 20
+"""The most related changes listed for one change; the rest are counted."""
 _SERVICE_SIDS = frozenset({"S-1-5-18", "S-1-5-19", "S-1-5-20"})
 """SYSTEM, LOCAL SERVICE, and NETWORK SERVICE: the accounts Windows itself runs as."""
 _MISSING = " Events may be missing from this account around this time."
@@ -140,6 +146,7 @@ class _Logon:
     workstation: str | None
     logon_type: str | None
     source: Source
+    account: str | None = None
 
 
 @dataclass
@@ -155,6 +162,7 @@ class _State:
     names: dict[str, set[str]] = field(default_factory=dict)
     dropped_problems: int = 0
     unnumbered: dict[tuple[str, str, bytes], int] = field(default_factory=dict)
+    boundaries: dict[str, list[datetime]] = field(default_factory=dict)
     input_number: int = 0
 
     def problem(self, problem: Problem) -> None:
@@ -288,7 +296,7 @@ def _take(state: _State, event: Event, scope: str) -> None:
     """File one event: count it, check for a duplicate, and keep it if it matters."""
     computer = event.computer.casefold()
     info = _lookup(state, event)
-    if info is not None and info.category != "logon" and event.record_id is not None:
+    if info is not None and event.record_id is not None:
         key = (computer, event.channel.casefold(), event.record_id)
         digest = _fingerprint(event)
         seen = state.kept.get(key)
@@ -305,7 +313,7 @@ def _take(state: _State, event: Event, scope: str) -> None:
             state.problem(Problem(event.source, text, event.record_id))
         else:
             state.kept[key] = digest
-    elif info is not None and info.category != "logon":
+    elif info is not None:
         # With no record number, the same event from two overlapping exports can only
         # be recognised by its content. Within one export, identical rows are kept.
         key_unnumbered = (computer, event.channel.casefold(), _fingerprint(event))
@@ -327,6 +335,8 @@ def _take(state: _State, event: Event, scope: str) -> None:
         state.account.other_ids[key_other] = state.account.other_ids.get(key_other, 0) + 1
         return
     _learn_names(state, event, info)
+    if info.action in _BOUNDARIES:
+        state.boundaries.setdefault(computer, []).append(event.time)
     if info.category == "logon":
         state.count("context")
         _note_session(state, event, info)
@@ -338,7 +348,8 @@ def _fingerprint(event: Event) -> bytes:
     """Hash what makes an event itself, so two copies can be compared cheaply."""
     digest = hashlib.sha256()
     parts = [str(event.event_id), event.time.isoformat(), event.provider]
-    for name, value in event.data.items():
+    # Exports list fields in different orders; the same fields are the same event.
+    for name, value in sorted(event.data.items()):
         parts += [name, value]
     for part in parts:
         raw = part.encode("utf-8", "surrogatepass")
@@ -408,6 +419,7 @@ def _note_session(state: _State, event: Event, info: EventInfo) -> None:
             _text(event, info, "workstation"),
             _text(event, info, "logon_type"),
             event.source,
+            _text(event, info, "target_sid"),
         )
     state.sessions.setdefault((computer, number), []).append((event.time, kind, held))
 
@@ -416,6 +428,8 @@ def _finish_sessions(state: _State) -> None:
     """Put each session's logons and logoffs in time order; a logoff sorts first."""
     for entries in state.sessions.values():
         entries.sort(key=lambda entry: (entry[0], entry[1]))
+    for times in state.boundaries.values():
+        times.sort()
 
 
 def _origin(state: _State, event: Event, info: EventInfo) -> Origin:
@@ -434,6 +448,9 @@ def _origin(state: _State, event: Event, info: EventInfo) -> Origin:
     logon = before[-1][2]
     if logon is None:
         return Origin("ended", logon_id=recorded)
+    doubt = _doubt(state, event, info, logon, before)
+    if doubt is not None:
+        return Origin(doubt, logon_id=recorded, logon_time=logon.time)
     return Origin(
         "session",
         logon_id=recorded,
@@ -445,6 +462,39 @@ def _origin(state: _State, event: Event, info: EventInfo) -> Origin:
         logon_time=logon.time,
         source=logon.source,
     )
+
+
+def _doubt(
+    state: _State,
+    event: Event,
+    info: EventInfo,
+    logon: _Logon,
+    before: list[tuple[datetime, int, _Logon | None]],
+) -> str | None:
+    """Why the latest logon for a change's session cannot be taken as its origin, if it can't."""
+    if _restarted_between(state, event, logon.time):
+        return "restarted"
+    rivals = {_session_facts(e[2]) for e in before if e[0] == logon.time and e[2] is not None}
+    if len(rivals) > 1:
+        # Two different logons for one session at one moment: choosing either would be
+        # a guess that depends on the order the inputs were read.
+        return "conflicting"
+    actor = _text(event, info, "actor_sid")
+    if logon.account and actor and logon.account.casefold() != actor.casefold():
+        return "other-account"
+    return None
+
+
+def _restarted_between(state: _State, event: Event, logon_time: datetime) -> bool:
+    """Whether the log shows a restart or a stopped log service after the logon."""
+    times = state.boundaries.get(event.computer.casefold(), [])
+    index = bisect.bisect_right(times, logon_time)
+    return index < len(times) and times[index] <= event.time
+
+
+def _session_facts(logon: _Logon) -> tuple[str | None, ...]:
+    """What a logon says about where a session came from, for comparing two copies."""
+    return (logon.address, logon.port, logon.workstation, logon.logon_type, logon.account)
 
 
 def _known_as(state: _State, sid: str | None, recorded: str | None) -> str | None:
@@ -819,18 +869,32 @@ def _relate(changes: list[Change]) -> list[Change]:
         # Every service on a computer shares its system sessions, so they link nothing.
         if number is not None and number not in _SYSTEM_SESSIONS:
             by_session.setdefault((change.computer.casefold(), number), []).append(index)
-    related: dict[int, list[int]] = {}
-    for indexes in by_session.values():
-        start = 0
-        for position, index in enumerate(indexes):
-            while changes[index].time - changes[indexes[start]].time > RELATED_WINDOW:
-                start += 1
-            for other in indexes[start:position]:
-                related.setdefault(index, []).append(other)
-                related.setdefault(other, []).append(index)
     ids = [f"C{index + 1:04d}" for index in range(len(changes))]
+    related: dict[int, tuple[tuple[str, ...], int]] = {}
+    for indexes in by_session.values():
+        times = [changes[index].time for index in indexes]
+        for position, index in enumerate(indexes):
+            when = times[position]
+            first = bisect.bisect_left(times, when - RELATED_WINDOW)
+            last = bisect.bisect_right(times, when + RELATED_WINDOW)
+            total = last - first - 1
+            if total <= 0:
+                continue
+            # The nearest in time are listed and the rest only counted, so a burst of
+            # automated changes cannot multiply the report by its own size.
+            low, high = max(first, position - MAX_RELATED), min(last, position + MAX_RELATED + 1)
+            nearby = sorted(
+                (p for p in range(low, high) if p != position),
+                key=lambda p: (abs(times[p] - when), p),
+            )[:MAX_RELATED]
+            related[index] = (tuple(ids[indexes[p]] for p in sorted(nearby)), total)
     return [
-        _with(change, id=ids[index], related=tuple(ids[o] for o in sorted(related.get(index, []))))
+        _with(
+            change,
+            id=ids[index],
+            related=related.get(index, ((), 0))[0],
+            related_total=related.get(index, ((), 0))[1],
+        )
         for index, change in enumerate(changes)
     ]
 
