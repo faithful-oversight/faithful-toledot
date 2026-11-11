@@ -288,7 +288,9 @@ The hashes show that the files are consistent. They do not show who made them: a
 
 `toledot-changes.csv` has one row for each detail of each change, and one row for a change with no details. The columns are:
 
-`change_id`, `time_utc`, `computer`, `category`, `action`, `actor`, `actor_sid`, `target`, `target_sid`, `target_dn`, `member`, `member_sid`, `detail_label`, `detail_kind`, `old_value`, `new_value`, `meaning`, `origin_status`, `origin_address`, `origin_workstation`, `logon_type`, `logon_id`, `event_ids`, `record_ids`, `files`.
+`change_id`, `time_utc`, `computer`, `category`, `action`, `actor`, `actor_sid`, `target`, `target_sid`, `target_dn`, `member`, `member_sid`, `detail_label`, `detail_kind`, `old_value`, `new_value`, `meaning`, `origin_status`, `origin_address`, `origin_workstation`, `logon_type`, `logon_id`, `event_ids`, `record_ids`, `files`, `account_completeness`.
+
+The last column, `account_completeness`, is the account's completeness: `complete`, `unconfirmed`, or `incomplete`, as in the summary of the JSON report. It is the same on every row. It lets the caveat travel with the change list when the CSV is the only file kept. The CSV holds no notices or problems, so read the other reports for the reasons. A run that finds no changes writes the header row alone.
 
 The columns `event_ids`, `record_ids`, and `files` join several values with a semicolon and a space. The file is UTF-8 with no byte order mark, and its rows end with CRLF. A spreadsheet that guesses the encoding wrongly can be told it is UTF-8 when you import. Values are never shortened.
 

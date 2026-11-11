@@ -48,6 +48,7 @@ CSV_COLUMNS = (
     "target", "target_sid", "target_dn", "member", "member_sid", "detail_label",
     "detail_kind", "old_value", "new_value", "meaning", "origin_status", "origin_address",
     "origin_workstation", "logon_type", "logon_id", "event_ids", "record_ids", "files",
+    "account_completeness",
 )  # fmt: skip
 CSP = "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'"
 """Content security policy: no scripts, no network access, no form submission."""
@@ -404,11 +405,14 @@ def render_csv(report: Report) -> str:
     """Render one row per detail; a change without details gets one row.
 
     Values are complete, never shortened. Every cell is protected against formula
-    injection.
+    injection. The last column, ``account_completeness``, holds the account's
+    completeness (``complete``, ``unconfirmed`` or ``incomplete``) on every row, so the
+    caveat travels with the change list when it is the only file kept.
     """
     buffer = io.StringIO(newline="")
     writer = csv.writer(buffer, lineterminator="\r\n")
     writer.writerow(CSV_COLUMNS)
+    completeness = report["summary"]["completeness"]
     for c in report["changes"]:
         member = c["member"] or {}
         files = list(dict.fromkeys(e["file"] for e in c["events"]))
@@ -430,7 +434,8 @@ def render_csv(report: Report) -> str:
                 if d is None
                 else (d["label"], d["kind"], d["old"], d["new"], d["meaning"])
             )
-            writer.writerow([csv_cell("" if v is None else str(v)) for v in (*common, *mid, *tail)])
+            row = (*common, *mid, *tail, completeness)
+            writer.writerow([csv_cell("" if v is None else str(v)) for v in row])
     return buffer.getvalue()
 
 

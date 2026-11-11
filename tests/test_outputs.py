@@ -765,6 +765,51 @@ def test_csv_rows_cover_details_events_and_missing_parts(rich_report: dict[str, 
     assert rows[3]["member"] == ""
 
 
+def csv_completeness(report: dict[str, Any]) -> tuple[str, list[str]]:
+    reader = csv.reader(io.StringIO(r.render_csv(report), newline=""))
+    head, *rows = list(reader)
+    return head[-1], [row[-1] for row in rows]
+
+
+@pytest.mark.parametrize(
+    ("account", "state"),
+    [
+        (Account(changes=[change(1, 0)], coverage=[CHECKED], counts={}), "complete"),
+        (Account(changes=[change(1, 0), change(2, 1)], counts={}), "unconfirmed"),
+        (
+            Account(
+                changes=[change(1, 0), change(2, 1)],
+                coverage=[CHECKED],
+                problems=[Problem(Source("x.csv", "line 1"), "bad")],
+                counts={},
+            ),
+            "incomplete",
+        ),
+    ],
+)
+def test_csv_carries_the_account_completeness_on_every_row(account: Account, state: str) -> None:
+    report = report_of(account)
+    assert report["summary"]["completeness"] == state
+    column, values = csv_completeness(report)
+    assert column == "account_completeness"
+    assert values == [state] * len(account.changes)
+    assert r.CSV_COLUMNS[-1] == "account_completeness"
+
+
+def test_csv_completeness_is_on_every_detail_row_of_a_rich_report(
+    rich_report: dict[str, Any],
+) -> None:
+    column, values = csv_completeness(rich_report)
+    assert column == "account_completeness"
+    assert len(values) == 10
+    assert set(values) == {rich_report["summary"]["completeness"]} == {"incomplete"}
+
+
+def test_csv_with_no_changes_is_the_header_alone() -> None:
+    column, values = csv_completeness(report_of(empty_account()))
+    assert (column, values) == ("account_completeness", [])
+
+
 def test_csv_with_a_missing_record_number() -> None:
     bare = replace(change(1, 0), events=(replace(ref(1), record_id=None),))
     text = r.render_csv(report_of(Account(changes=[bare], counts={})))
