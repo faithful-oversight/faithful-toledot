@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from faithful_toledot import catalog as catalog_module
 from faithful_toledot import correlate, formats
@@ -42,6 +43,27 @@ class InputFile:
     sha256: str
 
 
+def display_name(path: Path) -> str:
+    r"""Return a file's name as valid text, showing bytes that are not UTF-8 as ``\xff``."""
+    return os.fsencode(path.name).decode("utf-8", "backslashreplace")
+
+
+class _TextNamed:
+    """A path whose ``name`` is always valid text; everything else is the real path's.
+
+    The readers take a path and make their own source names from ``path.name``. On
+    Linux a name can hold bytes that are not UTF-8, and the report could not be
+    written with them. Readers see this wrapper, so every name they make is text.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+        self.name = display_name(path)
+
+    def __getattr__(self, attribute: str) -> Any:
+        return getattr(self._path, attribute)
+
+
 def fingerprint(path: Path) -> tuple[int, str]:
     """Return a file's size and SHA-256, reading it in blocks.
 
@@ -56,7 +78,7 @@ def fingerprint(path: Path) -> tuple[int, str]:
                 digest.update(block)
                 size += len(block)
     except OSError as exc:
-        msg = f"cannot read {path.name}: {exc.strerror or exc}"
+        msg = f"cannot read {display_name(path)}: {exc.strerror or exc}"
         raise InputError(msg) from None
     return size, digest.hexdigest()
 
@@ -86,7 +108,8 @@ def run(
     """
     seen: dict[str, str] = {}
     files: list[InputFile] = []
-    for path in paths:
+    readable = [cast("Path", _TextNamed(path)) for path in paths]
+    for path in readable:
         size, digest = fingerprint(path)
         if digest in seen:
             msg = f"{path.name} has the same contents as {seen[digest]}; give each file once"
@@ -96,7 +119,7 @@ def run(
         files.append(InputFile(path.name, formats.detect(path), scope, size, digest))
     inputs = [
         correlate.Input(file.name, formats.read(path, options, file.format), file.scope)
-        for path, file in zip(paths, files, strict=True)
+        for path, file in zip(readable, files, strict=True)
     ]
     account = correlate.build(inputs, catalog_module.load(), since=since, until=until)
     return account, files

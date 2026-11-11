@@ -28,7 +28,14 @@ def moment(text: str) -> datetime:
             "2026-11-03T14:00:00Z or 2026-11-03T08:00:00-06:00"
         )
         raise argparse.ArgumentTypeError(msg)
-    return value.astimezone(UTC)
+    try:
+        return value.astimezone(UTC)
+    except (OverflowError, ValueError):
+        msg = (
+            f"{text!r} is outside the years toledot can handle; "
+            "give a time that is still within the years 1 to 9999 in UTC"
+        )
+        raise argparse.ArgumentTypeError(msg) from None
 
 
 def bounded(low: int, high: int, what: str) -> Callable[[str], int]:

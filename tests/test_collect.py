@@ -9,6 +9,7 @@ Set ``TOLEDOT_REQUIRE_LIVE=1`` to fail instead of skipping when the ``live`` ext
 
 from __future__ import annotations
 
+import errno
 import os
 import sys
 from dataclasses import replace
@@ -360,6 +361,70 @@ def test_a_file_that_appears_during_collection_is_not_clobbered(
     assert leftovers(tmp_path) == []
 
 
+def no_hard_links(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
+    """Make ``os.link`` fail as on FAT; the count says how often it was tried."""
+    calls = {"link": 0}
+
+    def refuse(*_: object, **__: object) -> None:
+        calls["link"] += 1
+        raise OSError(errno.EPERM, "Operation not permitted")
+
+    monkeypatch.setattr(os, "link", refuse)
+    return calls
+
+
+@pytest.mark.usefixtures("fake")
+def test_a_file_system_without_hard_links_still_gets_the_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = no_hard_links(monkeypatch)
+    out = tmp_path / "e.jsonl"
+    result = run(out)
+    assert calls["link"] == 1
+    assert (result.path, result.events) == (out, 2)
+    assert out.read_bytes() == GOOD
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["e.jsonl"]
+
+
+@pytest.mark.usefixtures("fake")
+def test_a_failed_copy_removes_the_partly_written_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    no_hard_links(monkeypatch)
+    real = os.fsync
+    out = tmp_path / "e.jsonl"
+
+    def full(fd: int) -> None:
+        if out.exists():  # only the copy into the destination fails
+            raise OSError(errno.ENOSPC, "No space left on device")
+        real(fd)
+
+    monkeypatch.setattr(os, "fsync", full)
+    with pytest.raises(CollectionError, match=r"cannot write .*e\.jsonl: No space left"):
+        run(out)
+    assert not out.exists()
+    assert leftovers(tmp_path) == []
+
+
+@pytest.mark.usefixtures("fake")
+def test_a_file_that_appears_when_links_are_unavailable_is_not_clobbered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    no_hard_links(monkeypatch)
+    out = tmp_path / "e.jsonl"
+    real = remote._Sink.finish  # noqa: SLF001 - the moment between check and publish
+
+    def appear(sink: Any) -> Any:
+        out.write_text("arrived", encoding="utf-8")
+        return real(sink)
+
+    monkeypatch.setattr(remote._Sink, "finish", appear)  # noqa: SLF001
+    with pytest.raises(CollectionError, match="already exists"):
+        run(out)
+    assert out.read_text(encoding="utf-8") == "arrived"
+    assert leftovers(tmp_path) == []
+
+
 @pytest.mark.skipif(os.name == "nt", reason="symbolic links need privileges on Windows")
 def test_a_link_at_the_destination_is_never_followed(tmp_path: Path, fake: Remote) -> None:
     outside = tmp_path / "outside.txt"
@@ -519,10 +584,34 @@ def test_collect_with_the_current_kerberos_ticket(
         ["--timeout", "0"],
         ["--port", "70000"],
         ["--since", "2026-11-03"],
+        ["--since", "9999-12-31T23:59:59-14:00"],
+        ["--since", "0001-01-01T00:00:00+14:00"],
     ],
 )
 def test_collect_option_values_are_checked(tmp_path: Path, extra: list[str]) -> None:
     assert main(collect_args(tmp_path / "e.jsonl", *extra)) == ExitCode.USAGE
+
+
+def test_in_range_option_values_are_accepted() -> None:
+    from faithful_toledot.arguments import bounded  # noqa: PLC0415 - used by this test only
+
+    assert bounded(1, 10, "a number")("10") == 10
+
+
+@pytest.mark.usefixtures("fake")
+def test_a_collection_without_a_secret_still_publishes(tmp_path: Path) -> None:
+    out = tmp_path / "e.jsonl"
+    result = collect(replace(TARGET, secret=None), "s", {}, out, force=False)
+    assert result.path == out
+    assert out.read_bytes() == GOOD
+
+
+def test_collect_out_of_range_since_says_why(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = collect_args(tmp_path / "e.jsonl", "--since", "9999-12-31T23:59:59-14:00")
+    assert main(args) == ExitCode.USAGE
+    assert "outside the years toledot can handle" in capsys.readouterr().err
 
 
 def test_collector_writes_the_script(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

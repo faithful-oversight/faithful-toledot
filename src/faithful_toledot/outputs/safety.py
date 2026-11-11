@@ -15,6 +15,7 @@ import os
 import re
 import shlex
 import subprocess
+import unicodedata
 
 FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r", "\n", "\uff1d", "\uff0b", "\uff0d", "\uff20")
 """Leading characters that spreadsheet programs may treat as the start of a formula.
@@ -22,19 +23,47 @@ FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r", "\n", "\uff1d", "\uff0b", "\
 Includes the full-width forms, which some spreadsheet programs also accept.
 """
 
-_INVISIBLE = re.compile(
-    "[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f"  # control characters, except tab and line breaks
-    "\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069"  # bidirectional formatting
-    "\ud800-\udfff]"  # lone surrogates, which cannot be encoded
-)
+_CANDIDATE = re.compile("[^\x20-\x7e\t\n\r]")
+"""Every character that might need escaping; printable ASCII, tab, and line breaks never do."""
+_HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp"})
+"""Controls, format characters (zero width, bidirectional, joiners, soft hyphen, BOM),
+lone surrogates, and the line and paragraph separators."""
+_FILLERS = frozenset({0x034F, 0x115F, 0x1160, 0x180E, 0x3164, 0xFFA0})
+"""Characters that draw nothing but are not in the categories above (U+180E was one
+until Unicode 6.3, so it is listed in case the running Unicode data is older)."""
+_RANGES = ((0xE0000, 0xE007F), (0xFE00, 0xFE0F), (0xE0100, 0xE01EF))
+"""The tag block, and the variation selectors, which change how a neighbour is drawn."""
+_BMP_MAX = 0xFFFF
 _MD_SPECIAL = re.compile(r"([\\`*_\[\]<>|~&])")
 _AUTOLINK = re.compile(r"(?i)(://|www\.|@)")
 _WORD_JOINER = "\u2060"
 
 
+def _hidden(char: str) -> bool:
+    code = ord(char)
+    return (
+        unicodedata.category(char) in _HIDDEN_CATEGORIES
+        or code in _FILLERS
+        or any(low <= code <= high for low, high in _RANGES)
+    )
+
+
+def _escape(match: re.Match[str]) -> str:
+    char = match.group()
+    if not _hidden(char):
+        return char
+    code = ord(char)
+    return f"\\u{code:04x}" if code <= _BMP_MAX else f"\\U{code:08x}"
+
+
 def visible(value: str) -> str:
-    r"""Replace invisible and reordering characters with visible escapes like ``\u202e``."""
-    return _INVISIBLE.sub(lambda m: f"\\u{ord(m.group()):04x}", value)
+    r"""Replace invisible and reordering characters with visible escapes.
+
+    Characters in the Basic Multilingual Plane become ``\u202e``; others become
+    ``\U000e0041`` with eight digits, so the escape cannot be misread. Tab and line
+    breaks are kept: the callers that cannot allow them handle them.
+    """
+    return _CANDIDATE.sub(_escape, value)
 
 
 def neutralize_formula(value: str) -> str:
@@ -70,8 +99,13 @@ def escape_markdown(value: str) -> str:
 
 
 def terminal(value: str) -> str:
-    """Make a value safe to print to a terminal."""
-    return visible(value)
+    """Make text safe to print to a terminal.
+
+    Line feeds are kept, because callers print several lines at once. A carriage
+    return and a tab become visible escapes: a carriage return in a file name could
+    otherwise move the cursor back and print over the start of the line.
+    """
+    return visible(value).replace("\r", "\\r").replace("\t", "\\t")
 
 
 def command_line(*parts: str) -> str:

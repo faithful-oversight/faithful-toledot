@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any
 from faithful_toledot.collect.secrets import redact, remember
 from faithful_toledot.errors import CollectionError
 from faithful_toledot.formats import bundle
+from faithful_toledot.outputs.files import _copy_new
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -217,11 +218,21 @@ class _Sink:
         if force:
             self.temp.replace(self.destination)
             return
+        exists = f"{self.destination} already exists; pass --force to replace it"
         try:
-            os.link(self.temp, self.destination)
+            try:
+                os.link(self.temp, self.destination)
+            except FileExistsError:
+                raise
+            except OSError:
+                # No hard links here (FAT, exFAT, some network shares): create the
+                # name exclusively and copy. A failed copy removes what it created.
+                _copy_new(self.temp, self.destination)
         except FileExistsError:
-            msg = f"{self.destination} already exists; pass --force to replace it"
-            raise CollectionError(msg) from None
+            raise CollectionError(exists) from None
+        except OSError as exc:
+            msg = f"cannot write {self.destination}: {exc.strerror or exc}"
+            raise CollectionError(msg) from exc
         self.temp.unlink()
 
     def discard(self) -> None:

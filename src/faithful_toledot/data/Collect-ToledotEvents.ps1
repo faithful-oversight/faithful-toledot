@@ -323,16 +323,20 @@ function ConvertTo-LogJson($Facts) {
 
 # --- Output -------------------------------------------------------------------------
 
-function New-LineWriter([string] $Path, [bool] $Replace, [bool] $Pipeline) {
+function New-LineWriter([string] $Path, [bool] $Pipeline) {
     # Writes lines as UTF-8 with "\n" endings and keeps a running SHA-256 of them.
+    # A file is never written under its final name: lines go to a new temporary file
+    # next to it, created with CreateNew so it cannot be a file that already exists,
+    # and Publish-Output moves it into place only once the end line is written.
     $writer = [pscustomobject] @{
         Stream = $null; Hash = [System.Security.Cryptography.SHA256]::Create()
-        Pipeline = $Pipeline; Count = 0
+        Pipeline = $Pipeline; Count = 0; TempPath = $null
     }
     if (-not $Pipeline) {
-        $mode = if ($Replace) { [System.IO.FileMode]::Create } else { [System.IO.FileMode]::CreateNew }
+        $writer.TempPath = $Path + '.' + [guid]::NewGuid().ToString('N') + '.part'
         $writer.Stream = New-Object System.IO.FileStream -ArgumentList @(
-            $Path, $mode, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+            $writer.TempPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write,
+            [System.IO.FileShare]::None)
     }
     $writer
 }
@@ -349,8 +353,26 @@ function Get-HashText($Writer) {
 }
 
 function Close-LineWriter($Writer) {
-    if ($null -ne $Writer.Stream) { $Writer.Stream.Flush(); $Writer.Stream.Dispose() }
+    # Safe to call twice: the stream is released the first time.
+    if ($null -ne $Writer.Stream) { $Writer.Stream.Flush(); $Writer.Stream.Dispose(); $Writer.Stream = $null }
     $Writer.Hash.Dispose()
+}
+
+function Publish-Output($Writer, [string] $Path, [bool] $Replace) {
+    # Called after the stream is closed. Without -Force the move fails if the name is
+    # taken, even by a file that appeared after the start. With -Force the old file is
+    # replaced in one step where the file system allows. File.Move with overwrite is
+    # .NET Core 3.0 and later only, and this script must also run on Windows PowerShell
+    # 5.1 (.NET Framework), so File.Replace is used when the target exists and a plain
+    # move when it does not. Delete-then-move would leave no file at all if it failed
+    # in between.
+    if ($Replace -and [System.IO.File]::Exists($Path)) {
+        # [NullString]::Value, because PowerShell turns a plain $null into "" for a
+        # string argument, and "" is refused as the backup name.
+        [System.IO.File]::Replace($Writer.TempPath, $Path, [NullString]::Value)
+    } else {
+        [System.IO.File]::Move($Writer.TempPath, $Path)
+    }
 }
 
 # --- Collection ---------------------------------------------------------------------
@@ -368,7 +390,11 @@ function Invoke-Collection {
     $to = $Until
     if ($null -ne $to -and $to -le $from) { throw '-Until must be later than -Since.' }
     $gaps = New-Object System.Collections.Generic.List[object]
-    $writer = New-LineWriter $OutFile ([bool] $Force) ([bool] $ToPipeline)
+    if (-not $ToPipeline -and -not $Force -and [System.IO.File]::Exists($OutFile)) {
+        throw "$OutFile already exists. Use -Force to replace it."
+    }
+    $writer = New-LineWriter $OutFile ([bool] $ToPipeline)
+    $published = $false
     try {
         $ids = New-Object System.Collections.Generic.List[int]
         if (-not $All) {
@@ -396,8 +422,15 @@ function Invoke-Collection {
             }) -join ','
         $hash = Get-HashText $writer
         Write-Line $writer ('{"end":true,"events":' + $writer.Count + ',"sha256":"' + $hash + '","gaps":[' + $gapText + ']}') -Last
+        Close-LineWriter $writer
+        if (-not $ToPipeline) {
+            Publish-Output $writer $OutFile ([bool] $Force)
+            $published = $true
+        }
     } finally {
         Close-LineWriter $writer
+        # Whatever went wrong, OutFile is untouched and no partial file is left.
+        if (-not $ToPipeline -and -not $published) { [System.IO.File]::Delete($writer.TempPath) }
     }
 }
 

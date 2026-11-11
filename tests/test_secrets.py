@@ -75,6 +75,25 @@ def test_file_secret_empty_first_line(tmp_path: Path, content: str) -> None:
     assert resolve_error(f"file:{path}") == "the file secret is empty"
 
 
+def test_file_secret_drops_a_utf8_bom(tmp_path: Path) -> None:
+    path = tmp_path / "secret.txt"
+    path.write_bytes(b"\xef\xbb\xbf" + SECRET.encode() + b"\r\n")
+    assert secrets.resolve(f"file:{path}") == SECRET
+
+
+def test_file_secret_that_is_not_utf8_names_the_file_and_shows_nothing_of_it(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "secret.txt"
+    path.write_bytes(SECRET.encode() + b"\xff\xfe tail")
+    message = resolve_error(f"file:{path}")
+    assert "secret.txt" in message
+    assert "not valid UTF-8" in message
+    assert SECRET not in message
+    assert "tail" not in message
+    assert "\\x" not in message
+
+
 def test_file_secret_missing(tmp_path: Path) -> None:
     message = resolve_error(f"file:{tmp_path / 'absent.txt'}")
     assert message.startswith("cannot read the secret file: ")

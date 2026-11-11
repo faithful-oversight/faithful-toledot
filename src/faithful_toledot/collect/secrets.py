@@ -99,10 +99,14 @@ def _env(name: str) -> str:
 
 def _file(path: str) -> str:
     try:
-        text = Path(path).read_text(encoding="utf-8")
+        text = Path(path).read_text(encoding="utf-8-sig")
     except OSError as exc:
         msg = f"cannot read the secret file: {exc.strerror}"
         raise CollectionError(msg) from exc
+    except UnicodeDecodeError:
+        # Say nothing about the bytes: they may be the secret in another encoding.
+        msg = f"the secret file {Path(path).name} is not valid UTF-8 text"
+        raise CollectionError(msg) from None
     return text.splitlines()[0] if text else ""
 
 

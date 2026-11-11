@@ -96,7 +96,8 @@ def test_the_script_only_reads() -> None:
 
 def test_the_output_file_is_never_overwritten_without_force() -> None:
     assert "[System.IO.FileMode]::CreateNew" in TEXT
-    assert "if ($Replace) { [System.IO.FileMode]::Create }" in TEXT
+    assert "[System.IO.FileMode]::Create " not in TEXT  # the file is never opened in place
+    assert "[System.IO.File]::Move($Writer.TempPath, $Path)" in TEXT
 
 
 def test_event_xml_is_parsed_with_dtds_refused() -> None:
@@ -318,13 +319,90 @@ def test_a_whole_collection_reads_back_cleanly(tmp_path: Path, *, pipeline: bool
     assert header["query"]["since"] == "2026-11-01T00:00:00.0000000Z"
 
 
+FAILING = (
+    STUB
+    + """
+function Read-Channel($Writer, [string] $Name, [datetime] $From, [Nullable[datetime]] $To, $Gaps) {
+    Write-Line $Writer '{"half":"written"}'
+    throw 'the log went away'
+}
+"""
+)
+
+
+def collect_over(
+    folder: Path, out: Path, *, stub: str, force: bool
+) -> subprocess.CompletedProcess[str]:
+    setting = "$Force = $true\n" if force else ""
+    return run_pwsh(folder, stub + f"$OutFile = '{out}'\n{setting}Invoke-Collection")
+
+
+def only_the_file(folder: Path) -> list[str]:
+    return sorted(path.name for path in folder.iterdir() if path.name != "run.ps1")
+
+
 @needs_pwsh
 def test_an_existing_file_is_not_overwritten(tmp_path: Path) -> None:
     out = tmp_path / "events.jsonl"
     out.write_text("keep", encoding="utf-8")
-    result = run_pwsh(tmp_path, STUB + f"$OutFile = '{out}'\nInvoke-Collection")
+    result = collect_over(tmp_path, out, stub=STUB, force=False)
+    assert result.returncode != 0
+    assert "already exists" in result.stderr
+    assert out.read_text(encoding="utf-8") == "keep"
+    assert only_the_file(tmp_path) == ["events.jsonl"]
+
+
+@needs_pwsh
+def test_a_failed_run_without_force_keeps_the_existing_file_and_leaves_nothing(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "events.jsonl"
+    out.write_text("keep", encoding="utf-8")
+    result = collect_over(tmp_path, out, stub=FAILING, force=False)
     assert result.returncode != 0
     assert out.read_text(encoding="utf-8") == "keep"
+    assert only_the_file(tmp_path) == ["events.jsonl"]
+
+
+@needs_pwsh
+def test_a_failed_run_with_force_keeps_the_existing_file_and_leaves_nothing(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "events.jsonl"
+    out.write_text("keep", encoding="utf-8")
+    result = collect_over(tmp_path, out, stub=FAILING, force=True)
+    assert result.returncode != 0
+    assert "the log went away" in result.stderr
+    assert out.read_text(encoding="utf-8") == "keep"
+    assert only_the_file(tmp_path) == ["events.jsonl"]
+
+
+@needs_pwsh
+def test_a_failed_run_with_nothing_before_it_leaves_no_file(tmp_path: Path) -> None:
+    out = tmp_path / "events.jsonl"
+    assert collect_over(tmp_path, out, stub=FAILING, force=False).returncode != 0
+    assert only_the_file(tmp_path) == []
+
+
+@needs_pwsh
+def test_a_successful_run_with_force_replaces_the_existing_file(tmp_path: Path) -> None:
+    out = tmp_path / "events.jsonl"
+    out.write_text("old", encoding="utf-8")
+    result = collect_over(tmp_path, out, stub=STUB, force=True)
+    assert result.returncode == 0, result.stderr
+    assert only_the_file(tmp_path) == ["events.jsonl"]
+    items = list(read_bundle(out, ReadOptions()))
+    assert [item.record_id for item in items if isinstance(item, Event)] == [201, 202, 203]
+
+
+@needs_pwsh
+def test_a_successful_run_without_force_creates_the_file_and_leaves_nothing_else(
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "events.jsonl"
+    result = collect_over(tmp_path, out, stub=STUB, force=False)
+    assert result.returncode == 0, result.stderr
+    assert only_the_file(tmp_path) == ["events.jsonl"]
 
 
 @pytest.mark.skipif(sys.platform != "win32" or _PWSH is None, reason="needs Windows")

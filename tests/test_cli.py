@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import json
+import os
 import runpy
+import shutil
 import sys
 from typing import TYPE_CHECKING
 
@@ -105,6 +107,22 @@ def test_the_window_and_formats_are_applied(sample: Path) -> None:
     assert {change["time"][:10] for change in report["changes"]} == {"2026-11-03"}
 
 
+@pytest.mark.skipif(
+    sys.platform in ("win32", "darwin"),
+    reason="this file system rejects file names that are not valid UTF-8",
+)
+def test_a_file_name_that_is_not_utf8_is_shown_escaped(sample: Path) -> None:
+    bad = os.fsdecode(os.fsencode(sample) + b"/bad\xff.jsonl")
+    shutil.copy(files_of(sample)[0], bad)
+    out = sample / "badname"
+    assert main(["report", bad, "-o", str(out), "--fail-on", "never"]) == ExitCode.OK
+    document = json.loads((out / "toledot-report.json").read_text(encoding="utf-8"))
+    assert [item["name"] for item in document["inputs"]] == ["bad\\xff.jsonl"]
+    assert "xff.jsonl" in (out / "toledot-report.md").read_text(
+        encoding="utf-8"
+    )  # escaped by Markdown
+
+
 def test_whole_logs_make_absent_records_missing_events(sample: Path) -> None:
     out = sample / "whole"
     main(["report", files_of(sample)[0], "-o", str(out), "--whole-logs", "-f", "json"])
@@ -150,6 +168,8 @@ def test_the_same_file_twice_and_unknown_files_are_input_errors(
     [
         ["--since", "2026-11-03"],
         ["--since", "soon"],
+        ["--since", "9999-12-31T23:59:59-14:00"],
+        ["--until", "0001-01-01T00:00:00+14:00"],
         ["--local-offset", "6"],
         ["--local-offset", "+15:00"],
         ["--local-offset", "+14:30"],
@@ -161,6 +181,24 @@ def test_the_same_file_twice_and_unknown_files_are_input_errors(
 )
 def test_option_values_are_checked(sample: Path, extra: list[str]) -> None:
     assert main(["report", *files_of(sample), "-o", str(sample / "r"), *extra]) == ExitCode.USAGE
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        ["--since", "9999-12-31T23:59:59-14:00"],
+        ["--until", "0001-01-01T00:00:00+14:00"],
+    ],
+)
+def test_out_of_range_times_are_usage_errors_not_crashes(
+    sample: Path, capsys: pytest.CaptureFixture[str], extra: list[str]
+) -> None:
+    code = main(["report", *files_of(sample), "-o", str(sample / "r"), *extra])
+    captured = capsys.readouterr().err
+    assert code == ExitCode.USAGE
+    assert "outside the years toledot can handle" in captured
+    assert "Traceback" not in captured
+    assert "internal error" not in captured
 
 
 def test_csv_options_reach_the_reader(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
