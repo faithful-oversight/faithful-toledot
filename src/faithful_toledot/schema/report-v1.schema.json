@@ -1,0 +1,796 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "tool",
+    "generated_at",
+    "inputs",
+    "window",
+    "summary",
+    "notices",
+    "coverage",
+    "problems",
+    "changes",
+    "other_events",
+    "limitations"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "const": "toledot"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "generated_at": {
+      "$ref": "#/$defs/time"
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "format",
+          "scope",
+          "size",
+          "sha256"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "since",
+        "until"
+      ],
+      "properties": {
+        "since": {
+          "$ref": "#/$defs/timeOrNull"
+        },
+        "until": {
+          "$ref": "#/$defs/timeOrNull"
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "complete",
+        "changes",
+        "notices",
+        "problems",
+        "events",
+        "by_category",
+        "by_action",
+        "actors",
+        "first_change",
+        "last_change"
+      ],
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "changes": {
+          "$ref": "#/$defs/count"
+        },
+        "notices": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "warning",
+            "info"
+          ],
+          "properties": {
+            "warning": {
+              "$ref": "#/$defs/count"
+            },
+            "info": {
+              "$ref": "#/$defs/count"
+            }
+          },
+          "description": "Notices by severity. Only warnings make the account incomplete."
+        },
+        "problems": {
+          "$ref": "#/$defs/count"
+        },
+        "events": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "changes",
+            "context",
+            "notices",
+            "other",
+            "duplicates"
+          ],
+          "properties": {
+            "changes": {
+              "$ref": "#/$defs/count"
+            },
+            "context": {
+              "$ref": "#/$defs/count"
+            },
+            "notices": {
+              "$ref": "#/$defs/count"
+            },
+            "other": {
+              "$ref": "#/$defs/count"
+            },
+            "duplicates": {
+              "$ref": "#/$defs/count"
+            }
+          }
+        },
+        "by_category": {
+          "$ref": "#/$defs/countMap"
+        },
+        "by_action": {
+          "$ref": "#/$defs/countMap"
+        },
+        "actors": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "sid",
+              "changes"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "sid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "changes": {
+                "$ref": "#/$defs/count"
+              }
+            }
+          }
+        },
+        "first_change": {
+          "$ref": "#/$defs/timeOrNull"
+        },
+        "last_change": {
+          "$ref": "#/$defs/timeOrNull"
+        }
+      }
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "time",
+          "computer",
+          "kind",
+          "severity",
+          "text",
+          "actor",
+          "event"
+        ],
+        "properties": {
+          "time": {
+            "$ref": "#/$defs/time"
+          },
+          "computer": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "warning",
+              "info"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "actor": {
+            "$ref": "#/$defs/party"
+          },
+          "event": {
+            "$ref": "#/$defs/eventref"
+          }
+        }
+      }
+    },
+    "coverage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "computer",
+          "channel",
+          "events",
+          "first",
+          "last",
+          "first_record",
+          "last_record",
+          "continuity",
+          "missing",
+          "missing_count",
+          "scope",
+          "overwritten_before",
+          "statement"
+        ],
+        "properties": {
+          "computer": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "events": {
+            "$ref": "#/$defs/count"
+          },
+          "first": {
+            "$ref": "#/$defs/timeOrNull"
+          },
+          "last": {
+            "$ref": "#/$defs/timeOrNull"
+          },
+          "first_record": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "last_record": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "continuity": {
+            "enum": [
+              "complete",
+              "gaps",
+              "unnumbered",
+              "empty"
+            ]
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              ],
+              "items": false,
+              "minItems": 2
+            }
+          },
+          "missing_count": {
+            "$ref": "#/$defs/count"
+          },
+          "scope": {
+            "enum": [
+              "unfiltered",
+              "filtered",
+              "unknown"
+            ]
+          },
+          "overwritten_before": {
+            "$ref": "#/$defs/timeOrNull"
+          },
+          "statement": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "problems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "file",
+          "position",
+          "record_id",
+          "reason"
+        ],
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string"
+          },
+          "record_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "time",
+          "computer",
+          "category",
+          "action",
+          "title",
+          "sentence",
+          "actor",
+          "target",
+          "member",
+          "details",
+          "origin",
+          "events",
+          "related",
+          "notes"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "time": {
+            "$ref": "#/$defs/time"
+          },
+          "computer": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "sentence": {
+            "type": "string"
+          },
+          "actor": {
+            "$ref": "#/$defs/party"
+          },
+          "target": {
+            "$ref": "#/$defs/party"
+          },
+          "member": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/party"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "label",
+                "kind",
+                "old",
+                "new",
+                "meaning",
+                "attribute"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "set",
+                    "changed",
+                    "added",
+                    "removed",
+                    "info"
+                  ]
+                },
+                "old": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "new": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "meaning": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "attribute": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "origin": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "logon_id",
+              "address",
+              "port",
+              "workstation",
+              "logon_type",
+              "logon_type_name",
+              "logon_time",
+              "source",
+              "statement"
+            ],
+            "properties": {
+              "status": {
+                "enum": [
+                  "session",
+                  "local",
+                  "not-in-input",
+                  "none"
+                ]
+              },
+              "logon_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "address": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "port": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "workstation": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "logon_type": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "logon_type_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "logon_time": {
+                "$ref": "#/$defs/timeOrNull"
+              },
+              "source": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "file",
+                      "position"
+                    ],
+                    "properties": {
+                      "file": {
+                        "type": "string"
+                      },
+                      "position": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "statement": {
+                "type": "string"
+              }
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "event_id",
+                "record_id",
+                "time",
+                "file",
+                "position"
+              ],
+              "properties": {
+                "event_id": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "record_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "time": {
+                  "$ref": "#/$defs/time"
+                },
+                "file": {
+                  "type": "string"
+                },
+                "position": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "related": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "other_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "channel",
+          "event_id",
+          "count"
+        ],
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$id": "https://faithful-oversight.github.io/faithful-toledot/schema/report-v1.schema.json",
+  "title": "toledot account of changes",
+  "description": "Version 1 of the machine-readable report written by toledot. A minor version may add optional properties and ships a matching schema; removing or changing a property needs a new major version.",
+  "$defs": {
+    "time": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$",
+      "format": "date-time",
+      "description": "RFC 3339, UTC, with a trailing Z. Fractional seconds appear only when they are not zero."
+    },
+    "timeOrNull": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "party": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sid",
+        "name",
+        "domain",
+        "dn",
+        "object_class",
+        "guid",
+        "well_known",
+        "known_as",
+        "display"
+      ],
+      "properties": {
+        "sid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "domain": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dn": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "object_class": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "guid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "well_known": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "known_as": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "display": {
+          "type": "string"
+        }
+      },
+      "description": "An account or object as the event recorded it. known_as is a name from other events and is never a recorded name. display is the wording used in sentences."
+    },
+    "eventref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_id",
+        "record_id",
+        "time",
+        "file",
+        "position"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "record_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "time": {
+          "$ref": "#/$defs/time"
+        },
+        "file": {
+          "type": "string"
+        },
+        "position": {
+          "type": "string"
+        }
+      }
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "countMap": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/count"
+      }
+    }
+  }
+}

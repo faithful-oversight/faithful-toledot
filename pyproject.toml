@@ -30,6 +30,14 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+# Remote collection over PowerShell remoting. Reading files needs no dependencies.
+live = ["pypsrp>=0.8"]
+keyring = ["keyring>=25"]
+vault = ["hvac>=2.3"]
+aws = ["boto3>=1.35"]
+azure = ["azure-identity>=1.19", "azure-keyvault-secrets>=4.9"]
+
 [project.scripts]
 toledot = "faithful_toledot.cli:main"
 
@@ -46,6 +54,8 @@ dev = [
   "cyclonedx-bom>=7",
   "furo>=2025.12.19",
   "hypothesis>=6.100",
+  "jsonschema>=4.23",
+  "types-jsonschema>=4.23",
   "mypy>=1.15",
   "myst-parser>=5",
   "pip-audit>=2.9",
@@ -65,7 +75,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "docs", "examples", "LICENSE", "NOTICE", "README.md", "CHANGELOG.md"]
+include = ["src", "tests", "scripts", "docs", "examples", "LICENSE", "NOTICE", "README.md", "CHANGELOG.md"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/faithful_toledot"]
