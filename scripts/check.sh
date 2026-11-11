@@ -67,8 +67,11 @@ stage_workflows() {
 }
 stage_secrets()   { gitleaks git --redact --no-banner --exit-code 1 .; }
 stage_deps() {
-  uv export --color never --locked --all-groups --no-emit-project --format requirements-txt \
-    > "${TMPDIR:-/tmp}/requirements-audit.txt"
+  # --all-extras puts remote collection and the secret sources in the audit; without it
+  # their pins would never be checked. The inventory check fails if any are absent.
+  uv export --color never --locked --all-groups --all-extras --no-emit-project \
+    --format requirements-txt > "${TMPDIR:-/tmp}/requirements-audit.txt"
+  run python scripts/check_audit_inventory.py "${TMPDIR:-/tmp}/requirements-audit.txt"
   run pip-audit --strict --requirement "${TMPDIR:-/tmp}/requirements-audit.txt" --disable-pip
 }
 stage_licenses() {
