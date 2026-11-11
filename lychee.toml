@@ -1,7 +1,9 @@
 # Link checking for documentation. CI runs lychee on every pull request
 # (local links only) and weekly (all links).
 accept = ["200..=299", "429"]
-exclude_path = ["\\.venv", "LICENSES", "^LICENSE$"]
+# Generated sample reports hold escaped event data, such as an address with a word
+# joiner after the @, which is not a link; a test checks those files instead.
+exclude_path = ["\\.venv", "LICENSES", "^LICENSE$", "examples/[^/]+/sample-report/"]
 exclude = [
   # Private until public release.
   "^https://github\\.com/faithful-oversight/",

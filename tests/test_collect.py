@@ -10,6 +10,7 @@ Set ``TOLEDOT_REQUIRE_LIVE=1`` to fail instead of skipping when the ``live`` ext
 from __future__ import annotations
 
 import errno
+import importlib
 import os
 import sys
 from dataclasses import replace
@@ -28,7 +29,9 @@ from tests.helpers import at, logon, member_added
 from tests.test_formats_bundle import header
 
 if os.environ.get("TOLEDOT_REQUIRE_LIVE") == "1":  # pragma: no cover - set in CI
-    import pypsrp  # noqa: F401 - fail at collection, not skip, when the live extra is missing
+    # Fail at collection, not skip, when the live extra is missing. Imported by name so
+    # type checking does not need the extra installed.
+    importlib.import_module("pypsrp")
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
