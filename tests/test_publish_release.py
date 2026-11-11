@@ -249,6 +249,21 @@ def test_release_evidence_is_reproducible(tmp_path: Path) -> None:
         )
         outputs.append({p.name: p.read_bytes() for p in dist.iterdir()})
     assert outputs[0] == outputs[1]
-    assert sorted(outputs[0]) == ["SHA256SUMS", "package.whl", "sbom.cdx.json"]
-    sbom = json.loads(outputs[0]["sbom.cdx.json"])
-    assert "serialNumber" not in sbom
+    assert sorted(outputs[0]) == [
+        "SHA256SUMS", "package.whl", "sbom-all-extras.cdx.json", "sbom-base.cdx.json",
+    ]  # fmt: skip
+    names = {}
+    for kind in ("base", "all-extras"):
+        sbom = json.loads(outputs[0][f"sbom-{kind}.cdx.json"])
+        assert "serialNumber" not in sbom
+        (scope,) = (
+            p["value"] for p in sbom["metadata"]["properties"]
+            if p["name"] == "faithful-toledot:sbom-scope"
+        )  # fmt: skip
+        assert scope.startswith("base install" if kind == "base" else "every optional extra")
+        names[kind] = {c["name"] for c in sbom.get("components", [])}
+    # The analyzer has no runtime dependencies; remote collection and secret sources do.
+    assert names["base"] == set()
+    assert {"pypsrp", "pyspnego", "keyring", "hvac", "boto3", "azure-identity"} <= names[
+        "all-extras"
+    ]

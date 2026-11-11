@@ -96,9 +96,10 @@ jobs:
       - name: Write release notes and confirm the SBOM and checksums
         run: |
           uv run --no-sync python scripts/release_preflight.py release-notes.md >/dev/null
-          # check.sh build already wrote dist/sbom.cdx.json and dist/SHA256SUMS
+          # check.sh build already wrote both SBOMs and dist/SHA256SUMS
           # with scripts/release_evidence.sh, and proved a rebuild matches them.
-          test -s dist/sbom.cdx.json
+          test -s dist/sbom-base.cdx.json
+          test -s dist/sbom-all-extras.cdx.json
           (cd dist && sha256sum --check --strict SHA256SUMS)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
