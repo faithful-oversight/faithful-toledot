@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: 2026 Faithful Oversight, LLC
+# SPDX-License-Identifier: Apache-2.0
+#
+# Reviewed licenses for runtime dependencies whose metadata does not establish
+# one license (see scripts/check_licenses.py). Each entry applies only to the
+# exact version reviewed; a new version fails the check until someone reads its
+# license again and updates the entry.
+
+[[exception]]
+package = "isodate"
+version = "0.7.2"
+license = "BSD-3-Clause"
+evidence = "isodate-0.7.2.dist-info/LICENSE: three-clause BSD text with the non-endorsement clause and no advertising clause; metadata has only the generic BSD classifier and the license text"
+reviewed = "2026-11-11"
+
+
+[[exception]]
+package = "python-dateutil"
+version = "2.9.0.post0"
+license = "Apache-2.0 AND BSD-3-Clause"
+evidence = "python_dateutil-2.9.0.post0.dist-info/LICENSE: Apache-2.0 for contributions after 2017-12-01 and re-licensed code, three-clause BSD for the rest; metadata says only Dual License"
+reviewed = "2026-11-11"
+
