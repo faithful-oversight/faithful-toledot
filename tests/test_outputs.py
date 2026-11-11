@@ -966,3 +966,13 @@ def test_hostile_values_survive_a_round_trip_through_every_file(tmp_path: Path) 
     written = write_reports(tmp_path, report, ["json", "md", "html", "csv"], force=False)
     for path in written:
         path.read_text(encoding="utf-8")
+
+
+def test_related_changes_beyond_the_list_are_counted() -> None:
+    listed = replace(change(1, 0), related=("C0002", "C0003"), related_total=45)
+    report = report_of(Account(changes=[listed], coverage=[CHECKED], counts={}))
+    assert report["changes"][0]["related_total"] == 45
+    assert "C0002, C0003, and 43 more within the same moments" in r.render_markdown(report)
+    assert "and 43 more within the same moments" in r.render_html(report)
+    exact = replace(change(1, 0), related=("C0002",), related_total=1)
+    assert "more within" not in r.render_markdown(report_of(Account(changes=[exact], counts={})))

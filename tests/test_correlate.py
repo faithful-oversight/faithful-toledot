@@ -147,6 +147,14 @@ def test_two_unnumbered_logons_that_disagree_also_give_no_origin() -> None:
     assert account(one, two, member_added()).changes[0].origin.status == "conflicting"
 
 
+def test_logon_events_that_name_no_session_are_context_only() -> None:
+    explicit = event(4648, {**SUBJECT, "TargetUserName": "bob"}, seconds=-50)
+    nameless = event(4634, {"TargetUserSid": ALICE}, seconds=-40)
+    result = account(logon(), explicit, nameless, member_added())
+    assert result.changes[0].origin.status == "session"
+    assert result.counts["context"] == 3
+
+
 def test_identical_copies_of_a_logon_count_once_and_keep_the_origin() -> None:
     copy = logon()
     result = build([Input("a", [copy]), Input("b", [copy, member_added()])], catalog.load())

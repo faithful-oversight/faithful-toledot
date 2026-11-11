@@ -412,6 +412,7 @@
           "origin",
           "events",
           "related",
+          "related_total",
           "notes"
         ],
         "properties": {
@@ -641,7 +642,13 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Up to 20 other changes by the same session within two seconds, nearest first in time."
+          },
+          "related_total": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "How many such changes there are, listed or not."
           },
           "notes": {
             "type": "array",

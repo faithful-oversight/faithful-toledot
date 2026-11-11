@@ -184,6 +184,7 @@ def _change(change: Any) -> dict[str, Any]:
             for e in change.events
         ],
         "related": list(change.related),
+        "related_total": change.related_total,
         "notes": list(change.notes),
     }
 

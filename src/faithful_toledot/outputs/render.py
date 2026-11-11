@@ -327,6 +327,12 @@ def _md_summary(report: Report) -> list[str]:
     return lines
 
 
+def _unlisted_related(c: dict[str, Any]) -> str:
+    """Words for related changes that are counted but not listed."""
+    unlisted = c["related_total"] - len(c["related"])
+    return f", and {unlisted} more within the same moments" if unlisted > 0 else ""
+
+
 def _md_change(c: dict[str, Any], *, shorten: bool) -> list[str]:
     lines = [
         f"### {_md(c['id'])} · {_md(_clock(c['time']))} · {_md(c['sentence'])}",
@@ -338,7 +344,7 @@ def _md_change(c: dict[str, Any], *, shorten: bool) -> list[str]:
         lines.append(f"- {_md(d['label'])}: {_md(_detail_words(d, shorten=shorten) + attribute)}")
     lines.append(f"- From where: {_md(c['origin']['statement'])}")
     if c["related"]:
-        lines.append(f"- Related changes: {_md(', '.join(c['related']))}")
+        lines.append(f"- Related changes: {_md(', '.join(c['related']) + _unlisted_related(c))}")
     lines += [f"- Note: {_md(n)}" for n in c["notes"]]
     evidence = "; ".join(_evidence(e) for e in c["events"])
     lines.append(f"- Evidence: {_md(evidence) if evidence else 'none'}")
@@ -579,7 +585,7 @@ def _h_change(c: dict[str, Any], index: int, anchors: dict[str, str], *, shorten
     details = "".join(_h_detail(d, shorten=shorten) for d in c["details"])
     related = ", ".join(
         f'<a href="#{anchors[r]}">{_h(r)}</a>' if r in anchors else _h(r) for r in c["related"]
-    )
+    ) + _h(_unlisted_related(c))
     notes = "".join(f'<p class="note">{_h(n)}</p>' for n in c["notes"])
     evidence = "".join(f"<li>{_h(_evidence(e))}</li>" for e in c["events"])
     return (

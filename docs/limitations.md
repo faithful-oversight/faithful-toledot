@@ -26,6 +26,7 @@ Turn on **Success** auditing for these advanced audit policy subcategories on ev
 | Security groups created, changed, or deleted, and their members added or removed | 4727 to 4735, 4737, 4754 to 4758, 4764 | Audit Security Group Management |
 | Where a session came from | 4624 | Audit Logon |
 | When a session ended | 4634, 4647 | Audit Logoff |
+| When Windows started, so logon IDs may repeat | 4608 | Audit Security State Change |
 
 Microsoft documents each subcategory:
 
@@ -46,10 +47,10 @@ Other events in the catalog, such as the log cleared event 1102, need no setting
 
 ## The event catalog
 
-toledot understands 83 events: 82 in the Security log and event 104 (log cleared) in the System log. Run `toledot events` to list them.
+toledot understands 84 events: 83 in the Security log and event 104 (log cleared) in the System log. Run `toledot events` to list them.
 
 - **Everything else is not described.** An event outside the catalog, such as a failed logon (4625), is counted in "Other events read" and not described. An event is likewise from another provider that reuses an event ID, and a permission or auditing event on a `File` or `Key` object.
-- **Some entries are partly inferred.** Each catalog entry cites a Microsoft or standards page and carries a confirmed flag. When a detail could not be confirmed from a primary source, the flag is false, and the entry's note says which detail. `toledot events` marks these entries with `[partly inferred; see the catalog notes]`. At this release, 26 of the 83 entries are marked.
+- **Some entries are partly inferred.** Each catalog entry cites a Microsoft or standards page and carries a confirmed flag. When a detail could not be confirmed from a primary source, the flag is false, and the entry's note says which detail. `toledot events` marks these entries with `[partly inferred; see the catalog notes]`. At this release, 26 of the 84 entries are marked.
 - **Where this matters.** A `.evtx`, XML, or collection file carries each event's own field names, so a doubtful catalog detail affects little. A JSON export names values by position from the catalog, and a CSV export names them by the labels the catalog maps. For those two, check any result built from an event marked partly inferred against the event in Event Viewer.
 - **Codes.** A `%%NNNN` code in event data is decoded from the catalog. A meaning that Microsoft's documentation does not confirm is marked `[code meaning not documented by Microsoft]` in the report.
 
@@ -59,6 +60,8 @@ Each rule below is chosen so that toledot never says more than the events do.
 
 - **One event is one change.** The exception is directory service changes (5136). Windows writes one event for each value, so toledot joins the events that share a correlation ID and an object on one computer. It pairs a deleted and an added value of one attribute as one change of that value. A 5136 event with no correlation ID, or with no object name, stands alone.
 - **From where follows the logon ID.** A change names its actor's logon session. toledot looks for the latest logon event with that logon ID, on the same computer, at or before the change. If a logoff for that session comes after the logon and before the change, the logon no longer counts. The logon event gives the address, port, workstation name, and logon type.
+- **A logon from before a restart is not used.** Microsoft documents logon IDs as unique only between reboots. When Windows started (4608) or the log service stopped (1100) on the computer between the logon and the change, the origin says so instead of naming the earlier logon. A restart that left neither event in the input cannot be seen, and then an old logon with a reused ID could still be linked.
+- **Contradictory evidence gives no origin.** Two different logons for one session at the same moment, or a logon for a different account from the change's actor, give an origin that says why it is not known rather than a guess.
 - **A logon on another controller is not linked.** toledot matches logon IDs within one computer. If the logon event is on another domain controller, the report says that the logon event is not in the input, even when you gave toledot that controller's log. Where it came from is then not known. toledot says so and does not guess.
 - **A system session has no origin.** The sessions of the computer itself (SYSTEM, NETWORK SERVICE, and LOCAL SERVICE) have no logon event. The report says the computer's own system session made the change.
 - **The address is what the logon recorded.** A proxy, a jump host, or network address translation can hide the real origin.

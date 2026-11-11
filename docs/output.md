@@ -159,6 +159,8 @@ Each detail has a `label`, a `kind`, an `old` and a `new` value, an optional `me
 
 Values stay exactly as the event recorded them. `meaning` adds words when toledot can decode the value: the names of account control flags that were turned on or off, or the text of a `%%1794`-style code. A meaning that Microsoft's documentation does not confirm ends with `[code meaning not documented by Microsoft]`.
 
+`related` lists up to 20 other changes by the same session on the same computer within two seconds, nearest in time first; `related_total` counts all of them. A burst of automated changes is therefore described with a bounded list.
+
 Directory service change events (5136) record one event for each value. toledot joins the events of one modification, those that share a correlation ID and an object on one computer, into one change. A value that was deleted and one that was added for one attribute become one `changed` detail. When the events do not pair, the values are listed as `removed` and `added`.
 
 ### Origin
@@ -171,6 +173,9 @@ Directory service change events (5136) record one event for each value. toledot 
 | `local` | The change was made by one of the computer's own system sessions, which have no logon event. |
 | `ended` | The input holds only a logoff of that session before the change, and no logon. Where the session came from is not known. A logoff with the same timestamp as the change counts as possibly after it, so it does not set this status. |
 | `not-in-input` | The change names a session, but the input holds no logon or logoff event for it before the change. Where it came from is not known. |
+| `restarted` | The latest logon for the session came before Windows started (4608) or the log service stopped (1100) on that computer. Logon IDs are only unique between restarts, so that logon is not used. |
+| `conflicting` | The input holds two different logons for the session at the same moment, for example two copies of one record that disagree. toledot does not choose one. |
+| `other-account` | The logon was for a different account from the one that made the change, so it is not used. |
 | `none` | The change event names no session. |
 
 See [Limitations](limitations.md#how-toledot-links-events) for the rules and their limits.
