@@ -153,7 +153,8 @@
             "context",
             "notices",
             "other",
-            "duplicates"
+            "duplicates",
+            "outside_window"
           ],
           "properties": {
             "changes": {
@@ -170,8 +171,12 @@
             },
             "duplicates": {
               "$ref": "#/$defs/count"
+            },
+            "outside_window": {
+              "$ref": "#/$defs/count"
             }
-          }
+          },
+          "description": "Every event read, counted once by what became of it."
         },
         "by_category": {
           "$ref": "#/$defs/countMap"

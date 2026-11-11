@@ -390,6 +390,11 @@ function Invoke-Collection {
     $to = $Until
     if ($null -ne $to -and $to -le $from) { throw '-Until must be later than -Since.' }
     $gaps = New-Object System.Collections.Generic.List[object]
+    if (-not $ToPipeline) {
+        # .NET resolves a relative path against the process directory, which is not
+        # PowerShell's current location; resolve it the way the user sees it.
+        $script:OutFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutFile)
+    }
     if (-not $ToPipeline -and -not $Force -and [System.IO.File]::Exists($OutFile)) {
         throw "$OutFile already exists. Use -Force to replace it."
     }

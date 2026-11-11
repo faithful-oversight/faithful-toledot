@@ -187,7 +187,7 @@ def build(
         The changes in time order, with notices, coverage, and problems.
     """
     state = _State(catalog)
-    for name in ("changes", "context", "notices", "other", "duplicates"):
+    for name in ("changes", "context", "notices", "other", "duplicates", "outside_window"):
         state.account.counts[name] = 0
     for number, source in enumerate(inputs):
         state.input_number = number
@@ -212,7 +212,6 @@ def build(
     state.events.sort(key=_order)
     changes = list(_changes(state, window))
     state.account.changes = _relate(changes)
-    state.account.counts["changes"] = len(state.account.changes)
     state.account.notices.sort(key=lambda n: (n.time, n.computer))
     state.account.coverage = [_coverage(log) for _, log in sorted(state.logs.items())]
     if state.dropped_problems:
@@ -533,6 +532,8 @@ def _changes(state: _State, window: tuple[datetime | None, datetime | None]) -> 
             if _in_window(event.time, window):
                 state.account.notices.append(_notice(state, event, info))
                 state.count("notices")
+            else:
+                state.count("outside_window")
             continue
         key = _group_key(event, info)
         if key is not None and key in groups:
@@ -542,12 +543,14 @@ def _changes(state: _State, window: tuple[datetime | None, datetime | None]) -> 
             groups[key] = [event]
         order.append((event, info, key))
     for event, info, key in order:
-        if not _in_window(event.time, window):
-            continue
         members = groups[key] if key is not None else [event]
+        if not _in_window(event.time, window):
+            state.account.counts["outside_window"] += len(members)
+            continue
         if event.event_id == _AUDIT_POLICY_EVENT:
+            # Both a change and a notice; its event is counted once, with the changes.
             state.account.notices.append(_notice(state, event, info))
-            state.count("notices")
+        state.account.counts["changes"] += len(members)
         yield _change(state, info, members)
 
 

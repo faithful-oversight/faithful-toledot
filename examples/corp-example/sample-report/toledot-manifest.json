@@ -3,24 +3,24 @@
   "schema_version": "1.0",
   "tool": {
     "name": "toledot",
-    "version": "0.0.0"
+    "version": "0.1.0"
   },
   "generated_at": "2026-11-09T12:00:00Z",
   "files": [
     {
       "name": "toledot-report.json",
-      "size": 40687,
-      "sha256": "af0383ff2db07926fbef4c3c44ef2f07eef8dae8685e6dd2c6cdb1c9ce1ce4e8"
+      "size": 40714,
+      "sha256": "5229f837e28b914f755808b54b19271ac8ec090ce3e75ae2d3f5e197caf7ea91"
     },
     {
       "name": "toledot-report.md",
-      "size": 12736,
-      "sha256": "66b4a33fdccb2d21dafd9459eb887c31926e31ca35da08ff0e7e3976f8503ed4"
+      "size": 12758,
+      "sha256": "988287eb2456bfcce9c16ff22764f1acecd80e1ae21dce154193bef213580c36"
     },
     {
       "name": "toledot-report.html",
       "size": 26760,
-      "sha256": "4a65ac975d21477ea813fc9ac81a5d6153f6f0470bd37d8f8e575cfa97f31f10"
+      "sha256": "143e468ddb750573d4be0bde680bcdf0e5bf6057daa88a042d40481b841cece0"
     },
     {
       "name": "toledot-changes.csv",

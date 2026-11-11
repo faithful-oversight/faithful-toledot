@@ -29,8 +29,8 @@ def test_version_flag_prints_version(capsys: pytest.CaptureFixture[str]) -> None
 
 
 def test_no_arguments_prints_help(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main([]) == ExitCode.OK
-    assert "usage: toledot" in capsys.readouterr().out
+    assert main([]) == ExitCode.USAGE
+    assert "usage: toledot" in capsys.readouterr().err
 
 
 def test_unknown_option_is_a_usage_error(capsys: pytest.CaptureFixture[str]) -> None:
@@ -142,9 +142,7 @@ def test_whole_logs_make_absent_records_missing_events(sample: Path) -> None:
 def test_report_errors(
     sample: Path, capsys: pytest.CaptureFixture[str], extra: list[str], message: str
 ) -> None:
-    assert (
-        main(["report", *files_of(sample), "-o", str(sample / "r"), *extra]) == ExitCode.INPUT_ERROR
-    )
+    assert main(["report", *files_of(sample), "-o", str(sample / "r"), *extra]) == ExitCode.USAGE
     assert message in capsys.readouterr().err
 
 

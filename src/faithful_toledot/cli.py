@@ -18,7 +18,7 @@ from faithful_toledot import __version__, catalog, example, outputs, pipeline
 from faithful_toledot.arguments import moment
 from faithful_toledot.collect import cli as collect_cli
 from faithful_toledot.collect.secrets import redact
-from faithful_toledot.errors import InputError, ToledotError
+from faithful_toledot.errors import ToledotError, UsageError
 from faithful_toledot.events import ReadOptions
 from faithful_toledot.outputs import render
 from faithful_toledot.outputs.files import write_files
@@ -158,7 +158,7 @@ def _now() -> datetime:
 def _report(args: argparse.Namespace) -> int:
     if args.since and args.until and args.since >= args.until:
         msg = "--since must be earlier than --until"
-        raise InputError(msg)
+        raise UsageError(msg)
     options = ReadOptions(
         local_offset=args.local_offset,
         day_first=None if args.date_order is None else args.date_order == "day-first",
@@ -231,13 +231,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         code = exc.code
         return int(code) if isinstance(code, int) else int(ExitCode.USAGE)
     if not getattr(args, "run", None):
-        parser.print_help()
-        return int(ExitCode.OK)
+        parser.print_help(sys.stderr)
+        return int(ExitCode.USAGE)
     try:
         return int(args.run(args))
     except ToledotError as exc:
         print(f"toledot: error: {terminal(redact(str(exc)))}", file=sys.stderr)  # noqa: T201
-        return int(ExitCode.INPUT_ERROR)
+        return int(ExitCode.USAGE if isinstance(exc, UsageError) else ExitCode.INPUT_ERROR)
     except Exception as exc:  # noqa: BLE001 - last-resort handler keeps crashes distinct
         print(  # noqa: T201
             f"toledot: internal error: {type(exc).__name__}: {terminal(redact(str(exc)))}\n"

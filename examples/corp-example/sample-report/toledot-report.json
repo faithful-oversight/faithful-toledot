@@ -3,7 +3,7 @@
   "schema_version": "1.0",
   "tool": {
     "name": "toledot",
-    "version": "0.0.0"
+    "version": "0.1.0"
   },
   "generated_at": "2026-11-09T12:00:00Z",
   "inputs": [
@@ -36,11 +36,12 @@
     },
     "problems": 0,
     "events": {
-      "changes": 15,
+      "changes": 17,
       "context": 4,
       "notices": 1,
       "other": 0,
-      "duplicates": 0
+      "duplicates": 0,
+      "outside_window": 0
     },
     "by_category": {
       "user": 7,

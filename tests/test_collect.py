@@ -490,6 +490,7 @@ def fetched(monkeypatch: pytest.MonkeyPatch) -> list[str]:
             ["--since", "2026-11-03T00:00:00Z", "--until", "2026-11-02T00:00:00Z"],
             "--since must be earlier",
         ),
+        (["--auth", "ntlm"], "--auth ntlm needs --username and --secret"),
         (
             [
                 "--transport",
@@ -512,7 +513,10 @@ def test_collect_checks_everything_before_reading_the_secret(
     extra: list[str],
     problem: str,
 ) -> None:
-    assert main(collect_args(tmp_path / "e.jsonl", *extra)) == ExitCode.INPUT_ERROR
+    expected = (
+        ExitCode.USAGE if "needs" in problem or "earlier" in problem else ExitCode.INPUT_ERROR
+    )
+    assert main(collect_args(tmp_path / "e.jsonl", *extra)) == expected
     assert problem in capsys.readouterr().err
     assert fetched == []
 

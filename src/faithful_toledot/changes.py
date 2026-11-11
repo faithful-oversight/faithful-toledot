@@ -270,7 +270,9 @@ class Account:
         problems: Records and files that could not be read, and conflicts.
         counts: How many events were read, by what became of them: ``changes``,
             ``context``, ``notices``, ``other`` (not a change toledot describes),
-            and ``duplicates``.
+            ``duplicates``, and ``outside_window`` (before ``since`` or from ``until``).
+            Every event read is in exactly one count. An audit policy change is both a
+            change and a notice; its event is counted with the changes.
         other_ids: Event IDs read but not described, with their counts.
     """
 

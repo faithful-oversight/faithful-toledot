@@ -405,6 +405,19 @@ def test_a_successful_run_without_force_creates_the_file_and_leaves_nothing_else
     assert only_the_file(tmp_path) == ["events.jsonl"]
 
 
+@needs_pwsh
+def test_a_relative_out_file_is_relative_to_the_powershell_location(tmp_path: Path) -> None:
+    place = tmp_path / "here"
+    place.mkdir()
+    # The process directory stays elsewhere; only PowerShell's location moves.
+    body = (
+        STUB + f"Set-Location -LiteralPath '{place}'\n$OutFile = 'events.jsonl'\nInvoke-Collection"
+    )
+    result = run_pwsh(tmp_path, body)
+    assert result.returncode == 0, result.stderr
+    assert only_the_file(place) == ["events.jsonl"]
+
+
 @pytest.mark.skipif(sys.platform != "win32" or _PWSH is None, reason="needs Windows")
 def test_the_real_script_reads_a_real_log(tmp_path: Path) -> None:  # pragma: no cover
     """Application is readable without elevation; every event in a short window."""

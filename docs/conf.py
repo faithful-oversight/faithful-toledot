@@ -40,6 +40,11 @@ html_theme_options = {
 
 NAVIGATION = {
     "index": [
+        "quickstart",
+        "collecting",
+        "usage",
+        "formats",
+        "output",
         "limitations",
         "architecture",
         "threat-model",
@@ -50,6 +55,8 @@ NAVIGATION = {
         "0001-record-architecture-decisions",
         "0002-python-core",
         "0003-documentation-site",
+        "0004-collection-file",
+        "0005-remote-collection",
     ],
 }
 """Page order for the site navigation, keyed by the page that lists them."""

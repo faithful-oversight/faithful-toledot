@@ -9,8 +9,8 @@ scripts and network access, and never puts a value in a URL; CSV cells are
 protected against formula injection. Long values are shortened in Markdown and
 HTML with a visible marker. CSV and JSON keep full values.
 
-The CSV is UTF-8 without a byte order mark and uses ``\r\n`` line ends, as
-merilo's does. A spreadsheet that guesses the encoding wrongly can be told it
+The CSV is UTF-8 without a byte order mark and uses ``\r\n`` line ends. A
+spreadsheet that guesses the encoding wrongly can be told it
 is UTF-8 when importing.
 """
 
@@ -303,7 +303,7 @@ def _md_summary(report: Report) -> list[str]:
             f"{s['notices']['info']} routine log events, {_plural(s['problems'], 'problem')}. "
             f"Events read: {ev['changes']} in changes, {ev['context']} as context, "
             f"{ev['notices']} as notices, {ev['other']} not described, "
-            f"{ev['duplicates']} duplicates."
+            f"{ev['duplicates']} duplicates, {ev['outside_window']} outside the period."
         ),
         "",
     ]

@@ -47,6 +47,8 @@ FILE_NAMES = {
 """Output formats in the order they are written, with their file names."""
 MANIFEST_NAME = "toledot-manifest.json"
 INPUT_KEYS = ("name", "format", "scope", "size", "sha256")
+EVENT_COUNTS = ("changes", "context", "notices", "other", "duplicates", "outside_window")
+"""How the events read are counted; every event read is in exactly one."""
 
 LIMITATIONS = (
     (
@@ -220,10 +222,7 @@ def build_report(
                 "info": sum(n.severity != "warning" for n in account.notices),
             },
             "problems": len(account.problems),
-            "events": {
-                name: account.counts.get(name, 0)
-                for name in ("changes", "context", "notices", "other", "duplicates")
-            },
+            "events": {name: account.counts.get(name, 0) for name in EVENT_COUNTS},
             "by_category": _ranked(Counter(c.category for c in changes)),
             "by_action": _ranked(Counter(c.action for c in changes)),
             "actors": _actors(account),

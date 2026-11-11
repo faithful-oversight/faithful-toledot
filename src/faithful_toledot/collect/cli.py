@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from faithful_toledot.arguments import bounded, moment
 from faithful_toledot.collect import names, remote, script, secrets
-from faithful_toledot.errors import CollectionError
+from faithful_toledot.errors import UsageError
 from faithful_toledot.outputs.files import write_files
 from faithful_toledot.outputs.safety import command_line, terminal
 
@@ -81,13 +81,16 @@ def run_collect(args: argparse.Namespace) -> int:
     username = names.account_name(args.username)
     if args.since and args.until and args.since >= args.until:
         msg = "--since must be earlier than --until"
-        raise CollectionError(msg)
+        raise UsageError(msg)
     if args.secret and not username:
         msg = "--secret needs --username"
-        raise CollectionError(msg)
+        raise UsageError(msg)
+    if args.auth == "ntlm" and not username:
+        msg = "--auth ntlm needs --username and --secret; only Kerberos can use the current logon"
+        raise UsageError(msg)
     if username and not args.secret:
         msg = "--username needs --secret; leave both out to use the current Kerberos ticket"
-        raise CollectionError(msg)
+        raise UsageError(msg)
     target = remote.Target(
         server=server,
         auth=args.auth,

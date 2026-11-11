@@ -2,7 +2,7 @@
 
 **15 changes described, but the account is incomplete: 1 notice, 1 log with missing events.**
 
-Generated 2026-11-09T12:00:00Z by toledot 0.0.0. Period: everything in the input. All times are UTC.
+Generated 2026-11-09T12:00:00Z by toledot 0.1.0. Period: everything in the input. All times are UTC.
 
 ## Completeness
 
@@ -21,7 +21,7 @@ These events bear on whether the log can be trusted to be whole (a cleared log, 
 
 ## Summary
 
-15 changes, 1 warning notice, 0 routine log events, 0 problems. Events read: 15 in changes, 4 as context, 1 as notices, 0 not described, 0 duplicates.
+15 changes, 1 warning notice, 0 routine log events, 0 problems. Events read: 17 in changes, 4 as context, 1 as notices, 0 not described, 0 duplicates, 0 outside the period.
 
 First change 2026-11-02T08:06:00Z, last 2026-11-06T13:40:00Z.
 

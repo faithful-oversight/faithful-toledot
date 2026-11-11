@@ -13,3 +13,7 @@ class InputError(ToledotError):
 
 class CollectionError(ToledotError):
     """Live collection could not connect, authenticate, or read what it needs."""
+
+
+class UsageError(ToledotError):
+    """The command's options do not fit together, so nothing was attempted."""

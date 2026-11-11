@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -68,7 +68,9 @@ def test_a_membership_change_names_actor_member_group_and_origin() -> None:
     assert (change.origin.address, change.origin.logon_type_name) == ("192.0.2.44", "Network")
     assert change.sentence.startswith("CORP\\alice (")
     assert "to the group CORP\\Domain Admins" in change.sentence
-    assert result.counts == {"changes": 1, "context": 1, "notices": 0, "other": 0, "duplicates": 0}
+    assert result.counts == {
+        "changes": 1, "context": 1, "notices": 0, "other": 0, "duplicates": 0, "outside_window": 0,
+    }  # fmt: skip
     assert result.complete
 
 
@@ -435,7 +437,21 @@ def test_an_audit_policy_change_is_both_a_change_and_a_notice() -> None:
     )
     assert [c.action for c in result.changes] == ["policy-changed"]
     assert [n.kind for n in result.notices] == ["audit-policy-changed"]
-    assert result.counts["notices"] == 1
+    assert (result.counts["changes"], result.counts["notices"]) == (1, 0)  # its event, once
+
+
+@pytest.mark.parametrize("window", [{}, {"since": at(5)}, {"until": at(5)}])
+def test_every_event_read_is_counted_once(window: dict[str, Any]) -> None:
+    items = [
+        logon(), member_added(), member_added(1), member_added(10), member_added(10),
+        ds_change("description", "a", "%%14675", seconds=2),
+        ds_change("description", "b", "%%14674", seconds=2),
+        event(1102, {**SUBJECT}, seconds=3), event(4719, {**SUBJECT}, seconds=4),
+        event(9999, {}), event(4616, {**SUBJECT}, seconds=12),
+    ]  # fmt: skip
+    items[4] = replace(items[3])  # the same record twice
+    result = account(*items, **window)
+    assert sum(result.counts.values()) == len(items)
 
 
 def test_notices_outside_the_window_are_left_out() -> None:

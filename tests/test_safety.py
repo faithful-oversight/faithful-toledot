@@ -41,7 +41,7 @@ def test_ascii_text_tabs_and_line_breaks_pass_through(text: str) -> None:
 
 
 ORDINARY = [
-    "caf" + chr(0xE9) + " " + chr(0xFC) + "ber",  # accented Latin
+    "na" + chr(0xEF) + "ve " + chr(0xFC) + "ber",  # accented Latin
     chr(0x65E5) + chr(0x672C),  # CJK
     chr(0x41F) + chr(0x440),  # Cyrillic
     chr(0x1F600),  # an emoji without joiners
