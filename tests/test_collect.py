@@ -1,7 +1,11 @@
 # SPDX-FileCopyrightText: 2026 Faithful Oversight, LLC
 # SPDX-License-Identifier: Apache-2.0
 # ruff: noqa: E501 - parametrised cases read best one per line
-"""Remote collection over PowerShell remoting, and the collect commands."""
+"""Remote collection over PowerShell remoting, and the collect commands.
+
+Set ``TOLEDOT_REQUIRE_LIVE=1`` to fail instead of skipping when the ``live`` extra
+(pypsrp) is missing.
+"""
 
 from __future__ import annotations
 
@@ -21,6 +25,9 @@ from faithful_toledot.formats import bundle
 from faithful_toledot.formats.bundle import encode, read_bundle
 from tests.helpers import at, logon, member_added
 from tests.test_formats_bundle import header
+
+if os.environ.get("TOLEDOT_REQUIRE_LIVE") == "1":  # pragma: no cover - set in CI
+    import pypsrp  # noqa: F401 - fail at collection, not skip, when the live extra is missing
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

@@ -1,0 +1,1235 @@
+{
+  "$schema": "https://faithful-oversight.github.io/faithful-toledot/schema/report-v1.schema.json",
+  "schema_version": "1.0",
+  "tool": {
+    "name": "toledot",
+    "version": "0.0.0"
+  },
+  "generated_at": "2026-11-09T12:00:00Z",
+  "inputs": [
+    {
+      "name": "dc01-events.jsonl",
+      "format": "collection",
+      "scope": "unknown",
+      "size": 13161,
+      "sha256": "508be81c318863b934d9452907c9bd967d992d655a9eab3741da0d0ebe5ea9dc"
+    },
+    {
+      "name": "dc02-events.jsonl",
+      "format": "collection",
+      "scope": "unknown",
+      "size": 3889,
+      "sha256": "24de7ab253bd91df453112b1ffe18366f8c76e844e8131395f0c45ffe2792504"
+    }
+  ],
+  "window": {
+    "since": null,
+    "until": null
+  },
+  "summary": {
+    "complete": false,
+    "changes": 15,
+    "notices": {
+      "warning": 1,
+      "info": 0
+    },
+    "problems": 0,
+    "events": {
+      "changes": 15,
+      "context": 4,
+      "notices": 1,
+      "other": 0,
+      "duplicates": 0
+    },
+    "by_category": {
+      "user": 7,
+      "group": 5,
+      "directory": 2,
+      "policy": 1
+    },
+    "by_action": {
+      "changed": 3,
+      "member-added": 3,
+      "created": 2,
+      "password-reset": 2,
+      "deleted": 1,
+      "enabled": 1,
+      "member-removed": 1,
+      "policy-changed": 1,
+      "unlocked": 1
+    },
+    "actors": [
+      {
+        "name": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)",
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
+        "changes": 7
+      },
+      {
+        "name": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150)",
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1150",
+        "changes": 5
+      },
+      {
+        "name": "CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131)",
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1131",
+        "changes": 3
+      }
+    ],
+    "first_change": "2026-11-02T08:06:00Z",
+    "last_change": "2026-11-06T13:40:00Z"
+  },
+  "notices": [
+    {
+      "time": "2026-11-06T07:52:00Z",
+      "computer": "DC02.corp.example",
+      "kind": "log-cleared",
+      "severity": "warning",
+      "text": "The log was cleared. Events may be missing from this account around this time.",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
+        "name": "alice.admin",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+      },
+      "event": {
+        "event_id": 1102,
+        "record_id": 9102,
+        "time": "2026-11-06T07:52:00Z",
+        "file": "dc02-events.jsonl",
+        "position": "line 3"
+      }
+    }
+  ],
+  "coverage": [
+    {
+      "computer": "DC01.corp.example",
+      "channel": "Security",
+      "events": 17,
+      "first": "2026-11-02T08:05:00Z",
+      "last": "2026-11-05T07:40:00Z",
+      "first_record": 48211,
+      "last_record": 48639,
+      "continuity": "gaps",
+      "missing": [
+        [
+          48227,
+          48638
+        ]
+      ],
+      "missing_count": 412,
+      "scope": "filtered",
+      "overwritten_before": null,
+      "statement": "412 record numbers between the first and the last are absent. The input says it holds chosen events only, so this is expected and does not show whether any chosen event is missing."
+    },
+    {
+      "computer": "DC02.corp.example",
+      "channel": "Security",
+      "events": 5,
+      "first": "2026-11-06T07:50:00Z",
+      "last": "2026-11-06T13:40:00Z",
+      "first_record": 9101,
+      "last_record": 9105,
+      "continuity": "complete",
+      "missing": [],
+      "missing_count": 0,
+      "scope": "filtered",
+      "overwritten_before": "2026-11-05T08:00:00Z",
+      "statement": "Every record number between the first and the last is present. Events before the first or after the last are outside this input. The collection asked for earlier events, but the log's oldest record is from 2026-11-05 08:00:00 UTC: earlier events had been overwritten and are missing."
+    }
+  ],
+  "problems": [],
+  "changes": [
+    {
+      "id": "C0001",
+      "time": "2026-11-02T08:06:00Z",
+      "computer": "DC01.corp.example",
+      "category": "user",
+      "action": "created",
+      "title": "User account created",
+      "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) created the user account CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1150",
+        "name": "svc_provision",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150)"
+      },
+      "target": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1207",
+        "name": "dana.whitfield",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207)"
+      },
+      "member": null,
+      "details": [
+        {
+          "label": "SAM account name",
+          "kind": "initial",
+          "old": null,
+          "new": "dana.whitfield",
+          "meaning": null,
+          "attribute": "SamAccountName"
+        },
+        {
+          "label": "display name",
+          "kind": "initial",
+          "old": null,
+          "new": "Dana Whitfield",
+          "meaning": null,
+          "attribute": "DisplayName"
+        },
+        {
+          "label": "user principal name",
+          "kind": "initial",
+          "old": null,
+          "new": "dana.whitfield@corp.example",
+          "meaning": null,
+          "attribute": "UserPrincipalName"
+        },
+        {
+          "label": "password last set",
+          "kind": "initial",
+          "old": null,
+          "new": "%%1794",
+          "meaning": "<never> [code meaning not documented by Microsoft]",
+          "attribute": "PasswordLastSet"
+        },
+        {
+          "label": "account expiry",
+          "kind": "initial",
+          "old": null,
+          "new": "%%1794",
+          "meaning": "<never> [code meaning not documented by Microsoft]",
+          "attribute": "AccountExpires"
+        },
+        {
+          "label": "primary group RID",
+          "kind": "initial",
+          "old": null,
+          "new": "513",
+          "meaning": null,
+          "attribute": "PrimaryGroupId"
+        },
+        {
+          "label": "account control flags",
+          "kind": "changed",
+          "old": "0x0",
+          "new": "0x15",
+          "meaning": "turned on: USER_ACCOUNT_DISABLED, USER_PASSWORD_NOT_REQUIRED, USER_NORMAL_ACCOUNT",
+          "attribute": "OldUacValue/NewUacValue"
+        },
+        {
+          "label": "PrivilegeList",
+          "kind": "info",
+          "old": null,
+          "new": "%%1793",
+          "meaning": "<value not set> [code meaning not documented by Microsoft]",
+          "attribute": "PrivilegeList"
+        }
+      ],
+      "origin": {
+        "status": "session",
+        "logon_id": "0x2a51c",
+        "address": "198.51.100.20",
+        "port": "49731",
+        "workstation": null,
+        "logon_type": "3",
+        "logon_type_name": "Network",
+        "logon_time": "2026-11-02T08:05:00Z",
+        "source": {
+          "file": "dc01-events.jsonl",
+          "position": "line 2"
+        },
+        "statement": "Session 0x2a51c began at 2026-11-02 08:05:00 UTC as Network from 198.51.100.20 port 49731."
+      },
+      "events": [
+        {
+          "event_id": 4720,
+          "record_id": 48212,
+          "time": "2026-11-02T08:06:00Z",
+          "file": "dc01-events.jsonl",
+          "position": "line 3"
+        }
+      ],
+      "related": [
+        "C0002",
+        "C0003",
+        "C0004"
+      ],
+      "notes": []
+    },
+    {
+      "id": "C0002",
+      "time": "2026-11-02T08:06:00.6Z",
+      "computer": "DC01.corp.example",
+      "category": "user",
+      "action": "password-reset",
+      "title": "Password reset attempted",
+      "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) attempted to reset the password of CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1150",
+        "name": "svc_provision",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150)"
+      },
+      "target": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1207",
+        "name": "dana.whitfield",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207)"
+      },
+      "member": null,
+      "details": [],
+      "origin": {
+        "status": "session",
+        "logon_id": "0x2a51c",
+        "address": "198.51.100.20",
+        "port": "49731",
+        "workstation": null,
+        "logon_type": "3",
+        "logon_type_name": "Network",
+        "logon_time": "2026-11-02T08:05:00Z",
+        "source": {
+          "file": "dc01-events.jsonl",
+          "position": "line 2"
+        },
+        "statement": "Session 0x2a51c began at 2026-11-02 08:05:00 UTC as Network from 198.51.100.20 port 49731."
+      },
+      "events": [
+        {
+          "event_id": 4724,
+          "record_id": 48213,
+          "time": "2026-11-02T08:06:00.6Z",
+          "file": "dc01-events.jsonl",
+          "position": "line 4"
+        }
+      ],
+      "related": [
+        "C0001",
+        "C0003",
+        "C0004"
+      ],
+      "notes": []
+    },
+    {
+      "id": "C0003",
+      "time": "2026-11-02T08:06:01.2Z",
+      "computer": "DC01.corp.example",
+      "category": "user",
+      "action": "changed",
+      "title": "User account changed",
+      "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) changed the user account CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1150",
+        "name": "svc_provision",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150)"
+      },
+      "target": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1207",
+        "name": "dana.whitfield",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207)"
+      },
+      "member": null,
+      "details": [
+        {
+          "label": "account control flags",
+          "kind": "changed",
+          "old": "0x15",
+          "new": "0x10",
+          "meaning": "turned off: USER_ACCOUNT_DISABLED, USER_PASSWORD_NOT_REQUIRED",
+          "attribute": "OldUacValue/NewUacValue"
+        }
+      ],
+      "origin": {
+        "status": "session",
+        "logon_id": "0x2a51c",
+        "address": "198.51.100.20",
+        "port": "49731",
+        "workstation": null,
+        "logon_type": "3",
+        "logon_type_name": "Network",
+        "logon_time": "2026-11-02T08:05:00Z",
+        "source": {
+          "file": "dc01-events.jsonl",
+          "position": "line 2"
+        },
+        "statement": "Session 0x2a51c began at 2026-11-02 08:05:00 UTC as Network from 198.51.100.20 port 49731."
+      },
+      "events": [
+        {
+          "event_id": 4738,
+          "record_id": 48214,
+          "time": "2026-11-02T08:06:01.2Z",
+          "file": "dc01-events.jsonl",
+          "position": "line 5"
+        }
+      ],
+      "related": [
+        "C0001",
+        "C0002",
+        "C0004"
+      ],
+      "notes": []
+    },
+    {
+      "id": "C0004",
+      "time": "2026-11-02T08:06:01.8Z",
+      "computer": "DC01.corp.example",
+      "category": "user",
+      "action": "enabled",
+      "title": "User account enabled",
+      "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) enabled the user account CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1150",
+        "name": "svc_provision",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150)"
+      },
+      "target": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1207",
+        "name": "dana.whitfield",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207)"
+      },
+      "member": null,
+      "details": [],
+      "origin": {
+        "status": "session",
+        "logon_id": "0x2a51c",
+        "address": "198.51.100.20",
+        "port": "49731",
+        "workstation": null,
+        "logon_type": "3",
+        "logon_type_name": "Network",
+        "logon_time": "2026-11-02T08:05:00Z",
+        "source": {
+          "file": "dc01-events.jsonl",
+          "position": "line 2"
+        },
+        "statement": "Session 0x2a51c began at 2026-11-02 08:05:00 UTC as Network from 198.51.100.20 port 49731."
+      },
+      "events": [
+        {
+          "event_id": 4722,
+          "record_id": 48215,
+          "time": "2026-11-02T08:06:01.8Z",
+          "file": "dc01-events.jsonl",
+          "position": "line 6"
+        }
+      ],
+      "related": [
+        "C0001",
+        "C0002",
+        "C0003"
+      ],
+      "notes": []
+    },
+    {
+      "id": "C0005",
+      "time": "2026-11-02T08:06:30Z",
+      "computer": "DC01.corp.example",
+      "category": "group",
+      "action": "member-added",
+      "title": "Member added to security-enabled global group",
+      "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) added CN=Dana Whitfield,OU=Staff,DC=corp,DC=example (named CORP\\dana.whitfield in other events; S-1-5-21-1111111111-2222222222-3333333333-1207) to the group CORP\\Staff-All (S-1-5-21-1111111111-2222222222-3333333333-2101).",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1150",
+        "name": "svc_provision",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150)"
+      },
+      "target": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-2101",
+        "name": "Staff-All",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\Staff-All (S-1-5-21-1111111111-2222222222-3333333333-2101)"
+      },
+      "member": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1207",
+        "name": null,
+        "domain": null,
+        "dn": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example",
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": "CORP\\dana.whitfield",
+        "display": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example (named CORP\\dana.whitfield in other events; S-1-5-21-1111111111-2222222222-3333333333-1207)"
+      },
+      "details": [],
+      "origin": {
+        "status": "session",
+        "logon_id": "0x2a51c",
+        "address": "198.51.100.20",
+        "port": "49731",
+        "workstation": null,
+        "logon_type": "3",
+        "logon_type_name": "Network",
+        "logon_time": "2026-11-02T08:05:00Z",
+        "source": {
+          "file": "dc01-events.jsonl",
+          "position": "line 2"
+        },
+        "statement": "Session 0x2a51c began at 2026-11-02 08:05:00 UTC as Network from 198.51.100.20 port 49731."
+      },
+      "events": [
+        {
+          "event_id": 4728,
+          "record_id": 48216,
+          "time": "2026-11-02T08:06:30Z",
+          "file": "dc01-events.jsonl",
+          "position": "line 7"
+        }
+      ],
+      "related": [],
+      "notes": []
+    },
+    {
+      "id": "C0006",
+      "time": "2026-11-02T11:12:00Z",
+      "computer": "DC01.corp.example",
+      "category": "user",
+      "action": "password-reset",
+      "title": "Password reset attempted",
+      "sentence": "CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131) attempted to reset the password of CORP\\omar.reyes (S-1-5-21-1111111111-2222222222-3333333333-1188).",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1131",
+        "name": "helpdesk.sam",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131)"
+      },
+      "target": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1188",
+        "name": "omar.reyes",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\omar.reyes (S-1-5-21-1111111111-2222222222-3333333333-1188)"
+      },
+      "member": null,
+      "details": [],
+      "origin": {
+        "status": "session",
+        "logon_id": "0x3b7f02",
+        "address": "192.0.2.61",
+        "port": "49731",
+        "workstation": null,
+        "logon_type": "3",
+        "logon_type_name": "Network",
+        "logon_time": "2026-11-02T11:10:00Z",
+        "source": {
+          "file": "dc01-events.jsonl",
+          "position": "line 8"
+        },
+        "statement": "Session 0x3b7f02 began at 2026-11-02 11:10:00 UTC as Network from 192.0.2.61 port 49731."
+      },
+      "events": [
+        {
+          "event_id": 4724,
+          "record_id": 48218,
+          "time": "2026-11-02T11:12:00Z",
+          "file": "dc01-events.jsonl",
+          "position": "line 9"
+        }
+      ],
+      "related": [],
+      "notes": []
+    },
+    {
+      "id": "C0007",
+      "time": "2026-11-02T11:12:12Z",
+      "computer": "DC01.corp.example",
+      "category": "user",
+      "action": "unlocked",
+      "title": "User account unlocked",
+      "sentence": "CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131) unlocked the user account CORP\\omar.reyes (S-1-5-21-1111111111-2222222222-3333333333-1188).",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1131",
+        "name": "helpdesk.sam",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131)"
+      },
+      "target": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1188",
+        "name": "omar.reyes",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\omar.reyes (S-1-5-21-1111111111-2222222222-3333333333-1188)"
+      },
+      "member": null,
+      "details": [],
+      "origin": {
+        "status": "session",
+        "logon_id": "0x3b7f02",
+        "address": "192.0.2.61",
+        "port": "49731",
+        "workstation": null,
+        "logon_type": "3",
+        "logon_type_name": "Network",
+        "logon_time": "2026-11-02T11:10:00Z",
+        "source": {
+          "file": "dc01-events.jsonl",
+          "position": "line 8"
+        },
+        "statement": "Session 0x3b7f02 began at 2026-11-02 11:10:00 UTC as Network from 192.0.2.61 port 49731."
+      },
+      "events": [
+        {
+          "event_id": 4767,
+          "record_id": 48219,
+          "time": "2026-11-02T11:12:12Z",
+          "file": "dc01-events.jsonl",
+          "position": "line 10"
+        }
+      ],
+      "related": [],
+      "notes": []
+    },
+    {
+      "id": "C0008",
+      "time": "2026-11-03T09:07:00Z",
+      "computer": "DC01.corp.example",
+      "category": "directory",
+      "action": "changed",
+      "title": "Directory object modified",
+      "sentence": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) changed the user object CN=Dana Whitfield,OU=Staff,DC=corp,DC=example.",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
+        "name": "alice.admin",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+      },
+      "target": {
+        "sid": null,
+        "name": null,
+        "domain": null,
+        "dn": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example",
+        "object_class": "user",
+        "guid": "{6f1c2a9e-5b7d-4c3a-9e1f-0a2b3c4d5e6f}",
+        "well_known": null,
+        "known_as": null,
+        "display": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example"
+      },
+      "member": null,
+      "details": [
+        {
+          "label": "title",
+          "kind": "changed",
+          "old": "Analyst",
+          "new": "Finance Systems Lead",
+          "meaning": null,
+          "attribute": "title"
+        }
+      ],
+      "origin": {
+        "status": "session",
+        "logon_id": "0x5f1a2",
+        "address": "192.0.2.44",
+        "port": "49731",
+        "workstation": null,
+        "logon_type": "3",
+        "logon_type_name": "Network",
+        "logon_time": "2026-11-03T09:05:00Z",
+        "source": {
+          "file": "dc01-events.jsonl",
+          "position": "line 11"
+        },
+        "statement": "Session 0x5f1a2 began at 2026-11-03 09:05:00 UTC as Network from 192.0.2.44 port 49731."
+      },
+      "events": [
+        {
+          "event_id": 5136,
+          "record_id": 48221,
+          "time": "2026-11-03T09:07:00Z",
+          "file": "dc01-events.jsonl",
+          "position": "line 12"
+        },
+        {
+          "event_id": 5136,
+          "record_id": 48222,
+          "time": "2026-11-03T09:07:00Z",
+          "file": "dc01-events.jsonl",
+          "position": "line 13"
+        }
+      ],
+      "related": [],
+      "notes": []
+    },
+    {
+      "id": "C0009",
+      "time": "2026-11-03T09:09:00Z",
+      "computer": "DC01.corp.example",
+      "category": "group",
+      "action": "member-added",
+      "title": "Member added to security-enabled global group",
+      "sentence": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) added CN=Dana Whitfield,OU=Staff,DC=corp,DC=example (named CORP\\dana.whitfield in other events; S-1-5-21-1111111111-2222222222-3333333333-1207) to the group CORP\\Domain Admins (well-known: Domain Admins, if this is a domain SID; S-1-5-21-1111111111-2222222222-3333333333-512).",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
+        "name": "alice.admin",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+      },
+      "target": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-512",
+        "name": "Domain Admins",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": "Domain Admins, if this is a domain SID",
+        "known_as": null,
+        "display": "CORP\\Domain Admins (well-known: Domain Admins, if this is a domain SID; S-1-5-21-1111111111-2222222222-3333333333-512)"
+      },
+      "member": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1207",
+        "name": null,
+        "domain": null,
+        "dn": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example",
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": "CORP\\dana.whitfield",
+        "display": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example (named CORP\\dana.whitfield in other events; S-1-5-21-1111111111-2222222222-3333333333-1207)"
+      },
+      "details": [],
+      "origin": {
+        "status": "session",
+        "logon_id": "0x5f1a2",
+        "address": "192.0.2.44",
+        "port": "49731",
+        "workstation": null,
+        "logon_type": "3",
+        "logon_type_name": "Network",
+        "logon_time": "2026-11-03T09:05:00Z",
+        "source": {
+          "file": "dc01-events.jsonl",
+          "position": "line 11"
+        },
+        "statement": "Session 0x5f1a2 began at 2026-11-03 09:05:00 UTC as Network from 192.0.2.44 port 49731."
+      },
+      "events": [
+        {
+          "event_id": 4728,
+          "record_id": 48223,
+          "time": "2026-11-03T09:09:00Z",
+          "file": "dc01-events.jsonl",
+          "position": "line 14"
+        }
+      ],
+      "related": [],
+      "notes": []
+    },
+    {
+      "id": "C0010",
+      "time": "2026-11-03T09:09:24Z",
+      "computer": "DC01.corp.example",
+      "category": "directory",
+      "action": "changed",
+      "title": "Directory object modified",
+      "sentence": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) changed the user object CN=Dana Whitfield,OU=Staff,DC=corp,DC=example.",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
+        "name": "alice.admin",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+      },
+      "target": {
+        "sid": null,
+        "name": null,
+        "domain": null,
+        "dn": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example",
+        "object_class": "user",
+        "guid": "{6f1c2a9e-5b7d-4c3a-9e1f-0a2b3c4d5e6f}",
+        "well_known": null,
+        "known_as": null,
+        "display": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example"
+      },
+      "member": null,
+      "details": [
+        {
+          "label": "userAccountControl",
+          "kind": "changed",
+          "old": "512",
+          "new": "66048",
+          "meaning": "turned on: DONT_EXPIRE_PASSWORD",
+          "attribute": "userAccountControl"
+        }
+      ],
+      "origin": {
+        "status": "session",
+        "logon_id": "0x5f1a2",
+        "address": "192.0.2.44",
+        "port": "49731",
+        "workstation": null,
+        "logon_type": "3",
+        "logon_type_name": "Network",
+        "logon_time": "2026-11-03T09:05:00Z",
+        "source": {
+          "file": "dc01-events.jsonl",
+          "position": "line 11"
+        },
+        "statement": "Session 0x5f1a2 began at 2026-11-03 09:05:00 UTC as Network from 192.0.2.44 port 49731."
+      },
+      "events": [
+        {
+          "event_id": 5136,
+          "record_id": 48224,
+          "time": "2026-11-03T09:09:24Z",
+          "file": "dc01-events.jsonl",
+          "position": "line 15"
+        },
+        {
+          "event_id": 5136,
+          "record_id": 48225,
+          "time": "2026-11-03T09:09:24Z",
+          "file": "dc01-events.jsonl",
+          "position": "line 16"
+        }
+      ],
+      "related": [],
+      "notes": []
+    },
+    {
+      "id": "C0011",
+      "time": "2026-11-04T08:10:00Z",
+      "computer": "DC01.corp.example",
+      "category": "policy",
+      "action": "policy-changed",
+      "title": "Domain policy changed",
+      "sentence": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) changed policy on DC01.corp.example (domain policy changed).",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
+        "name": "alice.admin",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+      },
+      "target": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333",
+        "name": null,
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "S-1-5-21-1111111111-2222222222-3333333333"
+      },
+      "member": null,
+      "details": [
+        {
+          "label": "policy that changed",
+          "kind": "set",
+          "old": null,
+          "new": "Password Policy",
+          "meaning": null,
+          "attribute": "DomainPolicyChanged"
+        },
+        {
+          "label": "minimum password length",
+          "kind": "set",
+          "old": null,
+          "new": "8",
+          "meaning": null,
+          "attribute": "MinPasswordLength"
+        },
+        {
+          "label": "password history length",
+          "kind": "set",
+          "old": null,
+          "new": "5",
+          "meaning": null,
+          "attribute": "PasswordHistoryLength"
+        }
+      ],
+      "origin": {
+        "status": "session",
+        "logon_id": "0x5f1a2",
+        "address": "192.0.2.44",
+        "port": "49731",
+        "workstation": null,
+        "logon_type": "3",
+        "logon_type_name": "Network",
+        "logon_time": "2026-11-03T09:05:00Z",
+        "source": {
+          "file": "dc01-events.jsonl",
+          "position": "line 11"
+        },
+        "statement": "Session 0x5f1a2 began at 2026-11-03 09:05:00 UTC as Network from 192.0.2.44 port 49731."
+      },
+      "events": [
+        {
+          "event_id": 4739,
+          "record_id": 48226,
+          "time": "2026-11-04T08:10:00Z",
+          "file": "dc01-events.jsonl",
+          "position": "line 17"
+        }
+      ],
+      "related": [],
+      "notes": []
+    },
+    {
+      "id": "C0012",
+      "time": "2026-11-05T07:40:00Z",
+      "computer": "DC01.corp.example",
+      "category": "group",
+      "action": "member-removed",
+      "title": "Member removed from security-enabled global group",
+      "sentence": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) removed CN=Dana Whitfield,OU=Staff,DC=corp,DC=example (named CORP\\dana.whitfield in other events; S-1-5-21-1111111111-2222222222-3333333333-1207) from the group CORP\\Domain Admins (well-known: Domain Admins, if this is a domain SID; S-1-5-21-1111111111-2222222222-3333333333-512).",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
+        "name": "alice.admin",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+      },
+      "target": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-512",
+        "name": "Domain Admins",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": "Domain Admins, if this is a domain SID",
+        "known_as": null,
+        "display": "CORP\\Domain Admins (well-known: Domain Admins, if this is a domain SID; S-1-5-21-1111111111-2222222222-3333333333-512)"
+      },
+      "member": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1207",
+        "name": null,
+        "domain": null,
+        "dn": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example",
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": "CORP\\dana.whitfield",
+        "display": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example (named CORP\\dana.whitfield in other events; S-1-5-21-1111111111-2222222222-3333333333-1207)"
+      },
+      "details": [],
+      "origin": {
+        "status": "session",
+        "logon_id": "0x5f1a2",
+        "address": "192.0.2.44",
+        "port": "49731",
+        "workstation": null,
+        "logon_type": "3",
+        "logon_type_name": "Network",
+        "logon_time": "2026-11-03T09:05:00Z",
+        "source": {
+          "file": "dc01-events.jsonl",
+          "position": "line 11"
+        },
+        "statement": "Session 0x5f1a2 began at 2026-11-03 09:05:00 UTC as Network from 192.0.2.44 port 49731."
+      },
+      "events": [
+        {
+          "event_id": 4729,
+          "record_id": 48639,
+          "time": "2026-11-05T07:40:00Z",
+          "file": "dc01-events.jsonl",
+          "position": "line 18"
+        }
+      ],
+      "related": [],
+      "notes": []
+    },
+    {
+      "id": "C0013",
+      "time": "2026-11-06T08:00:00Z",
+      "computer": "DC02.corp.example",
+      "category": "group",
+      "action": "created",
+      "title": "Security-enabled global group created",
+      "sentence": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) created the group CORP\\Temp-Vendors (S-1-5-21-1111111111-2222222222-3333333333-2240).",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
+        "name": "alice.admin",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+      },
+      "target": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-2240",
+        "name": "Temp-Vendors",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\Temp-Vendors (S-1-5-21-1111111111-2222222222-3333333333-2240)"
+      },
+      "member": null,
+      "details": [
+        {
+          "label": "SAM account name",
+          "kind": "initial",
+          "old": null,
+          "new": "Temp-Vendors",
+          "meaning": null,
+          "attribute": "SamAccountName"
+        }
+      ],
+      "origin": {
+        "status": "session",
+        "logon_id": "0x77e310",
+        "address": "192.0.2.44",
+        "port": "49731",
+        "workstation": "ADMIN-PC7",
+        "logon_type": "10",
+        "logon_type_name": "RemoteInteractive",
+        "logon_time": "2026-11-06T07:50:00Z",
+        "source": {
+          "file": "dc02-events.jsonl",
+          "position": "line 2"
+        },
+        "statement": "Session 0x77e310 began at 2026-11-06 07:50:00 UTC as RemoteInteractive from 192.0.2.44 port 49731, workstation name ADMIN-PC7."
+      },
+      "events": [
+        {
+          "event_id": 4727,
+          "record_id": 9103,
+          "time": "2026-11-06T08:00:00Z",
+          "file": "dc02-events.jsonl",
+          "position": "line 4"
+        }
+      ],
+      "related": [],
+      "notes": []
+    },
+    {
+      "id": "C0014",
+      "time": "2026-11-06T08:01:00Z",
+      "computer": "DC02.corp.example",
+      "category": "group",
+      "action": "member-added",
+      "title": "Member added to security-enabled global group",
+      "sentence": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) added S-1-5-21-1111111111-2222222222-3333333333-1188 (named CORP\\omar.reyes in other events) to the group CORP\\Temp-Vendors (S-1-5-21-1111111111-2222222222-3333333333-2240).",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
+        "name": "alice.admin",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+      },
+      "target": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-2240",
+        "name": "Temp-Vendors",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\Temp-Vendors (S-1-5-21-1111111111-2222222222-3333333333-2240)"
+      },
+      "member": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1188",
+        "name": null,
+        "domain": null,
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": "CORP\\omar.reyes",
+        "display": "S-1-5-21-1111111111-2222222222-3333333333-1188 (named CORP\\omar.reyes in other events)"
+      },
+      "details": [],
+      "origin": {
+        "status": "session",
+        "logon_id": "0x77e310",
+        "address": "192.0.2.44",
+        "port": "49731",
+        "workstation": "ADMIN-PC7",
+        "logon_type": "10",
+        "logon_type_name": "RemoteInteractive",
+        "logon_time": "2026-11-06T07:50:00Z",
+        "source": {
+          "file": "dc02-events.jsonl",
+          "position": "line 2"
+        },
+        "statement": "Session 0x77e310 began at 2026-11-06 07:50:00 UTC as RemoteInteractive from 192.0.2.44 port 49731, workstation name ADMIN-PC7."
+      },
+      "events": [
+        {
+          "event_id": 4728,
+          "record_id": 9104,
+          "time": "2026-11-06T08:01:00Z",
+          "file": "dc02-events.jsonl",
+          "position": "line 5"
+        }
+      ],
+      "related": [],
+      "notes": []
+    },
+    {
+      "id": "C0015",
+      "time": "2026-11-06T13:40:00Z",
+      "computer": "DC02.corp.example",
+      "category": "user",
+      "action": "deleted",
+      "title": "User account deleted",
+      "sentence": "CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131) deleted the user account CORP\\old.contractor (S-1-5-21-1111111111-2222222222-3333333333-1099).",
+      "actor": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1131",
+        "name": "helpdesk.sam",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131)"
+      },
+      "target": {
+        "sid": "S-1-5-21-1111111111-2222222222-3333333333-1099",
+        "name": "old.contractor",
+        "domain": "CORP",
+        "dn": null,
+        "object_class": null,
+        "guid": null,
+        "well_known": null,
+        "known_as": null,
+        "display": "CORP\\old.contractor (S-1-5-21-1111111111-2222222222-3333333333-1099)"
+      },
+      "member": null,
+      "details": [],
+      "origin": {
+        "status": "not-in-input",
+        "logon_id": "0x91c4d7",
+        "address": null,
+        "port": null,
+        "workstation": null,
+        "logon_type": null,
+        "logon_type_name": null,
+        "logon_time": null,
+        "source": null,
+        "statement": "The logon event for session 0x91c4d7 is not in the input, so where it came from is not known."
+      },
+      "events": [
+        {
+          "event_id": 4726,
+          "record_id": 9105,
+          "time": "2026-11-06T13:40:00Z",
+          "file": "dc02-events.jsonl",
+          "position": "line 6"
+        }
+      ],
+      "related": [],
+      "notes": []
+    }
+  ],
+  "other_events": [],
+  "limitations": [
+    "toledot reports what the events record. It cannot show a change that Windows did not audit, and it does not judge whether a change was authorized.",
+    "\"From where\" is the source the logon session recorded. A proxy, a jump host, or network address translation can hide the real origin.",
+    "Times are UTC, as recorded by each computer's own clock. Clocks that disagree are not corrected.",
+    "Names that come from other events are shown apart from the names a change event recorded.",
+    "Old values exist only where Windows recorded them: directory service change events (event 5136 and its relatives) record the value that changed, and most other events do not.",
+    "A clean record-number check does not prove that nothing was removed. Someone able to rewrite the log can renumber it, and an export that was filtered cannot be checked at all."
+  ]
+}

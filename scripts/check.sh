@@ -34,6 +34,30 @@ stage_config() {
   run yamllint --strict .
   run actionlint
   git ls-files -z '*.sh' | xargs -0 uv run --locked --no-sync shellcheck --
+  check_powershell
+}
+check_powershell() {
+  # Parse every PowerShell script with the real PowerShell parser. GitHub's runners
+  # include pwsh; elsewhere the check is skipped with a note.
+  if ! command -v pwsh >/dev/null; then
+    echo "pwsh not found; skipping the PowerShell syntax check" >&2
+    return 0
+  fi
+  local script
+  while IFS= read -r -d '' script; do
+    # -Command does not pass extra arguments to the command as $args, so the path goes
+    # through the environment.
+    # shellcheck disable=SC2016 # $errors and $env: are PowerShell syntax
+    PS_PARSE_PATH="$script" pwsh -NoProfile -NonInteractive -Command '
+      $errors = $null
+      $path = (Resolve-Path -LiteralPath $env:PS_PARSE_PATH).Path
+      [void][System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errors)
+      foreach ($e in $errors) {
+        $line = "{0}:{1}:{2}: {3}" -f $env:PS_PARSE_PATH, $e.Extent.StartLineNumber, $e.Extent.StartColumnNumber, $e.Message
+        [Console]::Error.WriteLine($line)
+      }
+      if ($errors) { exit 1 }'
+  done < <(git ls-files -z '*.ps1')
 }
 stage_workflows() {
   # Online audits need a GitHub token; without one, run the offline audits only.

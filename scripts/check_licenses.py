@@ -13,6 +13,11 @@ import subprocess
 import sys
 from importlib.metadata import PackageNotFoundError, metadata
 
+from packaging.markers import Marker
+
+MAX_SPDX_FIELD = 40
+"""The longest License field read as an SPDX expression; longer text is a license body."""
+
 # Keep in sync with allow-licenses in .github/workflows/ci.yml.
 ALLOWED = {
     "0BSD",
@@ -21,10 +26,16 @@ ALLOWED = {
     "BSD-3-Clause",
     "ISC",
     "MIT",
+    "MIT-0",
+    "MPL-2.0",  # file-level copyleft; allowed for unmodified dependencies (certifi)
     "PSF-2.0",
     "Python-2.0",
     "Unlicense",
     "Zlib",
+}
+VERIFIED: dict[str, str] = {
+    # Distributions whose metadata declares no license, checked by reading the
+    # LICENSE file in the wheel. Re-check when the version changes.
 }
 CLASSIFIER_MAP = {
     "License :: OSI Approved :: Apache Software License": "Apache-2.0",
@@ -45,6 +56,7 @@ def runtime_requirements() -> list[str]:
             "never",
             "--locked",
             "--no-dev",
+            "--all-extras",
             "--no-emit-project",
             "--no-hashes",
             "--format",
@@ -57,18 +69,30 @@ def runtime_requirements() -> list[str]:
     names = []
     for raw in out.splitlines():
         line = raw.strip()
-        if line and not line.startswith(("#", "-")):
-            names.append(line.split("==")[0].split(";")[0].strip())
+        if not line or line.startswith(("#", "-")):
+            continue
+        requirement, _, marker = line.partition(";")
+        # Skip dependencies for other platforms or Python versions, which are not installed here.
+        if marker.strip() and not Marker(marker.strip()).evaluate():
+            continue
+        names.append(requirement.split("==")[0].strip())
     return names
 
 
 def licenses_for(name: str) -> set[str]:
     """Return SPDX identifiers declared by an installed distribution."""
     meta = metadata(name)
+    if name.lower() in VERIFIED and not meta.get_all("License-Expression"):
+        return {VERIFIED[name.lower()]}
     expressions = meta.get_all("License-Expression") or []
     if expressions:
         expression = expressions[0]
         return {part.strip("() ") for part in expression.replace(" OR ", " AND ").split(" AND ")}
+    declared = (meta.get_all("License") or [""])[0]
+    if declared and len(declared) < MAX_SPDX_FIELD:  # an SPDX-style License field, not license text
+        parts = {part.strip("() ") for part in declared.replace(" OR ", " AND ").split(" AND ")}
+        if parts <= ALLOWED:
+            return parts
     found = {CLASSIFIER_MAP[c] for c in meta.get_all("Classifier") or [] if c in CLASSIFIER_MAP}
     return found or {"UNKNOWN"}
 

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://faithful-oversight.github.io/faithful-toledot/schema/manifest-v1.schema.json",
+  "schema_version": "1.0",
+  "tool": {
+    "name": "toledot",
+    "version": "0.0.0"
+  },
+  "generated_at": "2026-11-09T12:00:00Z",
+  "files": [
+    {
+      "name": "toledot-report.json",
+      "size": 40607,
+      "sha256": "dbbf624382738cd9c83dbd8f2f0296ed10784ff69fba7febea2408c4c65a4bfa"
+    },
+    {
+      "name": "toledot-report.md",
+      "size": 12736,
+      "sha256": "66b4a33fdccb2d21dafd9459eb887c31926e31ca35da08ff0e7e3976f8503ed4"
+    },
+    {
+      "name": "toledot-report.html",
+      "size": 26741,
+      "sha256": "5afa2ee3948e515da2cde8cec472a8818d82abaddba474f343a774e62ebc1ca3"
+    },
+    {
+      "name": "toledot-changes.csv",
+      "size": 10435,
+      "sha256": "dcdb3ee26c3338586f6097237e34636f17681775980095f148f1fa58ea70115c"
+    }
+  ],
+  "inputs": [
+    {
+      "name": "dc01-events.jsonl",
+      "size": 13161,
+      "sha256": "508be81c318863b934d9452907c9bd967d992d655a9eab3741da0d0ebe5ea9dc"
+    },
+    {
+      "name": "dc02-events.jsonl",
+      "size": 3889,
+      "sha256": "24de7ab253bd91df453112b1ffe18366f8c76e844e8131395f0c45ffe2792504"
+    }
+  ]
+}
