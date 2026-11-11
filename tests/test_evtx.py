@@ -1464,3 +1464,37 @@ def test_the_base_file_for_fuzzing_is_itself_clean(tmp_path: Path) -> None:
     items = read(tmp_path, BASE)
     assert problems_of(items) == []
     assert [e.record_id for e in events_of(items)] == [1, 2, 3, 4, 5, 6]
+
+
+# --- Numeric text is bounded before it is converted ---
+
+
+def _substituted(slot: int, text: str) -> b.Instance:
+    """A record whose numeric system slot ``slot`` carries ``text`` as a string value."""
+    values = b.event_values(1)
+    values[slot] = b.string(text)
+    return b.Instance(b.event_root([]), values)
+
+
+@pytest.mark.parametrize(
+    ("slot", "name"), [(0, "EventID"), (2, "Version"), (8, "EventRecordID")]
+)
+@pytest.mark.parametrize("text", ["9" * 5000, "1" + "0" * 20, "18446744073709551616"])
+def test_oversized_numeric_text_is_a_damaged_record_and_reading_continues(
+    tmp_path: Path, slot: int, name: str, text: str
+) -> None:
+    good = b.security_event(2, 4728)
+    items = read(tmp_path, file_of(_substituted(slot, text), good))
+    assert len(problems_of(items)) == 1
+    assert "does not fit in 64 bits" in problems_of(items)[0].reason
+    assert name in problems_of(items)[0].reason
+    assert [e.event_id for e in events_of(items)] == [4728]
+
+
+@pytest.mark.parametrize(("slot", "name"), [(0, "EventID"), (2, "Version"), (8, "EventRecordID")])
+def test_the_largest_64_bit_numeric_text_is_still_read(
+    tmp_path: Path, slot: int, name: str
+) -> None:
+    event = one_event(tmp_path, _substituted(slot, str(2**64 - 1)))
+    got = {0: event.event_id, 2: event.version, 8: event.record_id}[slot]
+    assert got == 2**64 - 1, name

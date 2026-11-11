@@ -202,6 +202,8 @@ _MAX_SID_SUBAUTHORITIES = 15
 _FILETIME_EPOCH = datetime(1601, 1, 1, tzinfo=UTC)
 _TICKS_PER_SECOND = 10_000_000
 _ANSI_CODEC = "cp1252"
+_MAX_INTEGER = 2**64 - 1  # EventID, Version and record numbers are at most 64 bits
+_MAX_INTEGER_DIGITS = len(str(_MAX_INTEGER))
 
 _SYSTEM_TIME = re.compile(
     r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?Z",
@@ -928,9 +930,16 @@ def _system_fields(system: _Node) -> dict[str, str]:
 
 
 def _integer(fields: dict[str, str], key: str) -> int:
+    """Read an unsigned whole number of at most 64 bits (EventID, Version, record numbers).
+
+    The text is bounded before it is converted: a substituted string of thousands of digits
+    must become a damaged record, not Python's integer-conversion limit error.
+    """
     text = fields[key]
     if not (text.isascii() and text.isdecimal()):
         _fail(f"{key} is not a whole number")
+    if len(text) > _MAX_INTEGER_DIGITS or int(text) > _MAX_INTEGER:
+        _fail(f"{key} does not fit in 64 bits")
     return int(text)
 
 
