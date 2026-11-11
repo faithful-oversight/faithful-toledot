@@ -10,7 +10,9 @@ Set ``TOLEDOT_REQUIRE_LIVE=1`` to fail instead of skipping when the ``live`` ext
 from __future__ import annotations
 
 import errno
+import hashlib
 import importlib
+import json
 import os
 import sys
 from dataclasses import replace
@@ -288,6 +290,81 @@ def test_a_damaged_collection_leaves_no_file(
         run(out)
     assert not out.exists()
     assert leftovers(tmp_path) == []
+
+
+def with_trailer(**changes: object) -> list[Sequence[object]]:
+    """The good stream with its end line changed; ``None`` removes a key."""
+    trailer = json.loads(LINES[-1])
+    for key, value in changes.items():
+        if value is None:
+            del trailer[key]
+        else:
+            trailer[key] = value
+    return [[*LINES[:-1], json.dumps(trailer, separators=(",", ":"))]]
+
+
+@pytest.mark.parametrize(
+    ("batches", "problem"),
+    [
+        (
+            with_trailer(end=False),
+            "end line is not valid: the end line is not what the schema says",
+        ),
+        (with_trailer(end=1), "end line is not valid: the end line is not what the schema says"),
+        (with_trailer(end=None), "ended without its end line"),
+        (with_trailer(events="2"), "end line is not valid: events is not a whole number"),
+        (with_trailer(events=True), "end line is not valid: events is not a whole number"),
+        (with_trailer(sha256="ABC"), "end line is not valid: sha256 is not 64 lower-case"),
+        (with_trailer(gaps=None), "end line is not valid: the line has no 'gaps'"),
+        (with_trailer(gaps="none"), "end line is not valid: the end line is not what"),
+        (with_trailer(gaps=[3]), "end line is not valid: an entry in gaps is not an object"),
+        (with_trailer(gaps=[{"area": "x"}]), "end line is not valid: the line has no 'reason'"),
+        (with_trailer(extra=1), "end line is not valid: the line has unknown property 'extra'"),
+        ([[LINES[0].replace('"computer"', '"machine"'), *LINES[1:]]], "header is not valid"),
+        ([[LINES[0].replace('"logs":[', '"logs":{},"x":['), *LINES[1:]]], "header is not valid"),
+        ([['{"toledot_events":1', *LINES[1:]]], "header is not valid: the line is not valid JSON"),
+        ([['{"end":true', *LINES[1:]]], "first line is not a toledot header"),
+        ([[*LINES[:2], '{"end":true', LINES[-1]]], "end line is not valid: the line is not valid"),
+    ],
+)
+def test_a_stream_the_reader_would_refuse_is_never_published(
+    tmp_path: Path, fake: Remote, batches: list[Sequence[object]], problem: str
+) -> None:
+    fake.batches = batches
+    out = tmp_path / "e.jsonl"
+    out.write_bytes(b"existing evidence\n")
+    with pytest.raises(CollectionError, match=problem):
+        run(out, force=True)
+    assert out.read_bytes() == b"existing evidence\n"
+    assert leftovers(tmp_path) == []
+
+
+def test_an_invalid_stream_with_no_existing_file_leaves_nothing(
+    tmp_path: Path, fake: Remote
+) -> None:
+    fake.batches = with_trailer(end=False)
+    out = tmp_path / "e.jsonl"
+    with pytest.raises(CollectionError, match="end line is not valid"):
+        run(out)
+    assert sorted(path.name for path in tmp_path.iterdir()) == []
+
+
+def test_event_lines_that_mention_end_are_events_and_a_late_end_key_is_the_end(
+    tmp_path: Path, fake: Remote
+) -> None:
+    # An event whose text says "end" (valid JSON without an end key) and one that is
+    # not valid JSON are counted as events, as the reader counts them; a trailer whose
+    # "end" key is not first is still the end line.
+    mention = json.loads(LINES[1])
+    mention["data"] = {"note": "end"}
+    mentioned = json.dumps(mention, separators=(",", ":"))
+    broken = '{"record_id": "end"'
+    digest = hashlib.sha256(
+        "".join(f"{line}\n" for line in (LINES[0], mentioned, broken)).encode()
+    ).hexdigest()
+    trailer = json.dumps({"events": 2, "end": True, "sha256": digest, "gaps": []})
+    fake.batches = [[LINES[0], mentioned, broken, trailer]]
+    assert run(tmp_path / "e.jsonl").events == 2
 
 
 @pytest.mark.usefixtures("fake")

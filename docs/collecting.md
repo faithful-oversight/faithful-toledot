@@ -175,9 +175,9 @@ A query on a very large log can take a while before its first event. If collecti
 
 ### How the output file is written safely
 
-The lines stream into a private temporary file in the same folder as the output, named `.NAME.RANDOM.part`. toledot checks each line as it arrives. A line must be one line of ASCII text, at most 8 MiB, and the first line must be a toledot header. Nothing may follow the end line.
+The lines stream into a private temporary file in the same folder as the output, named `.NAME.RANDOM.part`. toledot checks each line as it arrives. A line must be one line of ASCII text, at most 8 MiB, and the first line must be a toledot header that passes the same checks as the file reader's. Nothing may follow the end line.
 
-When the script ends, toledot checks the end line against what arrived: the event count and the SHA-256 of every line before it must match. Only then does it publish the file.
+When the script ends, toledot checks the end line against what arrived: the end line must pass the file reader's own checks (`end` is `true`, `events` is a whole number, `sha256` is 64 lower-case hex digits, `gaps` is a well-formed list), and the event count and the SHA-256 of every line before it must match. Only then does it publish the file, so a stream that `toledot report` would refuse is never published and an existing file is left as it was.
 
 - Without `--force`, toledot puts the file in place only if the name is free, so it never replaces a file, even one that appears while collection runs. toledot also checks at the start and refuses early if the file exists.
 - With `--force`, it replaces the file. Where the file system has no hard links, such as FAT, exFAT, and some network shares, toledot creates the output name exclusively and copies the checked file into it. A failed copy removes what it created. A symbolic link at the output name is replaced, not followed.

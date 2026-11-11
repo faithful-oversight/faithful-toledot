@@ -25,7 +25,6 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import importlib
-import json
 import os
 import time
 import uuid
@@ -47,6 +46,7 @@ TRANSPORTS = ("https", "http")
 POLL_SECONDS = 5
 """How long one wait for output lasts before toledot checks the idle timeout."""
 _END = b'{"end":'
+_END_KEY = b'"end"'
 _INSTALL = 'remote collection needs pypsrp; install it with: pip install "faithful-toledot[live]"'
 
 
@@ -165,7 +165,7 @@ class _Sink:
         self.handle = os.fdopen(descriptor, "wb")
         self.digest = hashlib.sha256()
         self.events = 0
-        self.trailer: dict[str, Any] | None = None
+        self.trailer: bundle.Trailer | None = None
         self.lines = 0
 
     def take(self, item: object) -> None:
@@ -184,14 +184,41 @@ class _Sink:
         if self.lines == 0 and not raw.startswith(bundle.MARKER):
             msg = "the collector's first line is not a toledot header"
             raise CollectionError(msg)
+        # The header and end line must pass the rules read_bundle applies, or the file
+        # would be published and then refused by the reader.
+        if self.lines == 0:
+            try:
+                bundle.check_header(raw, self.destination.name)
+            except bundle.BadLineError as exc:
+                msg = f"the collector's header is not valid: {exc}"
+                raise CollectionError(msg) from None
+        elif _END_KEY in raw:
+            self.trailer = self._end_line(raw)
         self.lines += 1
         self.handle.write(raw)
-        if raw.startswith(_END):
-            self.trailer = json.loads(raw)
+        if self.trailer is not None:
             return
         self.digest.update(raw)
         if self.lines > 1:
             self.events += 1
+
+    @staticmethod
+    def _end_line(raw: bytes) -> bundle.Trailer | None:
+        """Return the checked end line, or ``None`` when ``raw`` is an event line."""
+        try:
+            value = bundle.decode_line(raw)
+        except bundle.BadLineError as exc:
+            if raw.startswith(_END):
+                msg = f"the collector's end line is not valid: {exc}"
+                raise CollectionError(msg) from None
+            return None  # an event that merely mentions "end" in its text
+        if "end" not in value:
+            return None
+        try:
+            return bundle.check_end(value)
+        except bundle.BadLineError as exc:
+            msg = f"the collector's end line is not valid: {exc}"
+            raise CollectionError(msg) from None
 
     def finish(self) -> tuple[int, tuple[str, ...]]:
         """Check the end line against what arrived."""
@@ -200,17 +227,13 @@ class _Sink:
         if trailer is None:
             msg = "the collection ended without its end line, so it did not finish"
             raise CollectionError(msg)
-        if trailer.get("events") != self.events or trailer.get("sha256") != self.digest.hexdigest():
+        if trailer.events != self.events or trailer.sha256 != self.digest.hexdigest():
             msg = (
                 f"the collection's end line does not match what arrived ({self.events} events "
                 "received); the transfer was damaged"
             )
             raise CollectionError(msg)
-        gaps = tuple(
-            f"{gap.get('area')}: {gap.get('reason')}"
-            for gap in trailer.get("gaps", [])
-            if isinstance(gap, dict)
-        )
+        gaps = tuple(f"{area}: {reason}" for area, reason in trailer.gaps)
         return self.events, gaps
 
     def publish(self, *, force: bool) -> None:

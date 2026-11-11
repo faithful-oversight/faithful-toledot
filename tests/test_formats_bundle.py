@@ -228,8 +228,32 @@ def test_a_bad_event_keeps_its_record_number_when_readable(tmp_path: Path) -> No
         ),
         (
             {"end": True, "events": 2, "sha256": "0" * 64, "gaps": [{"area": "x"}]},
+            "the line has no 'reason'",
+        ),
+        (
+            {"end": True, "events": 2, "sha256": "0" * 64, "gaps": [{"area": "x", "reason": 5}]},
             "gaps.reason is not text",
         ),
+        (
+            {
+                "end": True,
+                "events": 2,
+                "sha256": "0" * 64,
+                "gaps": [{"area": "x", "reason": "y", "extra": "z"}],
+            },
+            "unknown property 'extra'",
+        ),
+        (
+            {
+                "end": True,
+                "events": 2,
+                "sha256": "0" * 64,
+                "gaps": [{"area": "x", "reason": "y"}] * 1001,
+            },
+            "not what the schema says",
+        ),
+        ({"end": True, "events": 2, "sha256": "ABC", "gaps": []}, "sha256 is not 64 lower-case"),
+        ({"end": True, "events": 2, "sha256": 7, "gaps": []}, "sha256 is not 64 lower-case"),
     ],
 )
 def test_a_bad_end_line_is_a_problem(tmp_path: Path, trailer: dict[str, Any], reason: str) -> None:

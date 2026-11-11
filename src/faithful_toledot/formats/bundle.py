@@ -18,7 +18,7 @@ import hashlib
 import json
 import re
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from faithful_toledot.errors import InputError
 from faithful_toledot.events import Event, LogFacts, Problem, Source
@@ -58,10 +58,27 @@ _HEADER_KEYS = frozenset(
     {"toledot_events", "collector", "collected_at", "computer", "operator", "query", "logs"}
 )
 _TRAILER_KEYS = frozenset({"end", "events", "sha256", "gaps"})
+_GAP_KEYS = frozenset({"area", "reason"})
+_SHA256 = re.compile(r"[0-9a-f]{64}")
+MAX_GAPS = 1000
 
 
-class _BadLineError(ValueError):
+class BadLineError(ValueError):
     """A line that is not what the schema says."""
+
+
+class Trailer(NamedTuple):
+    """The checked contents of an end line.
+
+    Attributes:
+        events: The event count the collector states.
+        sha256: The hash it states, 64 lower-case hex digits.
+        gaps: What the collector could not read, as ``(area, reason)`` pairs.
+    """
+
+    events: int
+    sha256: str
+    gaps: tuple[tuple[str, str], ...]
 
 
 def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -69,14 +86,14 @@ def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     for name, value in pairs:
         if name in out:
             msg = f"the property {name!r} is repeated"
-            raise _BadLineError(msg)
+            raise BadLineError(msg)
         out[name] = value
     return out
 
 
 def _constant(text: str) -> Any:
     msg = f"{text} is not JSON"
-    raise _BadLineError(msg)
+    raise BadLineError(msg)
 
 
 def _decode(line: bytes) -> dict[str, Any]:
@@ -86,16 +103,16 @@ def _decode(line: bytes) -> dict[str, Any]:
         value = json.loads(text, object_pairs_hook=_pairs, parse_constant=_constant)
     except UnicodeDecodeError:
         msg = "the line is not UTF-8"
-        raise _BadLineError(msg) from None
+        raise BadLineError(msg) from None
     except RecursionError:
         msg = "the line is nested too deeply"
-        raise _BadLineError(msg) from None
+        raise BadLineError(msg) from None
     except ValueError as exc:
-        msg = str(exc) if isinstance(exc, _BadLineError) else "the line is not valid JSON"
-        raise _BadLineError(msg) from None
+        msg = str(exc) if isinstance(exc, BadLineError) else "the line is not valid JSON"
+        raise BadLineError(msg) from None
     if not isinstance(value, dict):
         msg = "the line is not a JSON object"
-        raise _BadLineError(msg)
+        raise BadLineError(msg)
     _check(value, 0)
     return value
 
@@ -104,13 +121,13 @@ def _check(value: object, depth: int) -> None:
     """Refuse deep nesting and text that is not valid Unicode."""
     if depth > MAX_DEPTH:
         msg = "the line is nested too deeply"
-        raise _BadLineError(msg)
+        raise BadLineError(msg)
     if isinstance(value, str):
         try:
             value.encode("utf-8")
         except UnicodeEncodeError:
             msg = "the line holds an unpaired surrogate"
-            raise _BadLineError(msg) from None
+            raise BadLineError(msg) from None
     elif isinstance(value, dict):
         for name, item in value.items():
             _check(name, depth + 1)
@@ -124,14 +141,14 @@ def _time(value: object, what: str) -> datetime:
     match = _TIME.fullmatch(value) if isinstance(value, str) else None
     if match is None:
         msg = f"{what} is not a UTC time such as 2026-11-03T14:00:00.1234567Z"
-        raise _BadLineError(msg)
+        raise BadLineError(msg)
     year, month, day, hour, minute, second = (int(part) for part in match.groups()[:6])
     fraction = (match.group(7) or "").ljust(7, "0")
     try:
         base = datetime(year, month, day, hour, minute, second, tzinfo=UTC)
     except ValueError:
         msg = f"{what} is not a real date and time"
-        raise _BadLineError(msg) from None
+        raise BadLineError(msg) from None
     return base + timedelta(microseconds=int(fraction[:6]))
 
 
@@ -144,21 +161,21 @@ def _integer(value: object, what: str, *, high: int, optional: bool = False) -> 
         return None
     if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= high:
         msg = f"{what} is not a whole number from 0 to {high}"
-        raise _BadLineError(msg)
+        raise BadLineError(msg)
     return value
 
 
 def _string(value: object, what: str, *, limit: int = MAX_NAME, empty: bool = False) -> str:
     if not isinstance(value, str) or len(value) > limit or (not value and not empty):
         msg = f"{what} is not text of at most {limit} characters"
-        raise _BadLineError(msg)
+        raise BadLineError(msg)
     return value
 
 
 def _strings(value: object, what: str, *, limit: int) -> dict[str, str]:
     if not isinstance(value, dict) or len(value) > MAX_FIELDS:
         msg = f"{what} is not an object of at most {MAX_FIELDS} text values"
-        raise _BadLineError(msg)
+        raise BadLineError(msg)
     for name, item in value.items():
         _string(name, f"a name in {what}")
         _string(item, f"{what}.{name}", limit=limit, empty=True)
@@ -171,7 +188,7 @@ def _keys(value: dict[str, Any], allowed: frozenset[str], required: frozenset[st
     if unknown or missing:
         problem = f"unknown property {unknown[0]!r}" if unknown else f"no {missing[0]!r}"
         msg = f"the line has {problem}"
-        raise _BadLineError(msg)
+        raise BadLineError(msg)
 
 
 def _event(value: dict[str, Any], source: Source) -> Event:
@@ -180,7 +197,7 @@ def _event(value: dict[str, Any], source: Source) -> Event:
     event_id = _integer(value["event_id"], "event_id", high=65535)
     version = _integer(value["version"], "version", high=255)
     if record is None or event_id is None or version is None:  # pragma: no cover - not optional
-        raise _BadLineError
+        raise BadLineError
     return Event(
         event_id=event_id,
         time=_time(value["time"], "time"),
@@ -204,18 +221,18 @@ def _facts(header: dict[str, Any], name: str) -> list[LogFacts]:
     logs = header["logs"]
     if not isinstance(query, dict) or not isinstance(logs, list) or len(logs) > 16:  # noqa: PLR2004
         msg = "the header's query or logs are not what the schema says"
-        raise _BadLineError(msg)
+        raise BadLineError(msg)
     since = _optional_time(query.get("since"), "query.since")
     _optional_time(query.get("until"), "query.until")
     ids = query.get("event_ids")
     if not isinstance(ids, list):
         msg = "query.event_ids is not a list"
-        raise _BadLineError(msg)
+        raise BadLineError(msg)
     out = []
     for log in logs:
         if not isinstance(log, dict):
             msg = "an entry in logs is not an object"
-            raise _BadLineError(msg)
+            raise BadLineError(msg)
         out.append(
             LogFacts(
                 computer=computer,
@@ -239,6 +256,73 @@ def _facts(header: dict[str, Any], name: str) -> list[LogFacts]:
             )
         )
     return out
+
+
+def check_header(line: bytes, name: str) -> list[LogFacts]:
+    """Check a header line against the schema, as the file reader does.
+
+    Both the file reader and the remote collector call this, so a stream is published
+    only if the reader will accept its first line.
+
+    Args:
+        line: The line's bytes, with or without its newline.
+        name: The file's name, for the source of the facts.
+
+    Returns:
+        The header's facts about each log.
+
+    Raises:
+        BadLineError: The line is too long or is not a header the schema allows.
+    """
+    if len(line) > MAX_LINE:
+        msg = "the first line is too long"
+        raise BadLineError(msg)
+    return _facts(_decode(line), name)
+
+
+def decode_line(line: bytes) -> dict[str, Any]:
+    """Parse one line strictly (UTF-8, one object, no repeated names).
+
+    Raises:
+        BadLineError: The line is not that.
+    """
+    return _decode(line)
+
+
+def check_end(value: dict[str, Any]) -> Trailer:
+    """Check a decoded end line against the schema, as the file reader does.
+
+    The checks are the schema's: exactly the keys ``end``, ``events``, ``sha256`` and
+    ``gaps``; ``end`` is ``true``; ``events`` is a whole number; ``sha256`` is 64 lower-case
+    hex digits; ``gaps`` is a list of at most 1000 objects with non-empty ``area`` and
+    ``reason`` text. Whether the count and hash match the events is for the caller.
+
+    Raises:
+        BadLineError: The line breaks one of those rules.
+    """
+    _keys(value, _TRAILER_KEYS, _TRAILER_KEYS)
+    gaps = value["gaps"]
+    if value["end"] is not True or not isinstance(gaps, list) or len(gaps) > MAX_GAPS:
+        msg = "the end line is not what the schema says"
+        raise BadLineError(msg)
+    stated = _integer(value["events"], "events", high=2**63 - 1)
+    digest = value["sha256"]
+    if stated is None or not isinstance(digest, str) or _SHA256.fullmatch(digest) is None:
+        msg = "sha256 is not 64 lower-case hex digits"
+        raise BadLineError(msg)
+    pairs = []
+    for gap in gaps:
+        if not isinstance(gap, dict):
+            msg = "an entry in gaps is not an object"
+            raise BadLineError(msg)
+        _keys(gap, _GAP_KEYS, _GAP_KEYS)
+        pairs.append(
+            (
+                _string(gap["area"], "gaps.area"),
+                _string(gap["reason"], "gaps.reason", limit=4096),
+            )
+        )
+    return Trailer(stated, digest, tuple(pairs))
 
 
 def is_bundle(start: bytes) -> bool:
@@ -270,11 +354,8 @@ def read_bundle(path: Path, options: ReadOptions) -> Iterator[Event | Problem | 
     with handle:
         first = handle.readline(MAX_LINE + 1)
         try:
-            if len(first) > MAX_LINE:
-                msg = "the first line is too long"
-                raise _BadLineError(msg)  # noqa: TRY301 - one place turns every header fault into an error
-            facts = _facts(_decode(first), name)
-        except _BadLineError as exc:
+            facts = check_header(first, name)
+        except BadLineError as exc:
             msg = f"{name} is not a toledot collection: {exc}"
             raise InputError(msg) from None
         yield from facts
@@ -301,7 +382,7 @@ def _lines(handle: Any, name: str, digest: Any) -> Iterator[Event | Problem]:
             return
         try:
             value = _decode(line)
-        except _BadLineError as exc:
+        except BadLineError as exc:
             digest.update(line)
             yield Problem(source, f"The line is not a valid event: {exc}.")
             continue
@@ -309,13 +390,13 @@ def _lines(handle: Any, name: str, digest: Any) -> Iterator[Event | Problem]:
             ended = True
             try:
                 yield from _trailer(value, source, count, digest.hexdigest())
-            except _BadLineError as exc:
+            except BadLineError as exc:
                 yield Problem(source, f"The end line is not valid: {exc}.")
             continue
         digest.update(line)
         try:
             event = _event(value, source)
-        except _BadLineError as exc:
+        except BadLineError as exc:
             yield Problem(source, f"The line is not a valid event: {exc}.", _record(value))
             continue
         count += 1
@@ -334,26 +415,16 @@ def _record(value: dict[str, Any]) -> int | None:
 
 
 def _trailer(value: dict[str, Any], source: Source, count: int, digest: str) -> Iterator[Problem]:
-    _keys(value, _TRAILER_KEYS, _TRAILER_KEYS)
-    gaps = value["gaps"]
-    if value["end"] is not True or not isinstance(gaps, list):
-        msg = "the end line is not what the schema says"
-        raise _BadLineError(msg)
-    stated = _integer(value["events"], "events", high=2**63 - 1)
-    if stated != count:
+    trailer = check_end(value)
+    if trailer.events != count:
         text = (
-            f"The end line counts {stated} events but {count} were read. "
+            f"The end line counts {trailer.events} events but {count} were read. "
             "Events are missing or the file was altered."
         )
         yield Problem(source, text)
-    if value["sha256"] != digest:
+    if trailer.sha256 != digest:
         yield Problem(source, "The file's contents do not match the hash in its end line.")
-    for gap in gaps:
-        if not isinstance(gap, dict):
-            msg = "an entry in gaps is not an object"
-            raise _BadLineError(msg)
-        area = _string(gap.get("area"), "gaps.area")
-        reason = _string(gap.get("reason"), "gaps.reason", limit=4096)
+    for area, reason in trailer.gaps:
         yield Problem(source, f"The collector could not read {area}: {reason}")
 
 
