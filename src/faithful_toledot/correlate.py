@@ -25,8 +25,8 @@ import bisect
 import hashlib
 import itertools
 import re
-from dataclasses import dataclass, field
-from datetime import timedelta
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from faithful_toledot import narrative
@@ -44,12 +44,13 @@ from faithful_toledot.events import Event, LogFacts, Problem, Source
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
-    from datetime import datetime
 
     from faithful_toledot.catalog import Attribute, Catalog, EventInfo
 
 SCOPES = ("unfiltered", "filtered", "unknown")
 RELATED_WINDOW = timedelta(seconds=2)
+CLOCK_SYNC_LIMIT = timedelta(minutes=5)
+"""The largest clock correction treated as routine; Kerberos tolerates 5 minutes of skew."""
 """Changes by one session this close together are marked as related."""
 MAX_MISSING_RANGES = 1000
 """Absent record ranges listed per log; beyond this only the count is kept."""
@@ -153,6 +154,8 @@ class _State:
     )
     names: dict[str, set[str]] = field(default_factory=dict)
     dropped_problems: int = 0
+    unnumbered: dict[tuple[str, str, bytes], int] = field(default_factory=dict)
+    input_number: int = 0
 
     def problem(self, problem: Problem) -> None:
         if len(self.account.problems) < MAX_PROBLEMS:
@@ -186,18 +189,24 @@ def build(
     state = _State(catalog)
     for name in ("changes", "context", "notices", "other", "duplicates"):
         state.account.counts[name] = 0
-    for source in inputs:
+    for number, source in enumerate(inputs):
+        state.input_number = number
         scope = source.scope if source.scope in SCOPES else "unknown"
+        facts: list[LogFacts] = []
+        computers: set[str] = set()
         for item in source.items:
             if isinstance(item, Problem):
                 state.problem(item)
             elif isinstance(item, LogFacts):
-                _take_facts(state, item)
-                if source.scope not in SCOPES[:2]:
-                    # A collection says what it holds; the user's statement wins.
-                    scope = "filtered" if item.filtered else "unfiltered"
+                facts.append(item)
+                # A collection states what it asked the log for, and that statement
+                # is better evidence than a blanket --whole-logs.
+                scope = "filtered" if item.filtered else "unfiltered"
             else:
+                computers.add(item.computer)
                 _take(state, item, scope)
+        for item in facts:
+            _take_facts(state, _same_computer(item, computers))
     _finish_sessions(state)
     window = (since, until)
     state.events.sort(key=_order)
@@ -220,6 +229,23 @@ def _order(pair: tuple[Event, EventInfo]) -> tuple[datetime, str, int]:
     return (event.time, event.computer.casefold(), event.record_id or 0)
 
 
+def _same_computer(facts: LogFacts, computers: set[str]) -> LogFacts:
+    """Name a collector's log facts after the computer its events name.
+
+    The collector names the computer from DNS and each event names it from the event
+    log, so ``DC01`` and ``DC01.corp.example`` can both mean one controller. Facts are
+    renamed only when exactly one event computer has the same first label.
+    """
+    wanted = facts.computer.casefold()
+    if any(name.casefold() == wanted for name in computers):
+        return facts
+    label = wanted.split(".", 1)[0]
+    matches = {name for name in computers if name.casefold().split(".", 1)[0] == label}
+    if len(matches) != 1:
+        return facts
+    return replace(facts, computer=matches.pop())
+
+
 def _take_facts(state: _State, facts: LogFacts) -> None:
     """Note what a collector recorded about a log when it read it."""
     key = (facts.computer.casefold(), facts.channel.casefold())
@@ -228,6 +254,7 @@ def _take_facts(state: _State, facts: LogFacts) -> None:
     if (
         facts.asked_since is not None
         and facts.oldest_time is not None
+        and facts.oldest_record != 1  # a log that still holds record 1 has lost nothing
         and facts.oldest_time > facts.asked_since
         and (log.overwritten_before is None or facts.oldest_time > log.overwritten_before)
     ):
@@ -269,15 +296,24 @@ def _take(state: _State, event: Event, scope: str) -> None:
         if seen is not None:
             if seen == digest:
                 state.count("duplicates")
-            else:
-                text = (
-                    f"Record {event.record_id} of the {event.channel} log on "
-                    f"{event.computer} is in the input more than once with different "
-                    "content. The first copy read is used."
-                )
-                state.problem(Problem(event.source, text, event.record_id))
+                return
+            text = (
+                f"Record {event.record_id} of the {event.channel} log on {event.computer} "
+                "is in the input more than once with different content. Both are kept: "
+                "they may be two events that reuse the number, such as one from an "
+                "archived log, or one event read from a damaged copy."
+            )
+            state.problem(Problem(event.source, text, event.record_id))
+        else:
+            state.kept[key] = digest
+    elif info is not None and info.category != "logon":
+        # With no record number, the same event from two overlapping exports can only
+        # be recognised by its content. Within one export, identical rows are kept.
+        key_unnumbered = (computer, event.channel.casefold(), _fingerprint(event))
+        first = state.unnumbered.setdefault(key_unnumbered, state.input_number)
+        if first != state.input_number:
+            state.count("duplicates")
             return
-        state.kept[key] = digest
     log = state.logs.setdefault(
         (computer, event.channel.casefold()), _Log(event.computer, event.channel)
     )
@@ -339,7 +375,12 @@ def _learn_names(state: _State, event: Event, info: EventInfo) -> None:
         if sid is None or name is None or not sid.startswith("S-1-"):
             continue
         domain = _text(event, info, f"{prefix}_domain")
-        state.names.setdefault(sid, set()).add(f"{domain}\\{name}" if domain else name)
+        names = state.names.setdefault(sid, set())
+        names.add(f"{domain}\\{name}" if domain else name)
+        renamed = event.data.get("NewTargetUserName") if prefix == "target" else None
+        if renamed and renamed not in _EMPTY:
+            # After a rename the account has had two names, so neither is "the" name.
+            names.add(f"{domain}\\{renamed}" if domain else renamed)
 
 
 def _note_session(state: _State, event: Event, info: EventInfo) -> None:
@@ -387,9 +428,13 @@ def _origin(state: _State, event: Event, info: EventInfo) -> Origin:
         return Origin("local", logon_id=recorded)
     entries = state.sessions.get((event.computer.casefold(), number), [])
     index = bisect.bisect_right(entries, event.time, key=lambda entry: entry[0])
-    logon = entries[index - 1][2] if index else None
-    if logon is None:
+    # A logoff stamped with the change's own time may have come just after it.
+    before = [entry for entry in entries[:index] if entry[0] < event.time or entry[1]]
+    if not before:
         return Origin("not-in-input", logon_id=recorded)
+    logon = before[-1][2]
+    if logon is None:
+        return Origin("ended", logon_id=recorded)
     return Origin(
         "session",
         logon_id=recorded,
@@ -566,11 +611,10 @@ def _notice(state: _State, event: Event, info: EventInfo) -> Notice:
     routine = kind in _ROUTINE_NOTICES
     if kind == "time-changed":
         text = _clock_text(event)
-        if actor.sid in _SERVICE_SIDS:
-            # Windows time synchronisation corrects the clock under a service account.
+        if _clock_sync(event, actor):
             routine = True
             text = text.replace(
-                "The system time was changed", "A Windows service account adjusted the system time"
+                "The system time was changed", "The Windows Time service adjusted the system time"
             )
     elif kind == "events-dropped" and event.data.get("Reason"):
         text = f"{text[:-1]} (reason code {event.data['Reason']}, not documented by Microsoft)."
@@ -578,6 +622,26 @@ def _notice(state: _State, event: Event, info: EventInfo) -> Notice:
         text += _MISSING
     severity = "info" if routine else "warning"
     return Notice(event.time, event.computer, kind, text, actor, _ref(event), severity)
+
+
+def _clock_sync(event: Event, actor: Party) -> bool:
+    """Whether a time change looks like Windows time synchronisation.
+
+    The Windows Time service runs in ``svchost.exe`` under a service account and makes
+    small corrections. A change by any other process, or one that moves the clock
+    further than ``CLOCK_SYNC_LIMIT``, is reported as a warning even under a service
+    account: SYSTEM can be any program.
+    """
+    process = event.data.get("ProcessName", "").replace("/", "\\").rsplit("\\", 1)[-1]
+    if actor.sid not in _SERVICE_SIDS or process.casefold() != "svchost.exe":
+        return False
+    try:
+        before = datetime.fromisoformat(event.data.get("PreviousTime", ""))
+        after = datetime.fromisoformat(event.data.get("NewTime", ""))
+        moved = abs(after - before)
+    except (ValueError, TypeError):
+        return True  # version 0 records local text times; the process is the evidence
+    return moved <= CLOCK_SYNC_LIMIT
 
 
 def _clock_text(event: Event) -> str:
@@ -715,9 +779,10 @@ def _directory_details(state: _State, events: list[Event]) -> list[Detail]:
         attribute = event.data.get("AttributeLDAPDisplayName", "") or "(attribute not recorded)"
         value = event.data.get("AttributeValue", "")
         operation = event.data.get("OperationType", "")
-        if operation == _DS_ADDED:
+        # Event Viewer's text exports carry the words instead of the code.
+        if operation in {_DS_ADDED, "Value Added"}:
             added.setdefault(attribute, []).append(value)
-        elif operation == _DS_DELETED:
+        elif operation in {_DS_DELETED, "Value Deleted"}:
             removed.setdefault(attribute, []).append(value)
         else:
             text = f"operation {operation or '(not recorded)'}"
@@ -748,7 +813,8 @@ def _relate(changes: list[Change]) -> list[Change]:
     by_session: dict[tuple[str, int], list[int]] = {}
     for index, change in enumerate(changes):
         number = _number_of(change.origin.logon_id)
-        if number is not None:
+        # Every service on a computer shares its system sessions, so they link nothing.
+        if number is not None and number not in _SYSTEM_SESSIONS:
             by_session.setdefault((change.computer.casefold(), number), []).append(index)
     related: dict[int, list[int]] = {}
     for indexes in by_session.values():

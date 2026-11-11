@@ -63,6 +63,8 @@ class Origin:
         status: ``session`` when the logon event was found; ``local`` for a session
             of the computer itself, which has no logon event; ``not-in-input`` when
             the change names a session whose logon event is not in the input;
+            ``ended`` when the input holds only a logoff of that session before the
+            change, so the logon that was in use is not in the input;
             ``none`` when the change event names no session.
         logon_id: The session's logon ID, as recorded.
         address: The source network address of the logon, if it recorded one.
@@ -230,6 +232,32 @@ class Coverage:
     statement: str
     overwritten_before: datetime | None = None
 
+    @property
+    def missing_events(self) -> bool:
+        """Whether this log is known to be missing events."""
+        return (self.continuity == "gaps" and self.scope == "unfiltered") or bool(
+            self.overwritten_before
+        )
+
+    @property
+    def checked(self) -> bool:
+        """Whether the input gives positive evidence about this log's completeness.
+
+        Continuous record numbers show nothing between the first and the last is
+        absent. A collection states what it asked the log for, so its expected gaps
+        are accounted for. Absent numbers in an input of unknown scope, and an export
+        with no record numbers, leave toledot unable to tell.
+        """
+        if self.continuity == "complete":
+            return True
+        return self.scope in {"filtered", "unfiltered"} and self.continuity in {"gaps", "empty"}
+
+
+COMPLETENESS = ("complete", "unconfirmed", "incomplete")
+"""``complete``: evidence that nothing is missing. ``unconfirmed``: nothing shows events
+missing, but the input cannot show that they are not. ``incomplete``: events are known
+or likely to be missing."""
+
 
 @dataclass
 class Account:
@@ -254,11 +282,16 @@ class Account:
     other_ids: dict[tuple[str, int], int] = field(default_factory=dict)
 
     @property
-    def complete(self) -> bool:
-        """Whether nothing found suggests the account is missing events."""
-        missing = any(
-            (c.continuity == "gaps" and c.scope == "unfiltered") or c.overwritten_before
-            for c in self.coverage
-        )
+    def completeness(self) -> str:
+        """One of ``COMPLETENESS``: whether the input shows the account is whole."""
         warned = any(notice.severity == "warning" for notice in self.notices)
-        return not (self.problems or warned or missing)
+        if self.problems or warned or any(c.missing_events for c in self.coverage):
+            return "incomplete"
+        if not self.coverage or not all(c.checked for c in self.coverage):
+            return "unconfirmed"
+        return "complete"
+
+    @property
+    def complete(self) -> bool:
+        """Whether the input gives evidence that the account is whole."""
+        return self.completeness == "complete"

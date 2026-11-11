@@ -51,7 +51,7 @@ CSV_COLUMNS = (
 CSP = "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'"
 """Content security policy: no scripts, no network access, no form submission."""
 
-_STATE_WORDS = {"complete": "Complete", "incomplete": "Incomplete"}
+_STATE_WORDS = {"complete": "Complete", "unconfirmed": "Not confirmed", "incomplete": "Incomplete"}
 _ID = re.compile(r"[A-Za-z0-9]{1,20}")
 
 
@@ -73,16 +73,29 @@ def _logs_missing(report: Report) -> int:
 def headline(report: Report) -> tuple[str, str]:
     """Say whether the account is complete, and what it holds, in plain words.
 
-    The state is ``complete`` only when the account's own completeness check passed.
-    The text is a sentence or two with its full stops.
+    The state is the account's completeness: ``complete`` only when the input gives
+    evidence that nothing is missing, ``unconfirmed`` when nothing shows events missing
+    but the input cannot show that none are, and ``incomplete`` otherwise. The text is
+    a sentence or two with its full stops.
     """
     summary = report["summary"]
     n = summary["changes"]
-    if summary["complete"]:
+    state = summary["completeness"]
+    lead = _plural(n, "change") + " described" if n else "No changes found in the input"
+    if state == "complete":
         if not n:
-            return "complete", "No changes found in the input."
-        return "complete", (
-            f"{_plural(n, 'change')} described. Nothing in the input suggests events are missing."
+            return state, "No changes found in the input."
+        return state, f"{lead}. Nothing in the input suggests events are missing."
+    if state == "unconfirmed":
+        unchecked = sum(1 for c in report["coverage"] if not c["checked"])
+        reason = (
+            f"{_plural(unchecked, 'log')} cannot show whether events are missing"
+            if unchecked
+            else "no events were read"
+        )
+        return state, (
+            f"{lead}. Nothing in the input shows events missing, but {reason}, so the "
+            "account may not be whole."
         )
     parts = []
     if summary["notices"]["warning"]:
@@ -92,7 +105,6 @@ def headline(report: Report) -> tuple[str, str]:
     if missing := _logs_missing(report):
         parts.append(_plural(missing, "log") + " with missing events")
     why = ": " + ", ".join(parts) if parts else ""
-    lead = _plural(n, "change") + " described" if n else "No changes found in the input"
     return "incomplete", f"{lead}, but the account is incomplete{why}."
 
 
@@ -422,9 +434,9 @@ def terminal_summary(report: Report) -> str:
     lines += [f"  {category}: {n}" for category, n in s["by_category"].items()]
     if s["first_change"]:
         lines.append(f"  first change {s['first_change']}, last {s['last_change']}")
-    if state == "incomplete":
+    if state != "complete":
         lines.append("  See the Completeness section of the report before relying on this account.")
-    return terminal("\n".join(lines))
+    return "\n".join(terminal(line) for line in lines)
 
 
 # HTML -------------------------------------------------------------------------------
@@ -452,7 +464,7 @@ padding:.5rem 1.25rem;display:flex;flex-wrap:wrap;gap:.25rem 1.25rem;font-size:.
 .small{font-size:.85rem}
 .state{border:2px solid currentColor;border-radius:8px;padding:.75rem 1rem;margin:1rem 0;
 background:var(--panel);font-weight:600}
-.state.complete{color:var(--ok)}.state.incomplete{color:var(--warn)}
+.state.complete{color:var(--ok)}.state.incomplete,.state.unconfirmed{color:var(--warn)}
 .state .word{text-transform:uppercase;letter-spacing:.04em;margin-right:.5rem}
 .state span.t{color:var(--fg)}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.6rem;margin:1rem 0}

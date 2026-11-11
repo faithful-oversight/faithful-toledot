@@ -82,6 +82,11 @@ def origin(where: Origin) -> str:
         return "The event names no logon session, so where it came from is not recorded."
     if where.status == "local":
         return f"Made by the computer's own system session ({where.logon_id})."
+    if where.status == "ended":
+        return (
+            f"Session {where.logon_id} had ended with a logoff before this change, and no "
+            "later logon with that ID is in the input, so where it came from is not known."
+        )
     if where.status == "not-in-input":
         return (
             f"The logon event for session {where.logon_id} is not in the input, so where "

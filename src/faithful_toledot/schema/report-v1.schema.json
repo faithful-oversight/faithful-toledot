@@ -98,6 +98,7 @@
       "additionalProperties": false,
       "required": [
         "complete",
+        "completeness",
         "changes",
         "notices",
         "problems",
@@ -110,7 +111,16 @@
       ],
       "properties": {
         "complete": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "True only when completeness is \"complete\"."
+        },
+        "completeness": {
+          "enum": [
+            "complete",
+            "unconfirmed",
+            "incomplete"
+          ],
+          "description": "complete: the input shows nothing is missing. unconfirmed: nothing shows events missing, but the input cannot show that none are. incomplete: events are known or likely to be missing."
         },
         "changes": {
           "$ref": "#/$defs/count"
@@ -264,6 +274,7 @@
           "missing_count",
           "scope",
           "overwritten_before",
+          "checked",
           "statement"
         ],
         "properties": {
@@ -334,6 +345,10 @@
           },
           "overwritten_before": {
             "$ref": "#/$defs/timeOrNull"
+          },
+          "checked": {
+            "type": "boolean",
+            "description": "Whether the input gives evidence about this log's completeness."
           },
           "statement": {
             "type": "string"
@@ -507,6 +522,7 @@
                   "session",
                   "local",
                   "not-in-input",
+                  "ended",
                   "none"
                 ]
               },

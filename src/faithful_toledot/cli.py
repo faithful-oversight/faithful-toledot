@@ -110,8 +110,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="how to read a date such as 03/04/2026 in exports that leave it open",
     )  # fmt: skip
     report.add_argument(
-        "--fail-on", choices=("incomplete", "never"), default="incomplete",
-        help="exit 1 when the account is incomplete (default), or never",
+        "--fail-on", choices=("unconfirmed", "incomplete", "never"), default="unconfirmed",
+        help=(
+            "exit 1 unless the input shows the account is whole (unconfirmed, the "
+            "default), only when events are known or likely to be missing "
+            "(incomplete), or never"
+        ),
     )  # fmt: skip
     report.add_argument("--force", action="store_true", help="replace existing report files")
     report.set_defaults(run=_report)
@@ -174,7 +178,8 @@ def _report(args: argparse.Namespace) -> int:
     written = outputs.write_reports(args.output, document, args.format, force=args.force)
     print(render.terminal_summary(document))  # noqa: T201
     print(terminal(f"Reports written to {args.output}: {', '.join(p.name for p in written)}"))  # noqa: T201
-    if args.fail_on == "incomplete" and not account.complete:
+    failing = {"unconfirmed": {"unconfirmed", "incomplete"}, "incomplete": {"incomplete"}}
+    if account.completeness in failing.get(args.fail_on, set()):
         return int(ExitCode.FINDINGS)
     return int(ExitCode.OK)
 

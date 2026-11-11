@@ -9,8 +9,8 @@
   "files": [
     {
       "name": "toledot-report.json",
-      "size": 40607,
-      "sha256": "dbbf624382738cd9c83dbd8f2f0296ed10784ff69fba7febea2408c4c65a4bfa"
+      "size": 40687,
+      "sha256": "af0383ff2db07926fbef4c3c44ef2f07eef8dae8685e6dd2c6cdb1c9ce1ce4e8"
     },
     {
       "name": "toledot-report.md",
@@ -19,8 +19,8 @@
     },
     {
       "name": "toledot-report.html",
-      "size": 26741,
-      "sha256": "5afa2ee3948e515da2cde8cec472a8818d82abaddba474f343a774e62ebc1ca3"
+      "size": 26760,
+      "sha256": "4a65ac975d21477ea813fc9ac81a5d6153f6f0470bd37d8f8e575cfa97f31f10"
     },
     {
       "name": "toledot-changes.csv",

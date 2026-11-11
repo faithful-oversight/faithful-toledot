@@ -206,9 +206,14 @@ def rich_report() -> dict[str, Any]:
     return report_of(rich())
 
 
-def empty_account(*, complete: bool = True) -> Account:
+CHECKED = Coverage(DC, "Security", 0, None, None, None, None, "empty", (), 0, "filtered", "Read.")
+"""A log a collection read and found nothing in: evidence that nothing is missing."""
+
+
+def empty_account(*, complete: bool = True, read: bool = True) -> Account:
     account = Account(
-        counts={"changes": 0, "context": 0, "notices": 0, "other": 0, "duplicates": 0}
+        coverage=[CHECKED] if read else [],
+        counts={"changes": 0, "context": 0, "notices": 0, "other": 0, "duplicates": 0},
     )
     if not complete:
         account.problems.append(Problem(Source("x.csv", "line 1"), "bad"))
@@ -319,12 +324,12 @@ def test_json_survives_a_lone_surrogate() -> None:
 
 def test_headline_states() -> None:
     assert r.headline(report_of(empty_account())) == ("complete", "No changes found in the input.")
-    one = Account(changes=[change(1, 0)], counts={})
+    one = Account(changes=[change(1, 0)], coverage=[CHECKED], counts={})
     assert r.headline(report_of(one)) == (
         "complete",
         "1 change described. Nothing in the input suggests events are missing.",
     )
-    many = Account(changes=[change(i, i) for i in range(1, 215)], counts={})
+    many = Account(changes=[change(i, i) for i in range(1, 215)], coverage=[CHECKED], counts={})
     assert r.headline(report_of(many))[1].startswith("214 changes described. Nothing")
     state, text = r.headline(report_of(rich()))
     assert state == "incomplete"
@@ -336,17 +341,36 @@ def test_headline_states() -> None:
         "incomplete",
         "No changes found in the input, but the account is incomplete: 1 problem with the input.",
     )
+    unread = Account(changes=[change(1, 0)], counts={})
+    assert r.headline(report_of(unread)) == (
+        "unconfirmed",
+        (
+            "1 change described. Nothing in the input shows events missing, but no events "
+            "were read, so the account may not be whole."
+        ),
+    )
+    unnumbered = replace(CHECKED, events=2, continuity="unnumbered", scope="unknown")
+    other = replace(CHECKED, channel="System", events=2, continuity="gaps", scope="unknown")
+    unsure = Account(changes=[change(1, 0)], coverage=[unnumbered, other], counts={})
+    assert r.headline(report_of(unsure)) == (
+        "unconfirmed",
+        (
+            "1 change described. Nothing in the input shows events missing, but 2 logs "
+            "cannot show whether events are missing, so the account may not be whole."
+        ),
+    )
 
 
 def test_only_warnings_count_and_info_alone_stays_complete() -> None:
     info = Notice(D0, DC, "k", "t", Party(), ref(1), "info")
-    account = Account(changes=[change(1, 0)], notices=[info], counts={})
+    account = Account(changes=[change(1, 0)], notices=[info], coverage=[CHECKED], counts={})
     assert r.headline(report_of(account))[0] == "complete"
 
 
 def test_an_incomplete_report_with_no_listed_cause_still_says_so() -> None:
     bare = report_of(empty_account())
     bare["summary"]["complete"] = False
+    bare["summary"]["completeness"] = "incomplete"
     assert r.headline(bare) == (
         "incomplete",
         "No changes found in the input, but the account is incomplete.",
@@ -399,7 +423,7 @@ def test_markdown_digest_reads_in_order(rich_report: dict[str, Any]) -> None:
 
 
 def test_markdown_with_no_changes_and_period_forms() -> None:
-    md = r.render_markdown(report_of(empty_account(), window=(None, GENERATED)))
+    md = r.render_markdown(report_of(empty_account(read=False), window=(None, GENERATED)))
     assert "No changes were found in the input." in md
     assert "No events were read." in md
     assert "Period: before 2026-11-05T09:30:00Z." in md
@@ -680,7 +704,9 @@ def test_terminal_summary_is_plain_and_safe() -> None:
     assert "\u202e" not in text
     assert "\\u001b" in text
     assert "Completeness section" in text
-    plain = r.terminal_summary(report_of(Account(changes=[change(1, 0)], counts={})))
+    plain = r.terminal_summary(
+        report_of(Account(changes=[change(1, 0)], coverage=[CHECKED], counts={}))
+    )
     assert plain.splitlines()[0] == "toledot 0.1.0"
     assert "  group: 1" in plain
     assert "first change 2026-11-03T23:59:58Z" in plain
@@ -731,7 +757,7 @@ def test_html_is_one_self_contained_accessible_page(rich_report: dict[str, Any])
     assert "(earlier value not recorded)" in page
     assert 'created as <span class="chg"><span class="val">Sales</span></span>' in page
     assert page.count("<h1>") == 1
-    ok = r.render_html(report_of(Account(changes=[change(1, 0)], counts={})))
+    ok = r.render_html(report_of(Account(changes=[change(1, 0)], coverage=[CHECKED], counts={})))
     assert "✔ Complete" in ok
     assert "Other events" not in ok
 
@@ -746,7 +772,7 @@ def test_the_print_stylesheet_reveals_collapsed_details(rich_report: dict[str, A
 
 
 def test_html_for_an_empty_account() -> None:
-    page = r.render_html(report_of(empty_account(), inputs=[]))
+    page = r.render_html(report_of(empty_account(read=False), inputs=[]))
     assert "No changes were found in the input." in page
     assert "No events were read." in page
     assert parse(page).bad == []

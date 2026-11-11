@@ -31,6 +31,9 @@ if TYPE_CHECKING:
 ADDED, DELETED = "%%14674", "%%14675"
 
 
+SVCHOST = "C:\\Windows\\System32\\svchost.exe"
+
+
 def account(
     *items: Event | Problem | LogFacts, scope: str = "unknown", **options: object
 ) -> Account:
@@ -117,7 +120,15 @@ def test_origin_uses_the_latest_logon_before_the_change_on_the_same_computer() -
 
 def test_a_session_that_logged_off_before_the_change_is_not_its_origin() -> None:
     result = account(logon(seconds=-60), logoff(seconds=-30), member_added())
-    assert result.changes[0].origin.status == "not-in-input"
+    origin = result.changes[0].origin
+    assert origin.status == "ended"
+    assert "had ended with a logoff before this change" in narrative.origin(origin)
+
+
+def test_a_logoff_at_the_same_moment_as_the_change_may_have_come_after_it() -> None:
+    # Event Viewer CSV times have whole seconds, so equal times do not show the order.
+    result = account(logon(seconds=-60), logoff(seconds=0), member_added())
+    assert result.changes[0].origin.status == "session"
 
 
 def test_system_sessions_and_events_without_a_session() -> None:
@@ -339,11 +350,10 @@ def test_two_inputs_that_disagree_about_a_record_are_a_problem() -> None:
     original = member_added()
     forged = replace(original, data={**original.data, "MemberSid": ALICE})
     result = build([Input("a", [original]), Input("b", [forged])], catalog.load())
-    assert len(result.changes) == 1
-    assert result.changes[0].member is not None
-    assert result.changes[0].member.sid == BOB
+    # Both are kept, such as an archived log and the current one reusing a number.
+    assert [c.member.sid for c in result.changes if c.member] == [BOB, ALICE]
     (problem,) = result.problems
-    assert "more than once with different content" in problem.reason
+    assert "more than once with different content. Both are kept" in problem.reason
     assert not result.complete
 
 
@@ -352,6 +362,58 @@ def test_events_without_record_numbers_cannot_be_deduplicated() -> None:
     result = account(one, one)
     assert len(result.changes) == 2
     assert result.coverage[0].continuity == "unnumbered"
+
+
+def test_the_same_unnumbered_event_in_two_overlapping_exports_counts_once() -> None:
+    one = replace(member_added(), record_id=None)
+    other = replace(member_added(5), record_id=None)
+    result = build([Input("monday.csv", [one]), Input("week.csv", [one, other])], catalog.load())
+    assert len(result.changes) == 2
+    assert result.counts["duplicates"] == 1
+
+
+def test_a_rename_means_an_account_has_no_single_name() -> None:
+    carol = f"{BOB}9"
+    created = event(
+        4720,
+        {**SUBJECT, "TargetUserName": "carol1", "TargetDomainName": "CORP", "TargetSid": carol},
+    )
+    renamed = event(4781, {**SUBJECT, "OldTargetUserName": "carol1", "NewTargetUserName": "carol2",
+                           "TargetDomainName": "CORP", "TargetSid": carol}, seconds=10)  # fmt: skip
+    added = member_added(20, MemberSid=carol, MemberName="CN=carol2,OU=Staff,DC=corp,DC=example")
+    change = account(created, renamed, added).changes[-1]
+    assert change.member is not None
+    assert change.member.known_as is None
+    assert "carol1" not in change.sentence
+
+
+def test_event_viewer_words_for_directory_operations_pair_like_the_codes() -> None:
+    (change,) = account(
+        ds_change("description", "old", "Value Deleted"),
+        ds_change("description", "new", "Value Added"),
+    ).changes
+    assert [(d.kind, d.old, d.new) for d in change.details] == [("changed", "old", "new")]
+
+
+def test_system_sessions_do_not_relate_changes() -> None:
+    result = account(*(member_added(i, SubjectLogonId="0x3e7") for i in range(3)))
+    assert [c.related for c in result.changes] == [(), (), ()]
+
+
+def test_a_log_that_still_holds_record_one_has_lost_nothing() -> None:
+    result = account(facts(oldest_record=1), member_added())
+    assert result.coverage[0].overwritten_before is None
+
+
+def test_log_facts_follow_the_name_the_events_use() -> None:
+    short = facts(computer="DC01", asked_since=None)
+    result = account(short, member_added())
+    assert [c.computer for c in result.coverage] == [DC]
+    two = [member_added(), replace(member_added(1), computer="DC01.other.example")]
+    unclear = account(short, *two)
+    assert sorted(c.computer for c in unclear.coverage) == sorted(
+        ["DC01", DC, "DC01.other.example"]
+    )
 
 
 # --- notices --------------------------------------------------------------------------------
@@ -403,23 +465,39 @@ def test_coverage_reports_absent_record_numbers() -> None:
     assert log.missing == ((12, 14), (17, 19))
     assert log.missing_count == 6
     assert "toledot cannot tell which" in log.statement
-    assert result.complete  # of unknown scope: a gap is reported, not asserted
+    # Of unknown scope, a gap is neither proof of missing events nor of none missing.
+    assert (log.checked, result.completeness) == (False, "unconfirmed")
 
 
 @pytest.mark.parametrize(
-    ("scope", "complete", "words"),
+    ("scope", "completeness", "words"),
     [
-        ("unfiltered", False, "events are missing"),
-        ("filtered", True, "this is expected"),
-        ("nonsense", True, "toledot cannot tell which"),
+        ("unfiltered", "incomplete", "events are missing"),
+        ("filtered", "complete", "this is expected"),
+        ("nonsense", "unconfirmed", "toledot cannot tell which"),
     ],
 )
 def test_what_a_gap_means_depends_on_the_stated_scope(
-    scope: str, *, complete: bool, words: str
+    scope: str, completeness: str, words: str
 ) -> None:
     result = account(*numbered(1, 3), scope=scope)
     assert words in result.coverage[0].statement
-    assert result.complete is complete
+    assert result.completeness == completeness
+    assert result.complete is (completeness == "complete")
+
+
+@pytest.mark.parametrize(
+    ("records", "scope", "completeness"),
+    [
+        ((1, 2, 3), "unknown", "complete"),  # continuous numbers are evidence
+        ((None, None), "unknown", "unconfirmed"),  # an export with no record numbers
+        ((), "unknown", "unconfirmed"),  # nothing read at all
+    ],
+)
+def test_complete_needs_evidence(
+    records: tuple[int | None, ...], scope: str, completeness: str
+) -> None:
+    assert account(*numbered(*records), scope=scope).completeness == completeness
 
 
 def test_coverage_handles_any_order_overlaps_and_unnumbered_events() -> None:
@@ -515,9 +593,10 @@ def test_a_collected_log_with_no_events_is_still_reported() -> None:
     assert "found none of the events" in log.statement
 
 
-def test_a_stated_scope_wins_over_what_a_collection_says() -> None:
-    result = account(facts(), *numbered(1, 3), scope="unfiltered")
-    assert result.coverage[0].scope == "unfiltered"
+def test_a_collection_says_its_own_scope_even_with_whole_logs() -> None:
+    result = account(facts(asked_since=None), *numbered(1, 3), scope="unfiltered")
+    assert result.coverage[0].scope == "filtered"  # the gap is expected, not missing events
+    assert result.complete
     declared = account(facts(filtered=False, asked_since=None), *numbered(1, 3))
     assert declared.coverage[0].scope == "unfiltered"
     assert not declared.complete
@@ -601,7 +680,7 @@ def test_a_well_known_rid_is_not_taken_as_proof_of_a_domain() -> None:
 @pytest.mark.parametrize(
     ("event_id", "actor_sid", "severity", "complete"),
     [
-        (4616, "S-1-5-19", "info", True),
+        (4616, "S-1-5-19", "info", True),  # with svchost.exe, below
         (4616, ALICE, "warning", False),
         (1100, ALICE, "info", True),
         (1102, "S-1-5-18", "warning", False),
@@ -610,7 +689,8 @@ def test_a_well_known_rid_is_not_taken_as_proof_of_a_domain() -> None:
 def test_routine_log_events_are_information_not_warnings(
     event_id: int, actor_sid: str, severity: str, *, complete: bool
 ) -> None:
-    result = account(event(event_id, {**SUBJECT, "SubjectUserSid": actor_sid}))
+    data = {**SUBJECT, "SubjectUserSid": actor_sid, "ProcessName": SVCHOST}
+    result = account(event(event_id, data))
     (notice,) = result.notices
     assert notice.severity == severity
     assert ("Events may be missing" in notice.text) is (severity == "warning")
@@ -621,8 +701,8 @@ def test_routine_log_events_are_information_not_warnings(
     ("data", "text"),
     [
         (
-            {"PreviousTime": "2026-11-03T14:00:00Z", "NewTime": "2026-11-03T18:00:00Z"},
-            "The system time was changed from 2026-11-03T14:00:00Z to 2026-11-03T18:00:00Z.",
+            {"PreviousTime": "2026-11-03T14:00:00Z", "NewTime": "2026-11-03T14:00:03Z"},
+            "The system time was changed from 2026-11-03T14:00:00Z to 2026-11-03T14:00:03Z.",
         ),
         (
             {"PreviousDate": "\u200e11/\u200e3/2026", "PreviousTime": "2:00:00 PM",
@@ -635,10 +715,32 @@ def test_routine_log_events_are_information_not_warnings(
 def test_a_time_change_says_from_and_to(data: dict[str, str], text: str) -> None:
     (notice,) = account(event(4616, {**SUBJECT, **data})).notices
     assert notice.text.startswith(text)
-    (service,) = account(event(4616, {**SUBJECT, **data, "SubjectUserSid": "S-1-5-19"})).notices
+    synced = {**SUBJECT, **data, "SubjectUserSid": "S-1-5-19", "ProcessName": SVCHOST}
+    (service,) = account(event(4616, synced)).notices
     assert service.text == text.replace(
-        "The system time was changed", "A Windows service account adjusted the system time"
+        "The system time was changed", "The Windows Time service adjusted the system time"
     )
+
+
+@pytest.mark.parametrize(
+    ("sid", "process", "new_time", "severity"),
+    [
+        ("S-1-5-19", SVCHOST, "2026-11-03T14:04:59Z", "info"),
+        ("S-1-5-20", SVCHOST, "2026-11-03T13:55:01Z", "info"),
+        ("S-1-5-19", SVCHOST, "2026-11-03T14:05:01Z", "warning"),  # too far for a correction
+        ("S-1-5-18", "C:\\Windows\\System32\\cmd.exe", "2026-11-03T14:00:01Z", "warning"),
+        ("S-1-5-18", "C:\\Tools\\vmtoolsd.exe", "2026-11-03T18:00:00Z", "warning"),
+        ("S-1-5-18", "", "2026-11-03T14:00:01Z", "warning"),
+        ("S-1-5-19", SVCHOST, "not a time", "info"),  # version 0 style: the process decides
+    ],
+)  # fmt: skip
+def test_only_small_corrections_by_the_time_service_are_routine(
+    sid: str, process: str, new_time: str, severity: str
+) -> None:
+    data = {**SUBJECT, "SubjectUserSid": sid, "ProcessName": process,
+            "PreviousTime": "2026-11-03T14:00:00Z", "NewTime": new_time}  # fmt: skip
+    (notice,) = account(event(4616, data)).notices
+    assert notice.severity == severity
 
 
 def test_dropped_events_carry_their_undocumented_reason() -> None:

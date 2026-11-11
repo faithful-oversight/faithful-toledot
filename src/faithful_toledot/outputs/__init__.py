@@ -213,6 +213,7 @@ def build_report(
         "window": {"since": _time(window[0]), "until": _time(window[1])},
         "summary": {
             "complete": account.complete,
+            "completeness": account.completeness,
             "changes": len(changes),
             "notices": {
                 "warning": sum(n.severity == "warning" for n in account.notices),
@@ -255,6 +256,7 @@ def build_report(
                 "missing_count": c.missing_count,
                 "scope": c.scope,
                 "overwritten_before": _time(c.overwritten_before),
+                "checked": c.checked,
                 "statement": c.statement,
             }
             for c in account.coverage
