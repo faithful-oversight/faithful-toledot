@@ -13,7 +13,7 @@ toledot [--version] COMMAND [options]
 | `schema` | Print a JSON Schema: `report`, `events`, or `manifest`. |
 | `example` | Write synthetic event files to try toledot with. |
 
-Run `toledot COMMAND --help` for the options of any command. Running `toledot` with no command prints the help and exits with code `0`.
+Run `toledot COMMAND --help` for the options of any command. Running `toledot` with no command prints the help and exits with code `2`.
 
 ## report
 
@@ -77,6 +77,7 @@ toledot hashes and identifies every file before it reads any of them, so a file 
 - A file it cannot read, or an empty file. A filename that is not valid UTF-8 shows in messages and reports with escapes such as `\xff`.
 - A file in none of the five [formats](formats.md).
 - Two files with the same contents, even under different names. The error names both. Give each file once, so one event is not counted twice.
+- Two files with the same name, even from different folders, such as `a/events.jsonl` and `b/events.jsonl`. A citation in the report names a file and a position, so the name has to identify one file. The error gives the name; rename one file and run again. The check compares the names as the report shows them, so a file whose name holds a byte that is not UTF-8 (shown as `\xff`) also clashes with a file whose name holds those four characters.
 
 A record that cannot be read does not stop the run. toledot lists it as a problem in the report, and the account is incomplete. A file that fails as a whole before its first record is an error and stops the run.
 

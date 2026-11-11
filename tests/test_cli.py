@@ -123,6 +123,39 @@ def test_a_file_name_that_is_not_utf8_is_shown_escaped(sample: Path) -> None:
     )  # escaped by Markdown
 
 
+def test_two_inputs_with_the_same_name_are_refused_before_analysis(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    first, second = files_of(sample)
+    (sample / "a").mkdir()
+    (sample / "b").mkdir()
+    shutil.copy(first, sample / "a" / "events.jsonl")
+    shutil.copy(second, sample / "b" / "events.jsonl")
+    out = sample / "dup"
+    args = ["report", str(sample / "a" / "events.jsonl"), str(sample / "b" / "events.jsonl")]
+    assert main([*args, "-o", str(out)]) == ExitCode.INPUT_ERROR
+    err = capsys.readouterr().err
+    assert "two input files are named events.jsonl" in err
+    assert "rename one so every citation names one file" in err
+    assert not out.exists()
+
+
+@pytest.mark.skipif(
+    sys.platform in ("win32", "darwin"),
+    reason="this file system rejects file names that are not valid UTF-8",
+)
+def test_names_that_only_match_once_escaped_are_refused(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    first, second = files_of(sample)
+    raw = os.fsdecode(os.fsencode(sample) + b"/dup\xff.jsonl")  # a real 0xff byte
+    literal = sample / "dup\\xff.jsonl"  # the four characters backslash, x, f, f
+    shutil.copy(first, raw)
+    shutil.copy(second, literal)
+    assert main(["report", raw, str(literal), "-o", str(sample / "esc")]) == ExitCode.INPUT_ERROR
+    assert "two input files are named dup\\xff.jsonl" in capsys.readouterr().err
+
+
 def test_whole_logs_make_absent_records_missing_events(sample: Path) -> None:
     out = sample / "whole"
     main(["report", files_of(sample)[0], "-o", str(out), "--whole-logs", "-f", "json"])

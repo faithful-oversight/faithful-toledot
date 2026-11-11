@@ -104,9 +104,11 @@ def run(
         until: Leave out changes at or after this time.
 
     Raises:
-        InputError: A file is given twice, cannot be read, or is in no known format.
+        InputError: A file is given twice, two files show the same name, a file cannot be
+            read, or a file is in no known format.
     """
     seen: dict[str, str] = {}
+    names: set[str] = set()
     files: list[InputFile] = []
     readable = [cast("Path", _TextNamed(path)) for path in paths]
     for path in readable:
@@ -114,7 +116,14 @@ def run(
         if digest in seen:
             msg = f"{path.name} has the same contents as {seen[digest]}; give each file once"
             raise InputError(msg)
+        if path.name in names:
+            msg = (
+                f"two input files are named {path.name}; rename one so every citation "
+                "names one file"
+            )
+            raise InputError(msg)
         seen[digest] = path.name
+        names.add(path.name)
         scope = "unfiltered" if whole_logs else "unknown"
         files.append(InputFile(path.name, formats.detect(path), scope, size, digest))
     inputs = [
