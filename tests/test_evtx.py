@@ -1476,9 +1476,7 @@ def _substituted(slot: int, text: str) -> b.Instance:
     return b.Instance(b.event_root([]), values)
 
 
-@pytest.mark.parametrize(
-    ("slot", "name"), [(0, "EventID"), (2, "Version"), (8, "EventRecordID")]
-)
+@pytest.mark.parametrize(("slot", "name"), [(0, "EventID"), (2, "Version"), (8, "EventRecordID")])
 @pytest.mark.parametrize("text", ["9" * 5000, "1" + "0" * 20, "18446744073709551616"])
 def test_oversized_numeric_text_is_a_damaged_record_and_reading_continues(
     tmp_path: Path, slot: int, name: str, text: str

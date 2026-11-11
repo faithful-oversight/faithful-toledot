@@ -120,6 +120,12 @@ EVENT_NAMESPACE = "http://schemas.microsoft.com/win/2004/08/events/event"
 """The namespace of Windows event XML."""
 MAX_DEPTH = 16
 """Deepest element nesting inside one ``Event``. Real events use 4 and ``UserData`` 6."""
+MAX_ELEMENT_DEPTH = 64
+"""Deepest element nesting anywhere in the file, ignored elements included.
+
+``MAX_DEPTH`` marks one event damaged. This is the hard budget that ends the read, so the
+parser's own nesting stack stays small whatever the file holds.
+"""
 MAX_DECLARATION_CHARS = 4096
 """Longest XML declaration looked for. A real one is under 100 characters."""
 MAX_IDLE_CHARS = 4 << 20
@@ -173,6 +179,10 @@ def read_xml(path: Path, options: ReadOptions) -> Iterator[Event | Problem]:
         _read(path, options),
         empty=f"{path.name} contains no Event elements; there is nothing to read",
     )
+
+
+class _Halt(Exception):  # noqa: N818 - control flow inside the parser, never escapes
+    """Raised from a parser callback to abandon the rest of the input."""
 
 
 @dataclass
@@ -288,6 +298,8 @@ class _Stream:
         self.tail = text[-_DTD_TAIL:]
         try:
             self.parser.Parse(text, final)
+        except _Halt:
+            return
         except expat.ExpatError as exc:
             if _DTD_DECLARATION.search(window):
                 msg = f"{self.name} declares a DTD or entity; refusing to parse it"
@@ -306,6 +318,9 @@ class _Stream:
         self.tick += 1
         self.junk_reported = False
         self.depth += 1
+        if self.depth > MAX_ELEMENT_DEPTH:  # before any skip logic: ignored elements count too
+            self.stop(f"elements are nested more than {MAX_ELEMENT_DEPTH} levels deep")
+            raise _Halt
         if self.skip_level or self.depth == 1:  # level 1 is the synthetic wrapper
             return
         namespace, _sep, local = name.rpartition("}")

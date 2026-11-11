@@ -17,7 +17,7 @@ from faithful_toledot.errors import InputError
 from faithful_toledot.events import Event, Problem, ReadOptions
 from faithful_toledot.formats import _text
 from faithful_toledot.formats import xml as xml_reader
-from faithful_toledot.formats.xml import MAX_DEPTH, read_xml
+from faithful_toledot.formats.xml import MAX_DEPTH, MAX_ELEMENT_DEPTH, read_xml
 
 NS = "http://schemas.microsoft.com/win/2004/08/events/event"
 SID = "S-1-5-21-1111111111-2222222222-3333333333-1105"
@@ -475,10 +475,47 @@ def test_nesting_over_the_limit_is_a_problem_for_that_event(tmp_path: Path) -> N
     assert isinstance(items[1], Event)
 
 
-def test_deep_nesting_in_ignored_elements_is_harmless(tmp_path: Path) -> None:
-    deep = "<A>" * 5000 + "</A>" * 5000
+def test_nesting_within_the_hard_budget_in_ignored_elements_is_harmless(tmp_path: Path) -> None:
+    levels = MAX_ELEMENT_DEPTH - 4  # the wrapper, Event, RenderingInfo and one spare
+    deep = "<A>" * levels + "</A>" * levels
     found = only_event(read(tmp_path, event(tail=f"<RenderingInfo>{deep}</RenderingInfo>")))
     assert found.event_id == 4720
+
+
+def test_deep_nesting_in_an_ignored_subtree_stops_the_read(tmp_path: Path) -> None:
+    deep = "<x>" * 20_000 + "</x>" * 20_000
+    content = event(4720) + event(4728, tail=f"<RenderingInfo>{deep}</RenderingInfo>") + event(4729)
+    items = read(tmp_path, content)
+    assert [i.event_id for i in items if isinstance(i, Event)] == [4720]
+    problem = items[-1]
+    assert isinstance(problem, Problem)
+    assert f"nested more than {MAX_ELEMENT_DEPTH} levels deep" in problem.reason
+    assert "the rest of the file was not read" in problem.reason
+    assert len(items) == 2
+
+
+def test_deep_nesting_with_nothing_read_yet_is_an_input_error(tmp_path: Path) -> None:
+    deep = "<x>" * 20_000 + "</x>" * 20_000
+    with pytest.raises(InputError, match=f"nested more than {MAX_ELEMENT_DEPTH} levels deep"):
+        read(tmp_path, event(tail=f"<RenderingInfo>{deep}</RenderingInfo>"))
+
+
+def test_deep_nesting_outside_any_event_stops_the_read(tmp_path: Path) -> None:
+    deep = "<x>" * 20_000 + "</x>" * 20_000
+    content = f"<Events>{event(4720)}<Stray>{deep}</Stray>{event(4728)}</Events>"
+    items = read(tmp_path, content)
+    assert [i.event_id for i in items if isinstance(i, Event)] == [4720]
+    assert isinstance(items[-1], Problem)
+    assert f"nested more than {MAX_ELEMENT_DEPTH} levels deep" in items[-1].reason
+
+
+def test_deep_nesting_in_an_already_invalid_event_stops_the_read(tmp_path: Path) -> None:
+    deep = "<x>" * 20_000 + "</x>" * 20_000
+    bad = event(namespace="urn:other", tail=f"<RenderingInfo>{deep}</RenderingInfo>")
+    items = read(tmp_path, event(4720) + bad + event(4728))
+    assert [i.event_id for i in items if isinstance(i, Event)] == [4720]
+    assert isinstance(items[-1], Problem)
+    assert f"nested more than {MAX_ELEMENT_DEPTH} levels deep" in items[-1].reason
 
 
 def test_too_many_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
