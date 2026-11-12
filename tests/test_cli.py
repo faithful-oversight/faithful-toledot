@@ -333,6 +333,10 @@ def test_a_report_without_json_never_points_to_it(tmp_path: Path, formats: str) 
     assert "toledot-report.json" not in {p.name for p in out.iterdir()}
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="a backslash separates folders on Windows, so no file name can hold the text \\u200b",
+)
 def test_names_that_print_the_same_are_refused(
     sample: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
