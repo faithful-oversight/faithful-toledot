@@ -68,8 +68,14 @@ jobs:
         with:
           enable-cache: false
           python-version: ${{ matrix.python }}
-      - run: uv sync --locked
+      # The live extra lets the real pypsrp transport tests run. GitHub's runners
+      # include pwsh, so the collector's PowerShell tests run too. The two REQUIRE
+      # variables make those tests fail rather than skip if either is missing.
+      - run: uv sync --locked --extra live
       - run: scripts/check.sh test
+        env:
+          TOLEDOT_REQUIRE_LIVE: "1"
+          TOLEDOT_REQUIRE_PWSH: "1"
 
   docs:
     name: Docs, config, and workflow security
@@ -201,7 +207,7 @@ jobs:
           # Keep in sync with ALLOWED in scripts/check_licenses.py.
           allow-licenses: >-
             0BSD, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, MIT,
-            PSF-2.0, Python-2.0, Unlicense, Zlib
+            MIT-0, MPL-2.0, PSF-2.0, Python-2.0, Unlicense, Zlib
 
   all-checks-passed:
     name: All checks passed

@@ -73,10 +73,10 @@ Pull requests are squash-merged, so the pull request title becomes the commit me
 ## Code standards
 
 - Python 3.11 or newer, fully type-annotated, passing mypy in strict mode.
-- Parse untrusted input defensively: use `defusedxml` for XML, never evaluate input, and treat every field as text until validated.
+- Parse untrusted input defensively: refuse DTDs and entity declarations in XML (the XML reader does this with the standard library's expat parser), never evaluate input, and treat every field as text until validated.
 - Neutralize spreadsheet formula injection in every CSV or spreadsheet output.
 - Escape all values in HTML output.
-- No network access, no telemetry, and no writes outside the output path the operator chooses.
+- No network access except `toledot collect`, which connects only to the domain controller the operator names (see [ADR 5](docs/adr/0005-remote-collection.md)). No telemetry, and no writes outside the output path the operator chooses.
 - New behavior needs tests. Parsers need property-based tests.
 - Every source file starts with SPDX copyright and license lines.
 

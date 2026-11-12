@@ -55,3 +55,14 @@ PowerShell
 TOML
 CHANGELOG
 [Mm]isspelled
+Kerberos
+SIDs?
+remoting
+untrusted
+renderers?
+evtx
+unindented
+ns
+WinRM
+DTDs
+RIDs

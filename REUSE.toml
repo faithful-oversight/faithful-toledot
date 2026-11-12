@@ -7,6 +7,7 @@ path = [
   "**/*.yml",
   "**/*.yaml",
   "**/*.json",
+  "**/*.jsonl",
   "**/*.ini",
   "**/*.txt",
   ".editorconfig",
