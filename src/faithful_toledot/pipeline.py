@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 from faithful_toledot import catalog as catalog_module
 from faithful_toledot import correlate, formats
 from faithful_toledot.errors import InputError
+from faithful_toledot.outputs.safety import visible
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -116,14 +117,14 @@ def run(
         if digest in seen:
             msg = f"{path.name} has the same contents as {seen[digest]}; give each file once"
             raise InputError(msg)
-        if path.name in names:
-            msg = (
-                f"two input files are named {path.name}; rename one so every citation "
-                "names one file"
-            )
+        # Compare names as reports show them: a zero-width space and the text
+        # "\u200b" are different names that print the same.
+        shown = visible(path.name)
+        if shown in names:
+            msg = f"two input files are named {shown}; rename one so every citation names one file"
             raise InputError(msg)
         seen[digest] = path.name
-        names.add(path.name)
+        names.add(shown)
         scope = "unfiltered" if whole_logs else "unknown"
         files.append(InputFile(path.name, formats.detect(path), scope, size, digest))
     inputs = [

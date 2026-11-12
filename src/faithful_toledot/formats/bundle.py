@@ -20,6 +20,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+from faithful_toledot.clock import date_and_time
 from faithful_toledot.errors import InputError
 from faithful_toledot.events import Event, LogFacts, Problem, Source
 
@@ -431,7 +432,7 @@ def _trailer(value: dict[str, Any], source: Source, count: int, digest: str) -> 
 def format_time(moment: datetime) -> str:
     """Write a time the way a collection file holds it: UTC with seven fraction digits."""
     utc = moment.astimezone(UTC)
-    return f"{utc:%Y-%m-%dT%H:%M:%S}.{utc.microsecond:06d}0Z"
+    return f"{date_and_time(utc)}.{utc.microsecond:06d}0Z"
 
 
 def encode(

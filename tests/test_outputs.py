@@ -976,3 +976,30 @@ def test_related_changes_beyond_the_list_are_counted() -> None:
     assert "and 43 more within the same moments" in r.render_html(report)
     exact = replace(change(1, 0), related=("C0002",), related_total=1)
     assert "more within" not in r.render_markdown(report_of(Account(changes=[exact], counts={})))
+
+
+def crowded() -> Account:
+    """More of everything than Markdown and HTML list when a JSON report holds the rest."""
+    warn = [Notice(D0, DC, "log-cleared", f"warning {i}", Party(), ref(i)) for i in range(30)]
+    info = [
+        Notice(D0, DC, "log-backed-up", f"routine {i}", Party(), ref(i), "info") for i in range(30)
+    ]
+    logs = [replace(CHECKED, channel=f"Log{i}") for i in range(110)]
+    problems = [Problem(Source("in.jsonl", f"line {i}"), f"problem {i}") for i in range(30)]
+    actors = [replace(change(i, i), actor=Party(sid=f"S-1-5-21-1-2-3-{2000 + i}", name=f"admin{i}"))
+              for i in range(30)]  # fmt: skip
+    others = {("Security", 9000 + i): 1 for i in range(110)}
+    return Account(changes=actors, notices=warn + info, coverage=logs, problems=problems,
+                   other_ids=others, counts={})  # fmt: skip
+
+
+@pytest.mark.parametrize("renderer", [r.render_markdown, r.render_html])
+def test_without_a_json_report_every_row_is_kept(renderer: Any) -> None:
+    report = report_of(crowded())
+    whole = renderer(report, shorten=False)
+    assert "JSON report" not in whole
+    for text in ("warning 29", "routine 29", "Log109", "problem 29", "admin29", "9109"):
+        assert text in whole
+    capped = renderer(report, shorten=True)
+    assert "more in the JSON report" in capped
+    assert "warning 29" not in capped

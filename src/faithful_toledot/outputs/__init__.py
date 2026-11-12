@@ -17,6 +17,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from faithful_toledot import narrative
+from faithful_toledot.clock import date_and_time
 from faithful_toledot.errors import ToledotError
 from faithful_toledot.outputs.files import write_files
 from faithful_toledot.outputs.render import (
@@ -87,7 +88,7 @@ def format_time(value: datetime) -> str:
     taken to be UTC, since every time toledot reads is.
     """
     value = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
-    text = value.strftime("%Y-%m-%dT%H:%M:%S")
+    text = date_and_time(value)
     if value.microsecond:
         text += f".{value.microsecond:06d}".rstrip("0")
     return text + "Z"

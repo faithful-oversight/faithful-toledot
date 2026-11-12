@@ -50,6 +50,25 @@ def meta(expression: str = "", license_field: str = "", *classifiers: str) -> Me
         (meta("", "BSD-4-Clause", BSD), {"BSD-4-Clause"}, False),
         (meta("", "GPL-3.0-only", MIT), {"GPL-3.0-only"}, False),
         (meta("", "GPL", MIT), None, False),
+        # Long explicit expressions are still explicit, whatever the classifiers say.
+        (
+            meta("", "MIT AND GPL-3.0-only AND Apache-2.0 AND BSD-3-Clause", MIT),
+            {"MIT", "GPL-3.0-only", "Apache-2.0", "BSD-3-Clause"},
+            False,
+        ),
+        (
+            meta("", "MIT AND Apache-2.0 AND BSD-3-Clause AND BSD-2-Clause AND ISC", MIT),
+            {"MIT", "Apache-2.0", "BSD-3-Clause", "BSD-2-Clause", "ISC"},
+            True,
+        ),
+        (
+            meta("", "Permission is hereby granted, free of charge, to any person obtaining", MIT),
+            {"MIT"},
+            True,
+        ),
+        # Public domain only through a reviewed exception.
+        (meta("LicenseRef-Public-Domain"), None, False),
+        (meta("", "MIT AND LicenseRef-Public-Domain"), None, False),
         (meta("", "LGPL", MIT), None, False),
         # License-Expression wins, and must be valid SPDX.
         (meta("MIT", "GPL-3.0-only"), {"MIT"}, True),
@@ -114,6 +133,17 @@ def test_every_exception_records_its_evidence(gate: Any, tmp_path: Path, missing
     text = "\n".join(line for line in ENTRY.splitlines() if not line.startswith(missing))
     with pytest.raises(ValueError, match=f"needs {missing}"):
         gate.load_exceptions(write(tmp_path, text))
+
+
+def test_public_domain_passes_with_an_exception_for_that_version(
+    gate: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    entry = ENTRY.replace('"BSD-3-Clause"', '"BSD-2-Clause AND LicenseRef-Public-Domain"')
+    exceptions = gate.load_exceptions(write(tmp_path, entry))
+    monkeypatch.setattr(gate, "metadata", lambda _: meta("LicenseRef-Public-Domain"))
+    monkeypatch.setattr(gate, "version", lambda _: "1.2.3")
+    assert gate.licenses_for("some-package", exceptions) <= gate.ALLOWED
+    assert not gate.licenses_for("other-package", exceptions) <= gate.ALLOWED
 
 
 def test_no_exceptions_file_means_no_exceptions(gate: Any, tmp_path: Path) -> None:

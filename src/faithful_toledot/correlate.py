@@ -147,6 +147,8 @@ class _Logon:
     logon_type: str | None
     source: Source
     account: str | None = None
+    place: tuple[str, int | None] = ("", None)
+    """The log and record number, to order events that share a timestamp."""
 
 
 @dataclass
@@ -162,7 +164,10 @@ class _State:
     names: dict[str, set[str]] = field(default_factory=dict)
     dropped_problems: int = 0
     unnumbered: dict[tuple[str, str, bytes], int] = field(default_factory=dict)
-    boundaries: dict[str, list[datetime]] = field(default_factory=dict)
+    boundaries: dict[str, list[_Moment]] = field(default_factory=dict)
+    disputed: set[tuple[str, str, int]] = field(default_factory=set)
+    """Records read more than once with different content (computer, log, number)."""
+    disputed_sessions: set[tuple[str, int]] = field(default_factory=set)
     input_number: int = 0
 
     def problem(self, problem: Problem) -> None:
@@ -311,6 +316,7 @@ def _take(state: _State, event: Event, scope: str) -> None:
                 "archived log, or one event read from a damaged copy."
             )
             state.problem(Problem(event.source, text, event.record_id))
+            state.disputed.add(key)
         else:
             state.kept[key] = digest
     elif info is not None:
@@ -336,7 +342,7 @@ def _take(state: _State, event: Event, scope: str) -> None:
         return
     _learn_names(state, event, info)
     if info.action in _BOUNDARIES:
-        state.boundaries.setdefault(computer, []).append(event.time)
+        state.boundaries.setdefault(computer, []).append(_moment(event))
     if info.category == "logon":
         state.count("context")
         _note_session(state, event, info)
@@ -409,6 +415,10 @@ def _note_session(state: _State, event: Event, info: EventInfo) -> None:
         return
     if number is None:
         return
+    if (computer, event.channel.casefold(), event.record_id) in state.disputed:
+        # Copies of one logon record disagree, perhaps only on the time: no copy of that
+        # session can be trusted to say where it came from.
+        state.disputed_sessions.add((computer, number))
     held = None
     if kind:
         held = _Logon(
@@ -420,6 +430,7 @@ def _note_session(state: _State, event: Event, info: EventInfo) -> None:
             _text(event, info, "logon_type"),
             event.source,
             _text(event, info, "target_sid"),
+            (event.channel.casefold(), event.record_id),
         )
     state.sessions.setdefault((computer, number), []).append((event.time, kind, held))
 
@@ -428,8 +439,8 @@ def _finish_sessions(state: _State) -> None:
     """Put each session's logons and logoffs in time order; a logoff sorts first."""
     for entries in state.sessions.values():
         entries.sort(key=lambda entry: (entry[0], entry[1]))
-    for times in state.boundaries.values():
-        times.sort()
+    for moments in state.boundaries.values():
+        moments.sort(key=lambda moment: moment[0])
 
 
 def _origin(state: _State, event: Event, info: EventInfo) -> Origin:
@@ -472,7 +483,10 @@ def _doubt(
     before: list[tuple[datetime, int, _Logon | None]],
 ) -> str | None:
     """Why the latest logon for a change's session cannot be taken as its origin, if it can't."""
-    if _restarted_between(state, event, logon.time):
+    number = _number_of(_text(event, info, "actor_logon_id"))
+    if (event.computer.casefold(), number) in state.disputed_sessions:
+        return "conflicting"
+    if _restarted_between(state, event, logon):
         return "restarted"
     rivals = {_session_facts(e[2]) for e in before if e[0] == logon.time and e[2] is not None}
     if len(rivals) > 1:
@@ -485,11 +499,51 @@ def _doubt(
     return None
 
 
-def _restarted_between(state: _State, event: Event, logon_time: datetime) -> bool:
-    """Whether the log shows a restart or a stopped log service after the logon."""
-    times = state.boundaries.get(event.computer.casefold(), [])
-    index = bisect.bisect_right(times, logon_time)
-    return index < len(times) and times[index] <= event.time
+def _shifted(when: datetime, by: timedelta) -> datetime:
+    """Move a time, stopping at the first or last representable moment."""
+    try:
+        return when + by
+    except OverflowError:
+        edge = datetime.min if by < timedelta(0) else datetime.max  # noqa: DTZ901 - zone set next
+        return edge.replace(tzinfo=when.tzinfo)
+
+
+_Moment = tuple[datetime, str, int | None]
+"""When an event happened, with its log and record number for ordering ties."""
+
+
+def _moment(event: Event) -> _Moment:
+    return (event.time, event.channel.casefold(), event.record_id)
+
+
+def _later(one: _Moment, other: _Moment) -> bool | None:
+    """Whether one event came after another, or None when the input cannot say.
+
+    Exports often round times to the second, so events can share a timestamp. Record
+    numbers order them only within one log.
+    """
+    if one[0] != other[0]:
+        return one[0] > other[0]
+    if one[1] == other[1] and one[2] is not None and other[2] is not None:
+        return one[2] > other[2]
+    return None
+
+
+def _restarted_between(state: _State, event: Event, logon: _Logon) -> bool:
+    """Whether a restart or a stopped log service may have come between logon and change.
+
+    A boundary whose order against either event cannot be established counts: taking
+    an address from a logon that may come from before a restart would be a guess.
+    """
+    moments = state.boundaries.get(event.computer.casefold(), [])
+    start = bisect.bisect_left(moments, logon.time, key=lambda moment: moment[0])
+    end = bisect.bisect_right(moments, event.time, key=lambda moment: moment[0])
+    logged_on = (logon.time, *logon.place)
+    changed = _moment(event)
+    return any(
+        _later(moment, logged_on) is not False and _later(changed, moment) is not False
+        for moment in moments[start:end]
+    )
 
 
 def _session_facts(logon: _Logon) -> tuple[str | None, ...]:
@@ -875,8 +929,8 @@ def _relate(changes: list[Change]) -> list[Change]:
         times = [changes[index].time for index in indexes]
         for position, index in enumerate(indexes):
             when = times[position]
-            first = bisect.bisect_left(times, when - RELATED_WINDOW)
-            last = bisect.bisect_right(times, when + RELATED_WINDOW)
+            first = bisect.bisect_left(times, _shifted(when, -RELATED_WINDOW))
+            last = bisect.bisect_right(times, _shifted(when, RELATED_WINDOW))
             total = last - first - 1
             if total <= 0:
                 continue

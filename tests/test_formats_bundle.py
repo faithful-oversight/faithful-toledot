@@ -365,3 +365,12 @@ def test_files_in_no_known_format_are_refused(tmp_path: Path, data: bytes, reaso
         formats.detect(write(tmp_path, data, "odd.bin"))
     with pytest.raises(InputError, match=r"cannot read gone\.evtx"):
         formats.detect(tmp_path / "gone.evtx")
+
+
+def test_times_are_written_with_four_digit_years() -> None:
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    assert format_time(datetime(1, 1, 1, tzinfo=UTC)) == "0001-01-01T00:00:00.0000000Z"
+    assert format_time(datetime(9999, 12, 31, 23, 59, 59, 999999, tzinfo=UTC)) == (
+        "9999-12-31T23:59:59.9999990Z"
+    )

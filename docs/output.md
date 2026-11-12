@@ -35,7 +35,7 @@ The headline at the top says one of three things, matching the account's complet
 
 The report also records when it was generated, the toledot version, and the period (`--since` and `--until`). All times are UTC.
 
-The Markdown and HTML reports shorten any value longer than 300 characters and say how long it was, but only when the JSON report is written too (it is by default). With `--format` leaving `json` out, they keep every value whole, because nothing else would hold it. They list at most 25 notices, 25 problems, 20 routine log events, and 100 rows of the coverage table and of the other-events table, then say how many more the JSON report holds. The JSON report and the CSV file always hold full values.
+The Markdown and HTML reports shorten any value longer than 300 characters and say how long it was, but only when the JSON report is written too (it is by default). With `--format` leaving `json` out, they keep every value whole, because nothing else would hold it. When the JSON report is written, they also list at most 25 notices, 25 problems, 20 routine log events, 20 actors, and 100 rows of the coverage table and of the other-events table, then say how many more the JSON report holds. Without the JSON report they list every row. The JSON report and the CSV file always hold full values.
 
 ## What complete means
 
@@ -173,8 +173,8 @@ Directory service change events (5136) record one event for each value. toledot 
 | `local` | The change was made by one of the computer's own system sessions, which have no logon event. |
 | `ended` | The input holds only a logoff of that session before the change, and no logon. Where the session came from is not known. A logoff with the same timestamp as the change counts as possibly after it, so it does not set this status. |
 | `not-in-input` | The change names a session, but the input holds no logon or logoff event for it before the change. Where it came from is not known. |
-| `restarted` | The latest logon for the session came before Windows started (4608) or the log service stopped (1100) on that computer. Logon IDs are only unique between restarts, so that logon is not used. |
-| `conflicting` | The input holds two different logons for the session at the same moment, for example two copies of one record that disagree. toledot does not choose one. |
+| `restarted` | The latest logon for the session is not clearly after Windows started (4608) or the log service stopped (1100) on that computer. Events with the same timestamp are ordered by record number when they are in the same log; when they cannot be ordered, the logon is not trusted. Logon IDs are only unique between restarts, so that logon is not used. |
+| `conflicting` | The input holds two different logons for the session at the same moment, or two copies of one logon record that disagree in any way, including their time. toledot does not choose one. |
 | `other-account` | The logon was for a different account from the one that made the change, so it is not used. |
 | `none` | The change event names no session. |
 

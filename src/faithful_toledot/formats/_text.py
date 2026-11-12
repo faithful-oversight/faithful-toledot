@@ -19,6 +19,7 @@ import re
 from datetime import UTC, datetime, timedelta, timezone
 from typing import TYPE_CHECKING, TypeVar
 
+from faithful_toledot.clock import date_and_time
 from faithful_toledot.errors import InputError
 
 if TYPE_CHECKING:
@@ -401,7 +402,7 @@ def parse_timestamp(
 def iso_utc(moment: datetime) -> str:
     """Write a UTC time the way Windows event XML does: ``2026-11-10T02:15:03.1230000Z``."""
     utc = moment.astimezone(UTC)
-    return f"{utc:%Y-%m-%dT%H:%M:%S}.{utc.microsecond:06d}0Z"
+    return f"{date_and_time(utc)}.{utc.microsecond:06d}0Z"
 
 
 # --- rendering values ---------------------------------------------------------------

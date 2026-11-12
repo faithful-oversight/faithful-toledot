@@ -10,6 +10,8 @@ import os
 import runpy
 import shutil
 import sys
+from dataclasses import replace
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
@@ -18,6 +20,7 @@ from hypothesis import strategies as st
 
 from faithful_toledot import __version__
 from faithful_toledot.cli import ExitCode, main
+from faithful_toledot.formats.bundle import encode
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -290,3 +293,55 @@ def test_a_bad_source_date_epoch_falls_back_to_the_clock(
     main(["report", *files_of(sample), "-o", str(out), "-f", "json", "--force"])
     report = json.loads((out / "toledot-report.json").read_text(encoding="utf-8"))
     assert report["generated_at"].startswith("20")
+
+
+@pytest.mark.parametrize(
+    "when",
+    [datetime(1, 1, 1, tzinfo=UTC), datetime(9999, 12, 31, 23, 59, 59, 999999, tzinfo=UTC)],
+)
+def test_events_at_the_ends_of_time_are_reported_not_crashed_on(
+    tmp_path: Path, when: datetime
+) -> None:
+    from tests.helpers import logon, member_added  # noqa: PLC0415
+    from tests.test_formats_bundle import header  # noqa: PLC0415
+
+    events = [replace(e, time=when) for e in (logon(), member_added(), member_added(1))]
+    path = tmp_path / "edge.jsonl"
+    path.write_bytes(encode(header(), events))
+    out = tmp_path / "out"
+    assert (
+        main(["report", str(path), "-o", str(out), "-f", "json", "--fail-on", "never"])
+        == ExitCode.OK
+    )
+    report = json.loads((out / "toledot-report.json").read_text(encoding="utf-8"))
+    assert [c["related_total"] for c in report["changes"]] == [1, 1]
+
+
+@pytest.mark.parametrize("formats", ["html", "md", "html,md,csv"])
+def test_a_report_without_json_never_points_to_it(tmp_path: Path, formats: str) -> None:
+    from tests.helpers import event  # noqa: PLC0415
+    from tests.test_formats_bundle import header  # noqa: PLC0415
+
+    cleared = [event(1102, {"SubjectUserSid": "S-1-5-21-1-2-3-1104"}, seconds=i) for i in range(30)]
+    path = tmp_path / "cleared.jsonl"
+    path.write_bytes(encode(header(), cleared))
+    out = tmp_path / "out"
+    assert main(["report", str(path), "-o", str(out), "-f", formats]) == ExitCode.FINDINGS
+    for written in out.iterdir():
+        text = written.read_text(encoding="utf-8")
+        assert "JSON report" not in text, written.name
+    assert "toledot-report.json" not in {p.name for p in out.iterdir()}
+
+
+def test_names_that_print_the_same_are_refused(
+    sample: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    hidden = sample / "dc\u200b01.jsonl"
+    literal = sample / "dc\\u200b01.jsonl"
+    data = (sample / "dc01-events.jsonl").read_bytes()
+    hidden.write_bytes(data)
+    literal.write_bytes(data + b"\n")
+    assert (
+        main(["report", str(hidden), str(literal), "-o", str(sample / "r")]) == ExitCode.INPUT_ERROR
+    )
+    assert "rename one" in capsys.readouterr().err

@@ -21,6 +21,7 @@ import csv
 import html
 import io
 import re
+import sys
 from typing import TYPE_CHECKING, Any
 
 from faithful_toledot.outputs.safety import csv_cell, escape_markdown, terminal, visible
@@ -191,6 +192,11 @@ def _by_day(report: Report) -> list[tuple[str, list[dict[str, Any]]]]:
     return list(days.items())
 
 
+def _limit(cap: int, shorten: bool) -> int:  # noqa: FBT001 - mirrors the keyword it is given
+    """How many rows to show: the cap when the JSON report holds the rest, else all."""
+    return cap if shorten else sys.maxsize
+
+
 def _more(total: int, shown: int) -> str:
     return f"{total - shown} more in the JSON report."
 
@@ -236,9 +242,9 @@ def _md_completeness(report: Report, *, shorten: bool) -> list[str]:
             ),
             "",
         ]
-        lines += [_md_notice(n, shorten=shorten) for n in warnings[:MAX_LISTED]]
-        if len(warnings) > MAX_LISTED:
-            lines.append(f"- {_md(_more(len(warnings), MAX_LISTED))}")
+        lines += [_md_notice(n, shorten=shorten) for n in warnings[: _limit(MAX_LISTED, shorten)]]
+        if len(warnings) > _limit(MAX_LISTED, shorten):
+            lines.append(f"- {_md(_more(len(warnings), _limit(MAX_LISTED, shorten)))}")
         lines.append("")
     coverage = report["coverage"]
     lines += ["### What each log holds", ""]
@@ -249,11 +255,11 @@ def _md_completeness(report: Report, *, shorten: bool) -> list[str]:
                 _records(c), c["continuity"], c["scope"], _ranges(c["missing"]),
                 _shorten(c["statement"], shorten=shorten),
             )
-            for c in coverage[:MAX_ROWS]
+            for c in coverage[:_limit(MAX_ROWS, shorten)]
         ]  # fmt: skip
         lines += _md_table(COVERAGE_HEAD, rows)
-        if len(coverage) > MAX_ROWS:
-            lines += ["", _md(_more(len(coverage), MAX_ROWS))]
+        if len(coverage) > _limit(MAX_ROWS, shorten):
+            lines += ["", _md(_more(len(coverage), _limit(MAX_ROWS, shorten)))]
     else:
         lines.append("No events were read.")
     lines.append("")
@@ -268,14 +274,14 @@ def _md_completeness(report: Report, *, shorten: bool) -> list[str]:
             ),
             "",
         ]
-        for p in problems[:MAX_LISTED]:
+        for p in problems[: _limit(MAX_LISTED, shorten)]:
             record = f", record {p['record_id']}" if p["record_id"] is not None else ""
             lines.append(
                 f"- {_md(p['file'])}, {_md(p['position'])}{_md(record)}: "
                 f"{_md(_shorten(p['reason'], shorten=shorten))}"
             )
-        if len(problems) > MAX_LISTED:
-            lines.append(f"- {_md(_more(len(problems), MAX_LISTED))}")
+        if len(problems) > _limit(MAX_LISTED, shorten):
+            lines.append(f"- {_md(_more(len(problems), _limit(MAX_LISTED, shorten)))}")
         lines.append("")
     if infos:
         lines += [
@@ -284,9 +290,9 @@ def _md_completeness(report: Report, *, shorten: bool) -> list[str]:
             "These do not suggest missing events.",
             "",
         ]
-        lines += [_md_notice(n, shorten=shorten) for n in infos[:MAX_INFO]]
-        if len(infos) > MAX_INFO:
-            lines.append(f"- {_md(_more(len(infos), MAX_INFO))}")
+        lines += [_md_notice(n, shorten=shorten) for n in infos[: _limit(MAX_INFO, shorten)]]
+        if len(infos) > _limit(MAX_INFO, shorten):
+            lines.append(f"- {_md(_more(len(infos), _limit(MAX_INFO, shorten)))}")
         lines.append("")
     return lines
 
@@ -297,7 +303,7 @@ COVERAGE_HEAD = (
 )  # fmt: skip
 
 
-def _md_summary(report: Report) -> list[str]:
+def _md_summary(report: Report, *, shorten: bool) -> list[str]:
     s = report["summary"]
     ev = s["events"]
     lines = [
@@ -317,7 +323,7 @@ def _md_summary(report: Report) -> list[str]:
         lines += [f"First change {_md(s['first_change'])}, last {_md(s['last_change'])}.", ""]
         lines += [*_md_table(("Category", "Changes"), s["by_category"].items()), ""]
         lines += [*_md_table(("Action", "Changes"), s["by_action"].items()), ""]
-        actors = s["actors"][:MAX_ACTORS_SHOWN]
+        actors = s["actors"][: _limit(MAX_ACTORS_SHOWN, shorten)]
         lines += _md_table(
             ("Actor", "SID", "Changes"), [(a["name"], a["sid"] or "", a["changes"]) for a in actors]
         )
@@ -372,7 +378,7 @@ def render_markdown(report: Report, *, shorten: bool = True) -> str:
         "",
     ]
     lines += _md_completeness(report, shorten=shorten)
-    lines += _md_summary(report)
+    lines += _md_summary(report, shorten=shorten)
     days = _by_day(report)
     if not days:
         lines += ["## Changes", "", "No changes were found in the input.", ""]
@@ -389,10 +395,11 @@ def render_markdown(report: Report, *, shorten: bool = True) -> str:
             "",
         ]
         lines += _md_table(
-            ("Log", "Event ID", "Count"), [tuple(o.values()) for o in others[:MAX_ROWS]]
+            ("Log", "Event ID", "Count"),
+            [tuple(o.values()) for o in others[: _limit(MAX_ROWS, shorten)]],
         )
-        if len(others) > MAX_ROWS:
-            lines += ["", _md(_more(len(others), MAX_ROWS))]
+        if len(others) > _limit(MAX_ROWS, shorten):
+            lines += ["", _md(_more(len(others), _limit(MAX_ROWS, shorten)))]
         lines.append("")
     lines += ["## Inputs", ""]
     lines += _md_table(
@@ -625,17 +632,25 @@ def _h_completeness(report: Report, *, shorten: bool) -> str:
     warnings, infos = _split_notices(report)
     if warnings:
         extra = (
-            f"<li>{_h(_more(len(warnings), MAX_LISTED))}</li>" if len(warnings) > MAX_LISTED else ""
+            f"<li>{_h(_more(len(warnings), _limit(MAX_LISTED, shorten)))}</li>"
+            if len(warnings) > _limit(MAX_LISTED, shorten)
+            else ""
         )
-        items = "".join(_h_notice(n, shorten=shorten) for n in warnings[:MAX_LISTED])
+        items = "".join(
+            _h_notice(n, shorten=shorten) for n in warnings[: _limit(MAX_LISTED, shorten)]
+        )
         parts.append(
             "<h3>Notices that bear on completeness</h3><p>These events bear on whether the log "
             "can be trusted to be whole.</p>"
             f'<ul class="list">{items}{extra}</ul>'
         )
     if infos:
-        extra = f"<li>{_h(_more(len(infos), MAX_INFO))}</li>" if len(infos) > MAX_INFO else ""
-        items = "".join(_h_notice(n, shorten=shorten) for n in infos[:MAX_INFO])
+        extra = (
+            f"<li>{_h(_more(len(infos), _limit(MAX_INFO, shorten)))}</li>"
+            if len(infos) > _limit(MAX_INFO, shorten)
+            else ""
+        )
+        items = "".join(_h_notice(n, shorten=shorten) for n in infos[: _limit(MAX_INFO, shorten)])
         parts.append(
             f"<details><summary>Routine log events ({len(infos)})</summary>"
             "<p>These do not suggest missing events.</p>"
@@ -657,11 +672,11 @@ def _h_completeness(report: Report, *, shorten: bool) -> str:
                 _h(_ranges(c["missing"])),
                 _h(_shorten(c["statement"], shorten=shorten)),
             )
-            for c in coverage[:MAX_ROWS]
+            for c in coverage[: _limit(MAX_ROWS, shorten)]
         ]
         parts.append(_table("What each log holds", COVERAGE_HEAD_HTML, rows))
-        if len(coverage) > MAX_ROWS:
-            parts.append(f"<p>{_h(_more(len(coverage), MAX_ROWS))}</p>")
+        if len(coverage) > _limit(MAX_ROWS, shorten):
+            parts.append(f"<p>{_h(_more(len(coverage), _limit(MAX_ROWS, shorten)))}</p>")
     else:
         parts.append("<p>No events were read.</p>")
     problems = report["problems"]
@@ -670,10 +685,12 @@ def _h_completeness(report: Report, *, shorten: bool) -> str:
             f"<li><code>{_h(p['file'])}</code>, {_h(p['position'])}"
             + (f", record {_h(p['record_id'])}" if p["record_id"] is not None else "")
             + f": {_h(_shorten(p['reason'], shorten=shorten))}</li>"
-            for p in problems[:MAX_LISTED]
+            for p in problems[: _limit(MAX_LISTED, shorten)]
         )
         extra = (
-            f"<li>{_h(_more(len(problems), MAX_LISTED))}</li>" if len(problems) > MAX_LISTED else ""
+            f"<li>{_h(_more(len(problems), _limit(MAX_LISTED, shorten)))}</li>"
+            if len(problems) > _limit(MAX_LISTED, shorten)
+            else ""
         )
         parts.append(
             "<h3>Problems with the input</h3><p>These records or files could not be read, or "
@@ -689,7 +706,7 @@ COVERAGE_HEAD_HTML = (
 )  # fmt: skip
 
 
-def _h_summary(report: Report) -> str:
+def _h_summary(report: Report, *, shorten: bool) -> str:
     s = report["summary"]
     ev = s["events"]
     cards = "".join(
@@ -724,7 +741,7 @@ def _h_summary(report: Report) -> str:
                 [(_h(k), _h(v)) for k, v in s["by_action"].items()],
             )
         )
-        actors = s["actors"][:MAX_ACTORS_SHOWN]
+        actors = s["actors"][: _limit(MAX_ACTORS_SHOWN, shorten)]
         parts.append(
             _table(
                 "Most active actors",
@@ -774,12 +791,19 @@ def render_html(report: Report, *, shorten: bool = True) -> str:
     others = report["other_events"]
     other = ""
     if others:
-        rows = [(_h(o["channel"]), _h(o["event_id"]), _h(o["count"])) for o in others[:MAX_ROWS]]
+        rows = [
+            (_h(o["channel"]), _h(o["event_id"]), _h(o["count"]))
+            for o in others[: _limit(MAX_ROWS, shorten)]
+        ]
         other = (
             '<h2 id="other">Other events read</h2><p>These events were read but are not '
             "changes toledot describes.</p>"
             + _table("Other events read", ("Log", "Event ID", "Count"), rows)
-            + (f"<p>{_h(_more(len(others), MAX_ROWS))}</p>" if len(others) > MAX_ROWS else "")
+            + (
+                f"<p>{_h(_more(len(others), _limit(MAX_ROWS, shorten)))}</p>"
+                if len(others) > _limit(MAX_ROWS, shorten)
+                else ""
+            )
         )
     inputs = _table(
         "Inputs",
@@ -824,7 +848,7 @@ def render_html(report: Report, *, shorten: bool = True) -> str:
 {_h(_span(report))} All times are UTC.</p>
 </header>
 {_h_completeness(report, shorten=shorten)}
-{_h_summary(report)}
+{_h_summary(report, shorten=shorten)}
 <h2 id="changes">Changes by day</h2>
 {changes}
 {other}

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -141,6 +142,17 @@ def test_two_different_logons_for_one_session_give_no_origin(order: int) -> None
     assert "more than once with different content" in problem.reason
 
 
+def test_copies_of_one_logon_record_with_different_times_give_no_origin() -> None:
+    first = logon(seconds=-60, address="192.0.2.44")
+    later = replace(logon(seconds=-30, address="203.0.113.99"), record_id=first.record_id)
+    for order in ([first, later], [later, first]):
+        result = build(
+            [Input("a", order[:1]), Input("b", [*order[1:], member_added()])], catalog.load()
+        )
+        assert result.changes[0].origin.status == "conflicting"
+        assert not result.complete
+
+
 def test_two_unnumbered_logons_that_disagree_also_give_no_origin() -> None:
     one = replace(logon(address="192.0.2.44"), record_id=None)
     two = replace(logon(address="203.0.113.99"), record_id=None)
@@ -170,6 +182,53 @@ def test_a_logon_before_a_restart_is_not_the_origin_of_a_later_change(boundary: 
     assert origin.status == "restarted"
     assert "only unique between restarts" in narrative.origin(origin)
     assert result.notices[0].severity == "info"  # restarts are routine on their own
+
+
+def numbered_at(item: Event, record: int, seconds: float) -> Event:
+    return replace(item, record_id=record, time=at(seconds))
+
+
+@pytest.mark.parametrize(
+    ("boundary_record", "status"),
+    [
+        (101, "restarted"),  # the same second, but after the logon in the log
+        (99, "session"),  # the same second, and before the logon: the logon is fresh
+    ],
+)
+def test_record_numbers_order_a_restart_that_shares_the_logon_time(
+    boundary_record: int, status: str
+) -> None:
+    signed_in = numbered_at(logon(), 100, -60)
+    stopped = numbered_at(event(1100, {}), boundary_record, -60)
+    change = numbered_at(member_added(), 102, 0)
+    assert account(signed_in, stopped, change).changes[0].origin.status == status
+
+
+def test_a_restart_at_the_logon_time_with_no_order_is_not_trusted() -> None:
+    signed_in = replace(logon(seconds=-60), record_id=None)
+    stopped = replace(event(4608, {}, seconds=-60), record_id=None)
+    assert account(signed_in, stopped, member_added()).changes[0].origin.status == "restarted"
+
+
+@pytest.mark.parametrize(("boundary_record", "status"), [(101, "session"), (99, "restarted")])
+def test_record_numbers_order_a_restart_that_shares_the_change_time(
+    boundary_record: int, status: str
+) -> None:
+    signed_in = numbered_at(logon(), 50, -60)
+    stopped = numbered_at(event(1100, {}), boundary_record, 0)
+    change = numbered_at(member_added(), 100, 0)
+    assert account(signed_in, stopped, change).changes[0].origin.status == status
+
+
+@pytest.mark.parametrize(
+    "when",
+    [datetime(1, 1, 1, tzinfo=UTC), datetime(9999, 12, 31, 23, 59, 59, 999999, tzinfo=UTC)],
+)
+def test_changes_at_the_ends_of_time_are_described(when: datetime) -> None:
+    first = replace(member_added(), time=when)
+    second = replace(member_added(1), time=when)
+    result = account(replace(logon(), time=when), first, second)
+    assert [c.related_total for c in result.changes] == [1, 1]
 
 
 def test_a_logon_after_the_restart_is_used() -> None:

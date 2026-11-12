@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from faithful_toledot.clock import date_and_time
+
 if TYPE_CHECKING:
     from datetime import datetime
 
@@ -80,9 +82,9 @@ _UNLINKED = {
     "none": "The event names no logon session, so where it came from is not recorded.",
     "local": "Made by the computer's own system session ({id}).",
     "restarted": (
-        "Session {id} was logged on before Windows restarted or its log service stopped. "
-        "Logon IDs are only unique between restarts, so that logon is not taken as where "
-        "this change came from."
+        "The latest logon for session {id} is not clearly after Windows restarted or its "
+        "log service stopped. Logon IDs are only unique between restarts, so that logon is "
+        "not taken as where this change came from."
     ),
     "conflicting": (
         "The input holds two different logons for session {id} at the same moment, so "
@@ -117,7 +119,9 @@ def origin(where: Origin) -> str:
     else:
         place = "an address the logon did not record"
     station = f", workstation name {where.workstation}" if where.workstation else ""
-    started = f"{where.logon_time:%Y-%m-%d %H:%M:%S} UTC" if where.logon_time else "an unknown time"
+    started = (
+        f"{date_and_time(where.logon_time, ' ')} UTC" if where.logon_time else "an unknown time"
+    )
     return f"Session {where.logon_id} began at {started} as {kind} from {place}{station}."
 
 
@@ -143,7 +147,7 @@ def overwritten_statement(before: datetime | None) -> str:
         return ""
     return (
         f" The collection asked for earlier events, but the log's oldest record is from "
-        f"{before:%Y-%m-%d %H:%M:%S} UTC: earlier events had been overwritten and are missing."
+        f"{date_and_time(before, ' ')} UTC: earlier events had been overwritten and are missing."
     )
 
 
