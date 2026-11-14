@@ -8,7 +8,7 @@
 # unpinned install stays behind.
 #
 # Usage: scripts/install_vale_styles.sh [<lock-file> [<styles-directory>]]
-# Needs curl, sha256sum, and python3.
+# Needs curl, sha256sum, and uv (which finds the Python that unpacks the zip).
 
 set -euo pipefail
 
@@ -39,7 +39,7 @@ while read -r name url sha256 extra; do
     exit 1
   fi
   mkdir "$tmp/$name.dir"
-  python3 -m zipfile -e "$zip" "$tmp/$name.dir"
+  uv run --no-project python -m zipfile -e "$zip" "$tmp/$name.dir"
   if [[ ! -d "$tmp/$name.dir/$name" ]]; then
     echo "::error::Vale package $name does not contain a $name directory" >&2
     exit 1

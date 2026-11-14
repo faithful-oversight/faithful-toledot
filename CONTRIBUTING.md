@@ -24,12 +24,13 @@ Because pull requests are squash-merged, the check runs on the commits of the pu
 
 ## Set up
 
-Requirements:
+Requirements for a clean machine:
 
-- [uv](https://docs.astral.sh/uv/) and Git.
-- Bash 4 or newer. macOS ships Bash 3.2, so install a newer Bash with Homebrew.
-- [Gitleaks](https://github.com/gitleaks/gitleaks) for the `secrets` stage. On Linux x64, `scripts/install_gitleaks.sh` installs the pinned version.
-- Network access for the first run of the `docs` stage (it downloads the Vale styles) and for the `deps` stage (it queries the vulnerability database).
+- [uv](https://docs.astral.sh/uv/) and Git. If the Python version in `.python-version` is not installed, uv downloads it, which needs network access.
+- A full clone, not a shallow one (`--depth`). The `secrets` stage and the sign-off check read the whole history.
+- Bash 4 or newer for `scripts/check.sh`, and `curl`, `tar`, `sha256sum`, `xargs`, and `diff`. Linux has all of these. macOS ships Bash 3.2 and has no `sha256sum`, so install a newer Bash and the GNU core utilities (for example with Homebrew). On Windows, use WSL or Git Bash. CI runs only the `test` stage on Windows and macOS, so the other stages are checked on Linux only.
+- [Gitleaks](https://github.com/gitleaks/gitleaks) on your `PATH`, for the `secrets` stage and the pre-commit hook. On Linux x64, `scripts/install_gitleaks.sh [directory]` downloads the pinned release from github.com, checks its SHA-256, and installs it into `~/.local/bin` or the directory you give. It needs `curl`, `tar`, `sha256sum`, and `install`. Make sure that directory is on your `PATH`. On other platforms, install Gitleaks yourself.
+- Network access for the stages marked in the table below. Vale and every other check tool come from the project environment, so there is nothing else to install. The link check runs in CI only.
 
 ```shell
 git clone https://github.com/faithful-oversight/faithful-toledot.git
@@ -48,21 +49,27 @@ scripts/check.sh all
 
 Run one stage at a time with `scripts/check.sh <stage>`:
 
-| Stage | What it checks |
-| --- | --- |
-| `format` | Code formatting (Ruff) |
-| `lint` | Code lint rules, including security rules (Ruff) |
-| `types` | Strict static typing (mypy) |
-| `test` | Unit and property-based tests, with at least 95% combined line and branch coverage (pytest, Hypothesis) |
-| `docs` | Markdown structure (PyMarkdown), spelling (codespell), and wording (Vale) |
-| `site` | Documentation site build, with warnings treated as errors (Sphinx) |
-| `config` | YAML style (yamllint), workflow correctness (actionlint), and shell scripts (ShellCheck) |
-| `workflows` | Workflow security (zizmor) |
-| `secrets` | Committed secrets across the full history (Gitleaks) |
-| `deps` | Known vulnerabilities in locked dependencies (pip-audit) |
-| `licenses` | Dependency licenses against the allow list |
-| `reuse` | Copyright and license information on every file (REUSE) |
-| `build` | Package build with the pinned backend, metadata check, and an end-to-end test of the built wheel (uv, twine) |
+| Stage | What it checks | Also needs |
+| --- | --- | --- |
+| `format` | Code formatting (Ruff) | Nothing |
+| `lint` | Code lint rules, including security rules (Ruff) | Nothing |
+| `types` | Strict static typing (mypy) | Nothing |
+| `test` | Unit and property-based tests, with at least 95% combined line and branch coverage (pytest, Hypothesis) | Nothing |
+| `docs` | Markdown structure (PyMarkdown), spelling (codespell), and wording (Vale) | Network: downloads the pinned Vale styles from github.com |
+| `site` | Documentation site build, with warnings treated as errors (Sphinx) | Nothing |
+| `config` | YAML style (yamllint), workflow correctness (actionlint), and shell scripts (ShellCheck) | Nothing |
+| `workflows` | Workflow security (zizmor) | Optional GitHub token, see below |
+| `secrets` | Committed secrets across the full history (Gitleaks) | Gitleaks on `PATH`; full history |
+| `deps` | Known vulnerabilities in locked dependencies (pip-audit) | Network: queries the vulnerability database |
+| `licenses` | Dependency licenses against the allow list | Installs the optional extras, so network on the first run |
+| `reuse` | Copyright and license information on every file (REUSE) | Nothing |
+| `build` | Package build with the pinned backend, metadata check, and an end-to-end test of the built wheel (uv, twine) | Network on the first run, for the pinned build backend; full history, because the reproducible build reads the commit time |
+
+"Nothing" means nothing beyond the project environment from `uv sync --locked`, which needs network access once.
+
+The `workflows` stage uses a GitHub token if `GH_TOKEN`, `GITHUB_TOKEN`, or `ZIZMOR_GITHUB_TOKEN` is set, which lets zizmor run its online audits (for example, known-vulnerable actions). With none set, it runs the offline audits only. If GitHub rejects the token, for example because it expired, the stage stops with a message instead of a stack trace. Fix the token, or unset `GH_TOKEN` and `GITHUB_TOKEN`, to continue.
+
+The pre-commit hooks use the project environment and Gitleaks, and download nothing.
 
 ## Commit messages and pull request titles
 

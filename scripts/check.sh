@@ -61,10 +61,35 @@ check_powershell() {
   done < <(git ls-files -z '*.ps1')
 }
 stage_workflows() {
-  # Online audits need a GitHub token; without one, run the offline audits only.
+  # Online audits (known-vulnerable actions, for example) need a valid GitHub
+  # token, which zizmor reads from any of three variables. Without one, run the
+  # offline audits only, and remove the variables: zizmor rejects an empty one
+  # even with --offline.
+  local token="${GH_TOKEN:-${GITHUB_TOKEN:-${ZIZMOR_GITHUB_TOKEN:-}}}"
   local -a mode=()
-  [[ -n "${GH_TOKEN:-}" ]] || mode=(--offline)
-  run zizmor "${mode[@]}" --persona=auditor --min-severity=low .github/workflows
+  local out rc=0
+  [[ -n "$token" ]] || mode=(--offline)
+  out="$(mktemp)"
+  (
+    [[ -n "$token" ]] || unset GH_TOKEN GITHUB_TOKEN ZIZMOR_GITHUB_TOKEN
+    RUST_BACKTRACE=0 run zizmor ${mode[@]+"${mode[@]}"} --persona=auditor --min-severity=low \
+      .github/workflows
+  ) > "$out" 2>&1 || rc=$?
+  if [[ $rc -eq 1 ]]; then
+    # Exit code 1 means zizmor could not finish; findings use higher codes. Show
+    # the cause without the Rust stack trace, and say what to do.
+    sed '/^Stack backtrace:/,$d' "$out" >&2
+    {
+      echo "workflows: zizmor could not finish its online audits. The usual cause is a GH_TOKEN"
+      echo "(or GITHUB_TOKEN) that GitHub rejects, such as an expired token, or no route to"
+      echo "github.com. Fix the token, or unset GH_TOKEN and GITHUB_TOKEN to run only the"
+      echo "offline audits."
+    } >&2
+  else
+    cat "$out"
+  fi
+  rm -f "$out"
+  return "$rc"
 }
 stage_secrets()   { gitleaks git --redact --no-banner --exit-code 1 .; }
 stage_deps() {

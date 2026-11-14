@@ -559,3 +559,100 @@ def test_one_uv_version_is_pinned_for_every_workflow() -> None:
             assert match is not None, f"{path.name} must define FO_UV_VERSION"
             versions.add(match.group(1))
     assert len(versions) == 1, f"workflows pin different uv versions: {sorted(versions)}"
+
+
+FAKE_ZIZMOR_UV = """#!/usr/bin/env bash
+[[ "$1" == run ]] || exit 0
+{
+  printf 'args: %s\\n' "$*"
+  printf 'GH_TOKEN=%s GITHUB_TOKEN=%s ZIZMOR_GITHUB_TOKEN=%s\\n' \
+    "${GH_TOKEN-unset}" "${GITHUB_TOKEN-unset}" "${ZIZMOR_GITHUB_TOKEN-unset}"
+} >> "$UV_LOG"
+cat "$ZIZMOR_OUTPUT"
+exit "${ZIZMOR_EXIT:-0}"
+"""
+
+ZIZMOR_FATAL_OUTPUT = """ INFO zizmor: zizmor v1.32.0
+fatal: no audit was performed
+'artipacked' audit failed on file://.github/workflows/ci.yml
+
+Caused by:
+    0: error in 'artipacked' audit
+    1: couldn't list tags for actions/checkout
+    2: request error while accessing GitHub API
+    3: HTTP status client error (401 Unauthorized) for url (https://github.com/x.git/git-upload-pack)
+
+Stack backtrace:
+   0: <anyhow::Error as core::convert::From<zizmor::Error>>::from
+   1: zizmor::main
+"""
+
+
+def _workflows(
+    tmp_path: Path, output: str, exit_code: int, env: dict[str, str]
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    """Run the workflows stage against a fake zizmor and return its log lines."""
+    bin_dir = tmp_path / "bin-zizmor"
+    bin_dir.mkdir()
+    uv = bin_dir / "uv"
+    uv.write_text(FAKE_ZIZMOR_UV, encoding="utf-8")
+    uv.chmod(0o755)
+    canned = tmp_path / "zizmor-output.txt"
+    canned.write_text(output, encoding="utf-8")
+    log = tmp_path / "zizmor.log"
+    # Start from an environment with no token of the machine this runs on.
+    base = {k: v for k, v in _env(tmp_path).items() if k not in TOKEN_VARIABLES}
+    base["PATH"] = f"{bin_dir}{os.pathsep}{base['PATH']}"
+    base |= {"UV_LOG": str(log), "ZIZMOR_OUTPUT": str(canned), "ZIZMOR_EXIT": str(exit_code)}
+    result = subprocess.run(  # noqa: S603 - fixed script path, no shell
+        ["bash", str(CHECK), "workflows"],  # noqa: S607 - bash is looked up on PATH on purpose
+        env=base | env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result, log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+
+
+TOKEN_VARIABLES = ("GH_TOKEN", "GITHUB_TOKEN", "ZIZMOR_GITHUB_TOKEN")
+
+
+@needs_bash
+def test_a_rejected_github_token_gets_a_clear_message_not_a_stack_trace(tmp_path: Path) -> None:
+    result, log = _workflows(tmp_path, ZIZMOR_FATAL_OUTPUT, 1, {"GH_TOKEN": "expired"})
+    assert result.returncode == 1
+    assert "401 Unauthorized" in result.stderr
+    assert "GH_TOKEN" in result.stderr
+    assert "unset GH_TOKEN and GITHUB_TOKEN" in result.stderr
+    assert "Stack backtrace" not in result.stderr + result.stdout
+    assert "--offline" not in log[0], "a set token must not silently drop the online audits"
+
+
+@needs_bash
+@pytest.mark.parametrize("variable", TOKEN_VARIABLES)
+def test_any_zizmor_token_variable_keeps_the_online_audits(tmp_path: Path, variable: str) -> None:
+    result, log = _workflows(tmp_path, "No findings\n", 0, {variable: "valid"})
+    assert result.returncode == 0
+    assert "--offline" not in log[0]
+
+
+@needs_bash
+@pytest.mark.parametrize("empty", [{}, {"GH_TOKEN": ""}, {"GITHUB_TOKEN": "", "GH_TOKEN": ""}])
+def test_without_a_token_zizmor_runs_offline_and_never_sees_an_empty_one(
+    tmp_path: Path, empty: dict[str, str]
+) -> None:
+    """Zizmor rejects an empty GH_TOKEN even with --offline, so the variables must be gone."""
+    result, log = _workflows(tmp_path, "No findings\n", 0, empty)
+    assert result.returncode == 0
+    assert "--offline" in log[0]
+    assert log[1] == "GH_TOKEN=unset GITHUB_TOKEN=unset ZIZMOR_GITHUB_TOKEN=unset"
+
+
+@needs_bash
+def test_workflow_findings_keep_their_exit_code_and_output(tmp_path: Path) -> None:
+    result, _ = _workflows(
+        tmp_path, "warning[artipacked]: credential persistence\n", 14, {"GH_TOKEN": "valid"}
+    )
+    assert result.returncode == 14
+    assert "credential persistence" in result.stdout
+    assert "could not finish" not in result.stderr
