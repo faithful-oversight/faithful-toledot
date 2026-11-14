@@ -23,7 +23,8 @@ stage_docs() {
   mapfile -t docs < <(git ls-files '*.md' ':!:examples/*/sample-report/*')
   run pymarkdown --config .pymarkdown.json scan "${docs[@]}"
   git ls-files -z | xargs -0 uv run --locked --no-sync codespell --
-  run vale sync >/dev/null
+  # Pinned, checksum-verified styles. `vale sync` would fetch the newest release unchecked.
+  scripts/install_vale_styles.sh >/dev/null
   run vale --minAlertLevel=warning "${docs[@]}"
 }
 stage_site() {

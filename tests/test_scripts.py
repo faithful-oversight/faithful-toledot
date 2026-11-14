@@ -4,11 +4,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shutil
 import subprocess
 import tomllib
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -21,6 +23,8 @@ CI = ROOT / ".github" / "workflows" / "ci.yml"
 RELEASE = ROOT / ".github" / "workflows" / "release.yml"
 VISIBILITY = ROOT / "scripts" / "check_visibility.sh"
 VERIFY = ROOT / "scripts" / "verify_artifacts.sh"
+VALE_INSTALL = ROOT / "scripts" / "install_vale_styles.sh"
+VALE_LOCK = ROOT / "scripts" / "vale-styles.lock"
 
 needs_bash = pytest.mark.skipif(
     os.name != "posix" or shutil.which("bash") is None or shutil.which("git") is None,
@@ -437,3 +441,121 @@ class TestVerifyArtifacts:
         result = _verify(tmp_path, dist)
         assert result.returncode == 1
         assert "SHA256SUMS is missing" in result.stderr
+
+
+def _style_zip(path: Path, package: str, files: dict[str, str]) -> str:
+    """Write a style package zip and return its SHA-256."""
+    with zipfile.ZipFile(path, "w") as archive:
+        for name, text in files.items():
+            archive.writestr(f"{package}/{name}", text)
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _install_styles(
+    tmp_path: Path, lock_text: str, dest: Path | None = None
+) -> subprocess.CompletedProcess[str]:
+    lock = tmp_path / "styles.lock"
+    lock.write_text(lock_text, encoding="utf-8")
+    return _run_script(VALE_INSTALL, str(lock), str(dest or tmp_path / "styles"), home=tmp_path)
+
+
+@needs_bash
+@pytest.mark.skipif(shutil.which("curl") is None, reason="needs curl")
+class TestInstallValeStyles:
+    """Vale styles come from pinned releases whose digest is checked before unpacking."""
+
+    def test_installs_a_package_that_matches_its_digest(self, tmp_path: Path) -> None:
+        digest = _style_zip(tmp_path / "Demo.zip", "Demo", {"Rule.yml": "extends: existence\n"})
+        result = _install_styles(
+            tmp_path, f"# comment\n\nDemo {(tmp_path / 'Demo.zip').as_uri()} {digest}\n"
+        )
+        assert result.returncode == 0, result.stderr
+        assert (tmp_path / "styles" / "Demo" / "Rule.yml").read_text(encoding="utf-8") == (
+            "extends: existence\n"
+        )
+
+    def test_replaces_an_existing_copy_without_leaving_stale_files(self, tmp_path: Path) -> None:
+        digest = _style_zip(tmp_path / "Demo.zip", "Demo", {"New.yml": "new\n"})
+        stale = tmp_path / "styles" / "Demo"
+        stale.mkdir(parents=True)
+        (stale / "Old.yml").write_text("from an unpinned sync\n", encoding="utf-8")
+        result = _install_styles(tmp_path, f"Demo {(tmp_path / 'Demo.zip').as_uri()} {digest}\n")
+        assert result.returncode == 0, result.stderr
+        assert sorted(p.name for p in stale.iterdir()) == ["New.yml"]
+
+    def test_rejects_a_package_that_does_not_match_its_digest(self, tmp_path: Path) -> None:
+        _style_zip(tmp_path / "Demo.zip", "Demo", {"Rule.yml": "changed upstream\n"})
+        result = _install_styles(tmp_path, f"Demo {(tmp_path / 'Demo.zip').as_uri()} {'0' * 64}\n")
+        assert result.returncode == 1
+        assert "does not match its pinned SHA-256" in result.stderr
+        assert not (tmp_path / "styles" / "Demo").exists()
+
+    def test_rejects_a_package_that_cannot_be_downloaded(self, tmp_path: Path) -> None:
+        missing = (tmp_path / "missing.zip").as_uri()
+        result = _install_styles(tmp_path, f"Demo {missing} {'0' * 64}\n")
+        assert result.returncode == 1
+        assert "cannot download Vale package Demo" in result.stderr
+
+    def test_rejects_a_zip_without_the_package_directory(self, tmp_path: Path) -> None:
+        digest = _style_zip(tmp_path / "Demo.zip", "Other", {"Rule.yml": "x\n"})
+        result = _install_styles(tmp_path, f"Demo {(tmp_path / 'Demo.zip').as_uri()} {digest}\n")
+        assert result.returncode == 1
+        assert "does not contain a Demo directory" in result.stderr
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "Demo https://example.com/Demo.zip",
+            "Demo https://example.com/Demo.zip nothex",
+            "../x u " + "0" * 64,
+        ],
+    )
+    def test_rejects_a_malformed_line(self, tmp_path: Path, line: str) -> None:
+        result = _install_styles(tmp_path, line + "\n")
+        assert result.returncode == 1
+        assert "bad line" in result.stderr
+
+    def test_rejects_a_lock_file_with_no_packages(self, tmp_path: Path) -> None:
+        result = _install_styles(tmp_path, "# nothing pinned\n")
+        assert result.returncode == 1
+        assert "lists no packages" in result.stderr
+
+
+def test_the_docs_check_installs_pinned_styles_and_never_syncs() -> None:
+    assert "vale sync" not in CHECK.read_text(encoding="utf-8").replace("`vale sync`", "")
+    assert "scripts/install_vale_styles.sh" in CHECK.read_text(encoding="utf-8")
+    entries = [
+        line.split()
+        for line in VALE_LOCK.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.startswith("#")
+    ]
+    assert {name for name, _, _ in entries} >= {"Google", "write-good"}
+    for name, url, digest in entries:
+        assert re.fullmatch(
+            r"https://github\.com/errata-ai/[\w-]+/releases/download/v\d+\.\d+\.\d+/"
+            + re.escape(name)
+            + r"\.zip",
+            url,
+        ), f"{name} must name one release"
+        assert re.fullmatch(r"[0-9a-f]{64}", digest)
+
+
+def test_one_uv_version_is_pinned_for_every_workflow() -> None:
+    workflows = ROOT / ".github" / "workflows"
+    if not workflows.exists():
+        pytest.skip("workflows are not part of the source distribution")
+    versions = set()
+    for path in sorted(workflows.glob("*.yml")):
+        text = path.read_text(encoding="utf-8")
+        steps = re.findall(
+            r"uses: astral-sh/setup-uv@\S+ # \S+\n        with:\n          version: (.+)\n", text
+        )
+        assert text.count("uses: astral-sh/setup-uv@") == len(steps), (
+            f"{path.name}: every setup-uv step needs the pinned version"
+        )
+        if steps:
+            assert set(steps) == {"${{ env.FO_UV_VERSION }}"}
+            match = re.search(r'^  FO_UV_VERSION: "(\d+\.\d+\.\d+)"$', text, re.MULTILINE)
+            assert match is not None, f"{path.name} must define FO_UV_VERSION"
+            versions.add(match.group(1))
+    assert len(versions) == 1, f"workflows pin different uv versions: {sorted(versions)}"

@@ -39,3 +39,13 @@ gh attestation verify faithful_toledot-X.Y.Z-py3-none-any.whl --repo faithful-ov
 ```
 
 The attestation check works for releases made after the repository became public.
+
+## Pinned tools
+
+Everything that runs in CI or the release is pinned, so a green `main` cannot turn red, and a rerun cannot produce different bytes, because an upstream project published something new. Dependabot updates the GitHub Actions (by commit SHA) and the Python packages in `uv.lock` and `requirements-build.txt`. It cannot update the tools below, so they change only in a reviewed pull request, and the maintainer checks them before each release.
+
+| Tool | Where it is pinned | How to update |
+| --- | --- | --- |
+| uv | `FO_UV_VERSION` in `ci.yml`, `pages.yml`, and `release.yml`. The `setup-uv` action checks the download's checksum. | Change all three to the same version, then run CI. Find the newest version with `gh release view --repo astral-sh/uv --json tagName`. |
+| Gitleaks | `VERSION` and `SHA256` in `scripts/install_gitleaks.sh` | Change both together, with the digest from the Gitleaks release page. Find the newest version with `gh release view --repo gitleaks/gitleaks --json tagName`. |
+| Vale styles | `scripts/vale-styles.lock`: a release URL and a SHA-256 for each style | Download the new release zip, run `sha256sum` on it, change the URL and digest together, and run `scripts/check.sh docs`. The check installs these files and never runs `vale sync`. |
