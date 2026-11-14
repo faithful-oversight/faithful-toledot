@@ -13,6 +13,11 @@ updates:
     groups:
       dev-tools:
         dependency-type: development
+      # Minor and patch updates of the packages users install arrive as one pull
+      # request. A major update stays its own pull request, for a closer look.
+      runtime-dependencies:
+        dependency-type: production
+        update-types: [minor, patch]
     open-pull-requests-limit: 5
   - package-ecosystem: pip
     # The pinned, hash-verified build backend in requirements-build.txt.
