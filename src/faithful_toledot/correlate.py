@@ -169,6 +169,8 @@ class _State:
     """Records read more than once with different content (computer, log, number)."""
     disputed_sessions: set[tuple[str, int]] = field(default_factory=set)
     input_number: int = 0
+    rivals: dict[tuple[tuple[str, int], int], bool] = field(default_factory=dict)
+    """Per session and latest logon: whether two different logons share its moment."""
 
     def problem(self, problem: Problem) -> None:
         if len(self.account.problems) < MAX_PROBLEMS:
@@ -454,16 +456,15 @@ def _origin(state: _State, event: Event, info: EventInfo) -> Origin:
         return Origin("none")
     if number in _SYSTEM_SESSIONS:
         return Origin("local", logon_id=recorded)
-    entries = state.sessions.get((event.computer.casefold(), number), [])
-    index = bisect.bisect_right(entries, event.time, key=lambda entry: entry[0])
-    # A logoff stamped with the change's own time may have come just after it.
-    before = [entry for entry in entries[:index] if entry[0] < event.time or entry[1]]
-    if not before:
+    key = (event.computer.casefold(), number)
+    entries = state.sessions.get(key, [])
+    last = _latest_before(entries, event.time)
+    if last is None:
         return Origin("not-in-input", logon_id=recorded)
-    logon = before[-1][2]
+    logon = entries[last][2]
     if logon is None:
         return Origin("ended", logon_id=recorded)
-    doubt = _doubt(state, event, info, logon, before)
+    doubt = _doubt(state, event, info, logon, (key, last))
     if doubt is not None:
         return Origin(doubt, logon_id=recorded, logon_time=logon.time)
     return Origin(
@@ -479,12 +480,52 @@ def _origin(state: _State, event: Event, info: EventInfo) -> Origin:
     )
 
 
+def _latest_before(
+    entries: list[tuple[datetime, int, _Logon | None]], when: datetime
+) -> int | None:
+    """The index of the latest logon or logoff that may come before a change, or ``None``.
+
+    Entries are sorted by time, a logoff first. An entry counts when it is earlier than
+    the change, or is a logon at the change's own time; a logoff stamped with the change's
+    own time may have come just after it. Only the entries at the change's own time can
+    fail that test, and they are a block of logoffs ahead of that time's logons, so the
+    answer is found by bisection and not by scanning the session's history.
+    """
+    index = bisect.bisect_right(entries, when, key=lambda entry: entry[0])
+    if index and (entries[index - 1][0] < when or entries[index - 1][1]):
+        return index - 1
+    earlier = bisect.bisect_left(entries, when, key=lambda entry: entry[0])
+    return earlier - 1 if earlier else None
+
+
+def _rivals(state: _State, place: tuple[tuple[str, int], int]) -> bool:
+    """Whether two different logons for one session share the latest logon's moment.
+
+    ``place`` is the session and the index of its latest logon that comes before the
+    change. The answer depends on nothing else, so it is kept for the next change by the
+    same session.
+    """
+    found = state.rivals.get(place)
+    if found is None:
+        key, last = place
+        entries = state.sessions[key]
+        moment = entries[last][0]
+        first = bisect.bisect_left(entries, moment, key=lambda entry: entry[0])
+        facts = {
+            _session_facts(item)
+            for _, _, item in itertools.islice(entries, first, last + 1)
+            if item is not None
+        }
+        found = state.rivals[place] = len(facts) > 1
+    return found
+
+
 def _doubt(
     state: _State,
     event: Event,
     info: EventInfo,
     logon: _Logon,
-    before: list[tuple[datetime, int, _Logon | None]],
+    place: tuple[tuple[str, int], int],
 ) -> str | None:
     """Why the latest logon for a change's session cannot be taken as its origin, if it can't."""
     number = _number_of(_text(event, info, "actor_logon_id"))
@@ -492,8 +533,7 @@ def _doubt(
         return "conflicting"
     if _restarted_between(state, event, logon):
         return "restarted"
-    rivals = {_session_facts(e[2]) for e in before if e[0] == logon.time and e[2] is not None}
-    if len(rivals) > 1:
+    if _rivals(state, place):
         # Two different logons for one session at one moment: choosing either would be
         # a guess that depends on the order the inputs were read.
         return "conflicting"

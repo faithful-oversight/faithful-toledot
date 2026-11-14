@@ -159,6 +159,43 @@ def test_a_lockout_does_not_change_the_name_other_events_give_the_sid() -> None:
 # --- origin ---------------------------------------------------------------------------------
 
 
+class _Counted(list):  # type: ignore[type-arg]
+    """A session's history that counts how many entries any lookup touches."""
+
+    touched = 0
+
+    def __getitem__(self, item: Any) -> Any:
+        if isinstance(item, slice):
+            type(self).touched += len(range(*item.indices(len(self))))
+        return super().__getitem__(item)
+
+    def __iter__(self) -> Any:
+        for entry in super().__iter__():
+            type(self).touched += 1
+            yield entry
+
+
+def test_linking_changes_to_one_long_session_does_not_rescan_its_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    count = 3000
+    real = correlate._finish_sessions  # noqa: SLF001 - wrapped to count what is touched
+
+    def counted(state: Any) -> None:
+        real(state)
+        state.sessions = {key: _Counted(value) for key, value in state.sessions.items()}
+
+    monkeypatch.setattr(correlate, "_finish_sessions", counted)
+    # Every logon names the same session, as a hostile or very busy log can.
+    logons = [logon(seconds=-count + n) for n in range(count)]
+    items = [*logons, *(member_added(seconds=n) for n in range(count))]
+    result = account(*items)
+    assert len(result.changes) == count
+    assert {change.origin.status for change in result.changes} <= {"session", "conflicting"}
+    # A scan of the whole history for every change would touch about count squared / 2.
+    assert _Counted.touched < 20 * count
+
+
 def test_origin_is_not_guessed_when_the_logon_is_not_in_the_input() -> None:
     (change,) = account(member_added()).changes
     assert change.origin.status == "not-in-input"
