@@ -94,6 +94,8 @@ Pull requests are squash-merged, so the pull request title becomes the commit me
 
 All changes reach `main` through a pull request. A pull request can merge only when every required check passes and every review conversation is resolved. The maintainer reviews each pull request before merging.
 
+A pull request runs its own copy of the workflows and of the scripts in `scripts/`, including the script that decides whether **All checks passed** is green. The maintainer therefore reads every change to `.github/`, `scripts/`, `zizmor.yml`, `pyproject.toml`, and `uv.lock` line by line, and approves the workflow runs of outside contributors before they start.
+
 ## License
 
 By contributing, you agree that your contributions are licensed under the [Apache License, Version 2.0](LICENSE).
