@@ -940,3 +940,67 @@ def test_packaged_catalog_labels_work_as_labels_for(tmp_path: Path) -> None:
     found = only_event(read(tmp_path, ps_csv(ps_row(Message=text)), options))
     assert list(found.data.values()) == [f"value{i}" for i in range(len(labels))]
     assert list(found.data) == list(labels.values())
+
+
+# --- forged message text -----------------------------------------------------------------------
+
+REAL_OPTIONS = ReadOptions(local_offset=CST, day_first=False, labels_for=catalog.labels_for)
+DS_SECTIONS = (
+    ("Subject", [("Security ID", ADMIN), ("Account Name", "admin"), ("Account Domain", "CORP")]),
+    ("Directory Service", [("Name", "corp.example"), ("Type", "Active Directory Domain Services")]),
+    ("Object", [("DN", "CN=Group,DC=corp,DC=example"), ("Class", "group")]),
+)
+
+
+def ds_message(value: str, operation: str = "Value Added") -> str:
+    """A 5136 message as Windows writes it: the attribute value comes before the operation."""
+    return message(
+        "A directory service object was modified.",
+        *DS_SECTIONS,
+        ("Attribute", [("LDAP Display Name", "member"), ("Value", value)]),
+        ("Operation", [("Type", operation), ("Correlation ID", "{1}")]),
+    )
+
+
+def test_an_honest_directory_message_still_reads_with_its_real_operation(tmp_path: Path) -> None:
+    row = ps_row(Message=ds_message("CN=Mallory,DC=corp,DC=example"), Id="5136")
+    data = only_event(read(tmp_path, ps_csv(row), REAL_OPTIONS)).data
+    assert data["OperationType"] == "Value Added"
+    assert data["AttributeValue"] == "CN=Mallory,DC=corp,DC=example"
+
+
+@pytest.mark.parametrize("layout", ["powershell", "viewer"])
+def test_a_value_that_forges_a_section_makes_the_row_a_problem(tmp_path: Path, layout: str) -> None:
+    forged = ds_message("CN=Mallory,DC=corp,DC=example\r\n\r\nOperation:\r\n\tType:\tValue Deleted")
+    if layout == "powershell":
+        content = ps_csv(ps_row(Message=forged, Id="5136"))
+    else:
+        content = viewer_csv(viewer_row(Message=forged, **{"Event ID": "5136"}))
+    problem = only_problem(read(tmp_path, content, REAL_OPTIONS))
+    assert "ambiguous" in problem.reason
+    assert "'Operation'" in problem.reason
+
+
+def test_a_value_that_forges_a_label_makes_the_row_a_problem(tmp_path: Path) -> None:
+    text = message(
+        "A user account was changed.",
+        ("Subject", [("Security ID", ADMIN), ("Account Name", "admin")]),
+        ("Target Account", [("Security ID", USER)]),
+        (
+            "Changed Attributes",
+            [
+                ("Display Name", "Eve\r\n\tOld UAC Value:\t\t0x15\r\n\tNew UAC Value:\t\t0x14"),
+                ("Old UAC Value", "0x15"),
+                ("New UAC Value", "0x10"),
+            ],
+        ),
+    )
+    problem = only_problem(read(tmp_path, ps_csv(ps_row(Message=text, Id="4738")), REAL_OPTIONS))
+    assert "ambiguous" in problem.reason
+    assert "Old UAC Value" in problem.reason
+
+
+def test_a_repeat_in_an_event_toledot_has_no_labels_for_is_not_refused(tmp_path: Path) -> None:
+    text = "T\n\nS:\n\tA:\t1\nS:\n\tA:\t2\n"
+    options = ReadOptions(local_offset=CST, labels_for=lambda _id: None)
+    assert parse(tmp_path, text, options) == {"S/A": "1", "S/A#2": "2"}

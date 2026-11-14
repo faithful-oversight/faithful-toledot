@@ -152,6 +152,8 @@ Windows security messages hold a label and a value on each line, grouped in sect
 
 toledot maps `Section/Label`, such as `Subject/Security ID`, to the event's field name using its catalog. A label with no mapping keeps the `Section/Label` text as its name, so nothing is lost. A message with no field lines at all, for example because the tabs were lost in the export, is a problem for that row.
 
+A genuine Windows message never repeats a label inside a section, or a section header. When a mapped `Section/Label` or a section header appears twice in one message, toledot makes that row a problem ("the message is ambiguous") and uses none of its fields. It does not choose the first or the last copy. A directory attribute such as `info` or `description` can hold line breaks, so a value can imitate the message's own labels and sections. A message-only CSV is therefore weaker evidence than `.evtx`, XML, JSON, or a collection file, which keep each field apart. toledot cannot detect an imitated label that the genuine message does not carry at all. Prefer the other formats when the log may hold values written by someone you do not trust.
+
 Because of this recovery, a change built from a CSV can show some details under a label such as `Subject/Logon ID` where an XML export shows the field name. The facts are the same.
 
 ### CSV limits
@@ -258,7 +260,7 @@ The hash detects a file that was cut short or damaged. It does not prove who wro
 
 ### How toledot reads it
 
-toledot reads the file line by line, so its size is not limited by memory. It reports each of these as a problem, and the account is incomplete:
+toledot reads the file line by line, but it keeps every change it builds in memory until the reports are written, so memory grows with the number of changes (see [Size limits](limitations.md#size-and-memory)). It reports each of these as a problem, and the account is incomplete:
 
 - A file that ends without its trailer. It was cut short, or collection did not finish. Every event before the cut is still read.
 - A trailer whose event count or SHA-256 does not match what toledot read.

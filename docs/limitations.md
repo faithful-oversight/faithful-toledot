@@ -68,10 +68,15 @@ Each rule below is chosen so that toledot never says more than the events do.
 - **Names are shown only when every event agrees.** The report always shows the name the change event recorded. It adds "named X in other events" for a SID only when every event that names the SID gives the same X. If events disagree, it adds nothing.
 - **Well-known relative identifiers are worded with care.** A relative identifier such as 512 means Domain Admins only under a domain SID. The same number under a computer's own SID is another account. toledot writes `well-known: Domain Admins, if this is a domain SID`. toledot knows 40 well-known SIDs and 21 well-known relative identifiers.
 - **Old values exist only where Windows recorded them.** Directory service change events record the value that changed. Most other events record only the new value.
-- **Password events are attempts.** Windows records events 4723 and 4724 as attempts, so the report words them as attempts.
+- **Password events are attempts.** Windows records events 4723, 4724, and 4794 for success and for failure, and the event does not say which, so the report words them as attempts. They are counted as `password-change-attempted` and `password-reset-attempted`, never as completed changes.
+- **A failed SID history attempt is never an add.** Event 4766 means that an attempt to add SID history failed. The report words it as an unsuccessful attempt and counts it as `sid-history-failed`. Only event 4765 is worded and counted as SID history added.
 - **Related changes are a hint.** Changes by one session, on one computer, within two seconds of each other are marked as related. They are probably parts of one administrative action. They may not be.
 - **Times are UTC, as each computer's own clock recorded them.** toledot does not correct clocks that disagree. The order of changes on different computers is only as good as their clocks.
-- **The same record is counted once.** A catalogued event that two inputs both hold counts once. Two copies of one record with different content are a problem, and toledot keeps the first.
+- **The same record is counted once.** A catalogued event that two inputs both hold counts once. Two copies of one record with different content are a problem, and toledot keeps both copies as separate changes so that neither is hidden.
+
+## Size and memory
+
+- **Memory grows with the number of changes.** The readers stream a file one record at a time, but toledot keeps every event it uses and every change it builds until the reports are written, and the JSON report is built whole before it is written. A test with 150,000 synthetic changes used about 1.5 GB at its peak, which is roughly 10 KB per change. A log with a million directory changes (event 5136 can be that numerous) would need about 10 GB. Use `--since` and `--until`, or collect shorter periods, when a log is large. Writing the reports in a streaming way is planned work, not done.
 
 ## Log overwrite and clearing
 
@@ -98,6 +103,7 @@ Event Viewer's "Save All Events As" CSV keeps the least. See [Input formats](for
 - It has no computer name and no log name. toledot treats every such file as coming from one computer, so do not mix files from different computers in one run.
 - Times have no UTC offset, so you must pass `--local-offset`, and `--date-order` for some dates. A fixed offset is wrong across a daylight saving change.
 - The reader needs English header names and message text.
+- It holds only the rendered message, so a value with line breaks can imitate labels. toledot refuses a message in which a mapped label or a section repeats, and reports the row as a problem. It cannot detect an imitated label that the real message does not carry. See [Input formats](formats.md#how-fields-are-recovered-from-the-message).
 
 ## Collectors
 

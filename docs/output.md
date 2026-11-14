@@ -217,7 +217,7 @@ Here are the two rows from the example:
 | DC01.corp.example | Security | gaps | filtered | 48227–48638 | 412 record numbers between the first and the last are absent. The input says it holds chosen events only, so this is expected and does not show whether any chosen event is missing. |
 | DC02.corp.example | Security | complete | filtered | none | Every record number between the first and the last is present. Events before the first or after the last are outside this input. The collection asked for earlier events, but the log's oldest record dates 2026-11-05 08:00:00 UTC. Earlier events had been overwritten and are missing. |
 
-An event that two inputs both hold is counted once. If the two copies of one record disagree, toledot keeps the first and reports a problem.
+An event that two inputs both hold is counted once. If the two copies of one record disagree, toledot keeps both copies and reports a problem.
 
 ## Problems
 
