@@ -70,7 +70,8 @@ def test_the_deps_stage_exports_every_extra_and_checks_the_inventory() -> None:
 
 
 @pytest.mark.skipif(
-    os.name != "posix" or shutil.which("uv") is None, reason="needs uv and a POSIX shell"
+    os.name != "posix" or shutil.which("uv") is None or not (ROOT / "uv.lock").exists(),
+    reason="needs uv, a POSIX shell, and the lock file (the source distribution has none)",
 )
 def test_the_locked_all_extras_export_holds_every_required_package(tmp_path: Path) -> None:
     export = tmp_path / "requirements.txt"

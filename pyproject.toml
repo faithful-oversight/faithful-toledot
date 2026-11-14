@@ -75,7 +75,18 @@ dev = [
 ]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "scripts", "docs", "examples", "LICENSE", "NOTICE", "README.md", "CHANGELOG.md"]
+# "scripts" is included because the bundled tests load the release and CI helpers from it.
+include = [
+  "src",
+  "tests",
+  "scripts",
+  "docs",
+  "examples",
+  "LICENSE",
+  "NOTICE",
+  "README.md",
+  "CHANGELOG.md",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/faithful_toledot"]

@@ -234,8 +234,11 @@ def test_main_reports_errors_and_runs_steps(
 
 
 @pytest.mark.skipif(
-    os.name != "posix" or shutil.which("git") is None or shutil.which("uv") is None,
-    reason="release evidence is built on Linux, with git and uv",
+    os.name != "posix"
+    or shutil.which("git") is None
+    or shutil.which("uv") is None
+    or not (ROOT / "uv.lock").exists(),
+    reason="release evidence needs a Linux checkout with git, uv, and uv.lock",
 )
 def test_release_evidence_is_reproducible(tmp_path: Path) -> None:
     """Two runs of scripts/release_evidence.sh give the same SBOM and SHA256SUMS."""
@@ -267,3 +270,79 @@ def test_release_evidence_is_reproducible(tmp_path: Path) -> None:
     assert {"pypsrp", "pyspnego", "keyring", "hvac", "boto3", "azure-identity"} <= names[
         "all-extras"
     ]
+
+
+def _gh(code: int, out: str = "", err: str = "") -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(args=[], returncode=code, stdout=out, stderr=err)
+
+
+def _script_gh(
+    monkeypatch: pytest.MonkeyPatch, *answers: subprocess.CompletedProcess[str]
+) -> list[list[str]]:
+    """Replace subprocess.run in the script with queued answers and record the commands."""
+    queue = list(answers)
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return queue.pop(0)
+
+    monkeypatch.setattr(pr.subprocess, "run", fake_run)
+    return commands
+
+
+def test_tag_lookup_reports_absent_only_for_a_clean_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands = _script_gh(monkeypatch, _gh(1, err="gh: Not Found (HTTP 404)"))
+    assert pr.GhApi().tag_commit(REPO, TAG) is None
+    assert commands[0][2] == f"repos/{REPO}/git/ref/tags/{TAG}"
+    assert len(commands) == 1
+
+
+def test_tag_lookup_resolves_an_existing_tag_to_its_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    commands = _script_gh(monkeypatch, _gh(0, "b" * 40 + "\n"), _gh(0, SHA + "\n"))
+    assert pr.GhApi().tag_commit(REPO, TAG) == SHA
+    assert commands[1][2] == f"repos/{REPO}/commits/{TAG}"
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        _gh(1, err="gh: Bad credentials (HTTP 401)"),
+        _gh(1, err="gh: API rate limit exceeded (HTTP 403)"),
+        _gh(1, err="gh: Too Many Requests (HTTP 429)"),
+        _gh(1, err="gh: Server Error (HTTP 502)"),
+        _gh(1, err="error connecting to api.github.com"),
+        _gh(0, "not a hash"),
+        _gh(0, ""),
+    ],
+    ids=["auth", "rate-limit", "throttled", "server", "network", "garbage", "empty"],
+)
+def test_tag_lookup_failure_is_not_mistaken_for_an_absent_tag(
+    monkeypatch: pytest.MonkeyPatch, answer: subprocess.CompletedProcess[str]
+) -> None:
+    _script_gh(monkeypatch, answer)
+    with pytest.raises(pr.ReleaseError):
+        pr.GhApi().tag_commit(REPO, TAG)
+
+
+def test_tag_that_exists_but_does_not_resolve_stops(monkeypatch: pytest.MonkeyPatch) -> None:
+    _script_gh(monkeypatch, _gh(0, "b" * 40), _gh(1, err="gh: Not Found (HTTP 404)"))
+    with pytest.raises(pr.ReleaseError, match="did not resolve"):
+        pr.GhApi().tag_commit(REPO, TAG)
+
+
+def test_indeterminate_tag_lookup_never_reaches_a_release_change(assets: list[Path]) -> None:
+    class Unknown(FakeGitHub):
+        def tag_commit(self, repo: str, tag: str) -> str | None:
+            raise pr.ReleaseError("tag lookup failed, so the tag's state is unknown")
+
+    gh = Unknown()
+    gh.create_draft(REPO, TAG, SHA, "notes")
+    with pytest.raises(pr.ReleaseError, match="unknown"):
+        pr.stage(gh, REF, "notes", assets)
+    with pytest.raises(pr.ReleaseError, match="unknown"):
+        pr.publish(gh, REF, assets)
+    assert gh.uploads == []
+    assert gh.release_list[0]["draft"] is True

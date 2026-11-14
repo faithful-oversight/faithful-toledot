@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- The source archive's own tests now run in the build check: it unpacks the archive outside the checkout and runs the whole suite there, instead of only collecting the tests.
+- Editing a pull request title now reruns the title check, so a corrected title clears the required check.
+- The dependency audit writes its export to a private temporary directory, so a planted link or a second run at the same time cannot interfere.
+- The DCO check now fails when it cannot list the commits to check, instead of reporting success.
+- The release script now treats only a clean "not found" answer as an absent tag; an authentication, rate-limit, network, or malformed answer stops the release.
+
 ## [0.1.0] - 2026-11-11
 
 First release.

@@ -67,12 +67,23 @@ stage_workflows() {
 }
 stage_secrets()   { gitleaks git --redact --no-banner --exit-code 1 .; }
 stage_deps() {
+  # A private directory for every run. A fixed path in a shared temporary
+  # directory could be a symlink planted beforehand, and two checks running at
+  # the same time would overwrite each other's input.
+  local work rc=0
+  work="$(mktemp -d)"
   # --all-extras puts remote collection and the secret sources in the audit; without it
   # their pins would never be checked. The inventory check fails if any are absent.
   uv export --color never --locked --all-groups --all-extras --no-emit-project \
-    --format requirements-txt > "${TMPDIR:-/tmp}/requirements-audit.txt"
-  run python scripts/check_audit_inventory.py "${TMPDIR:-/tmp}/requirements-audit.txt"
-  run pip-audit --strict --requirement "${TMPDIR:-/tmp}/requirements-audit.txt" --disable-pip
+    --format requirements-txt > "$work/requirements-audit.txt" || rc=$?
+  if [[ $rc -eq 0 ]]; then
+    run python scripts/check_audit_inventory.py "$work/requirements-audit.txt" || rc=$?
+  fi
+  if [[ $rc -eq 0 ]]; then
+    run pip-audit --strict --requirement "$work/requirements-audit.txt" --disable-pip || rc=$?
+  fi
+  rm -rf "$work"
+  return "$rc"
 }
 stage_licenses() {
   # Optional extras are dependencies too; install them so their licenses can be read.
@@ -86,6 +97,15 @@ stage_build() {
   uv build --build-constraint requirements-build.txt --require-hashes
   run twine check --strict dist/*
   scripts/smoke_test.sh dist
+  # The source distribution must carry everything its own tests need. Unpack it
+  # outside the checkout and run those tests there, against the unpacked source.
+  local unpacked py rc=0
+  unpacked="$(mktemp -d)"
+  tar -xzf dist/*.tar.gz -C "$unpacked"
+  py="$(run python -c 'import sys; print(sys.executable)')"
+  (cd "$unpacked"/*/ && PYTHONPATH="$PWD/src" "$py" -m pytest --no-cov -q -p no:cacheprovider) || rc=$?
+  rm -rf "$unpacked"
+  [[ $rc -eq 0 ]] || { echo "tests failed in the unpacked source distribution" >&2; return 1; }
   scripts/release_evidence.sh dist
   # A rerun of the release workflow rebuilds everything, and can resume a staged
   # draft only if every byte comes out the same. Prove that on every change.
