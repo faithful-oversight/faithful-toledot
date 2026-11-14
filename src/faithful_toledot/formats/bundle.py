@@ -74,12 +74,17 @@ class Trailer(NamedTuple):
     Attributes:
         events: The event count the collector states.
         sha256: The hash it states, 64 lower-case hex digits.
-        gaps: What the collector could not read, as ``(area, reason)`` pairs.
+        gaps: What the collector could not read, as ``(area, reason)`` pairs. At most
+            ``MAX_GAPS`` are kept.
+        unlisted_gaps: How many entries beyond ``MAX_GAPS`` the end line held. The schema
+            allows 1000, so a line with more is not what a toledot collector writes, but
+            its count and hash still decide whether the events arrived whole.
     """
 
     events: int
     sha256: str
     gaps: tuple[tuple[str, str], ...]
+    unlisted_gaps: int = 0
 
 
 def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -296,14 +301,17 @@ def check_end(value: dict[str, Any]) -> Trailer:
     The checks are the schema's: exactly the keys ``end``, ``events``, ``sha256`` and
     ``gaps``; ``end`` is ``true``; ``events`` is a whole number; ``sha256`` is 64 lower-case
     hex digits; ``gaps`` is a list of at most 1000 objects with non-empty ``area`` and
-    ``reason`` text. Whether the count and hash match the events is for the caller.
+    ``reason`` text. Whether the count and hash match the events is for the caller. A list
+    of more than 1000 gaps breaks the schema, but it is not refused here: the first 1000
+    are kept and the rest are counted in ``unlisted_gaps``, so the event count and the hash
+    are still checked and the gaps are not lost.
 
     Raises:
         BadLineError: The line breaks one of those rules.
     """
     _keys(value, _TRAILER_KEYS, _TRAILER_KEYS)
     gaps = value["gaps"]
-    if value["end"] is not True or not isinstance(gaps, list) or len(gaps) > MAX_GAPS:
+    if value["end"] is not True or not isinstance(gaps, list):
         msg = "the end line is not what the schema says"
         raise BadLineError(msg)
     stated = _integer(value["events"], "events", high=2**63 - 1)
@@ -312,7 +320,7 @@ def check_end(value: dict[str, Any]) -> Trailer:
         msg = "sha256 is not 64 lower-case hex digits"
         raise BadLineError(msg)
     pairs = []
-    for gap in gaps:
+    for gap in gaps[:MAX_GAPS]:
         if not isinstance(gap, dict):
             msg = "an entry in gaps is not an object"
             raise BadLineError(msg)
@@ -323,7 +331,7 @@ def check_end(value: dict[str, Any]) -> Trailer:
                 _string(gap["reason"], "gaps.reason", limit=4096),
             )
         )
-    return Trailer(stated, digest, tuple(pairs))
+    return Trailer(stated, digest, tuple(pairs), max(len(gaps) - MAX_GAPS, 0))
 
 
 def is_bundle(start: bytes) -> bool:
@@ -427,6 +435,12 @@ def _trailer(value: dict[str, Any], source: Source, count: int, digest: str) -> 
         yield Problem(source, "The file's contents do not match the hash in its end line.")
     for area, reason in trailer.gaps:
         yield Problem(source, f"The collector could not read {area}: {reason}")
+    if trailer.unlisted_gaps:
+        text = (
+            f"The end line lists {trailer.unlisted_gaps} more gaps than the {MAX_GAPS} a "
+            "collector may write. They are not listed here. Events may be missing."
+        )
+        yield Problem(source, text)
 
 
 def format_time(moment: datetime) -> str:

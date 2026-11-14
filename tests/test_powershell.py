@@ -100,6 +100,12 @@ def test_the_output_file_is_never_overwritten_without_force() -> None:
     assert "[System.IO.File]::Move($Writer.TempPath, $Path)" in TEXT
 
 
+def test_gaps_are_added_only_through_the_capped_helper() -> None:
+    assert code().count("$Gaps.Add(") == 1  # inside Add-Gap, which stops at $MaxGaps
+    assert "$MaxGaps = 1000" in TEXT
+    assert "Get-GapText $gaps" in TEXT
+
+
 def test_event_xml_is_parsed_with_dtds_refused() -> None:
     assert "[System.Xml.DtdProcessing]::Prohibit" in TEXT
     assert "XmlResolver = $null" in TEXT
@@ -317,6 +323,35 @@ def test_a_whole_collection_reads_back_cleanly(tmp_path: Path, *, pipeline: bool
     header = json.loads(raw.splitlines()[0])
     assert header["collector"]["method"] == ("psrp" if pipeline else "powershell")
     assert header["query"]["since"] == "2026-11-01T00:00:00.0000000Z"
+
+
+MANY_GAPS = (
+    STUB
+    + """
+function Read-Channel($Writer, [string] $Name, [datetime] $From, [Nullable[datetime]] $To, $Gaps) {
+    foreach ($i in 1..2500) { Add-Gap $Gaps "record $i of the $Name log" ('x' * 5000) }
+    Add-Gap $Gaps '' ''
+}
+"""
+)
+
+
+@needs_pwsh
+def test_more_than_a_thousand_gaps_still_make_a_valid_end_line(tmp_path: Path) -> None:
+    out = tmp_path / "events.jsonl"
+    result = collect_over(tmp_path, out, stub=MANY_GAPS, force=False)
+    assert result.returncode == 0, result.stderr
+    items = list(read_bundle(out, ReadOptions()))
+    reasons = [item.reason for item in items if isinstance(item, Problem)]
+    assert len(reasons) == 1000
+    assert (
+        reasons[-1]
+        == "The collector could not read further gaps: 1502 further gaps are not listed here"
+    )
+    assert not any("end line is not valid" in reason or "hash" in reason for reason in reasons)
+    trailer = json.loads(out.read_bytes().splitlines()[-1])
+    assert len(trailer["gaps"]) == 1000
+    assert all(len(gap["reason"]) <= 4096 for gap in trailer["gaps"])
 
 
 FAILING = (

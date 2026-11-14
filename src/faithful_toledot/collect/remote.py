@@ -234,6 +234,8 @@ class _Sink:
             )
             raise CollectionError(msg)
         gaps = tuple(f"{area}: {reason}" for area, reason in trailer.gaps)
+        if trailer.unlisted_gaps:
+            gaps += (f"{trailer.unlisted_gaps} further gaps are not listed",)
         return self.events, gaps
 
     def publish(self, *, force: bool) -> None:

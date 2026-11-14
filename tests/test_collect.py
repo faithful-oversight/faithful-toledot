@@ -261,6 +261,18 @@ def test_gaps_the_collector_recorded_are_returned(tmp_path: Path, fake: Remote) 
     assert run(tmp_path / "e.jsonl").gaps == ("the System log: Access is denied.",)
 
 
+def test_more_gaps_than_the_schema_allows_do_not_discard_the_collection(
+    tmp_path: Path, fake: Remote
+) -> None:
+    gaps = [{"area": f"record {n} of the Security log", "reason": "bad"} for n in range(1500)]
+    fake.batches = [encode(header(), [member_added()], gaps).decode().splitlines()]
+    result = run(tmp_path / "e.jsonl")
+    assert result.events == 1
+    assert len(result.gaps) == 1001
+    assert result.gaps[-1] == "500 further gaps are not listed"
+    assert (tmp_path / "e.jsonl").is_file()
+
+
 def damaged(lines: list[str]) -> list[Sequence[object]]:
     return [list(lines)]
 

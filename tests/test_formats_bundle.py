@@ -122,6 +122,42 @@ def test_gaps_the_collector_recorded_become_problems(tmp_path: Path) -> None:
     ]
 
 
+def _with_gaps(count: int, *, tamper: bool = False) -> bytes:
+    """A collection whose end line lists ``count`` gaps, optionally with an event removed."""
+    gaps = [{"area": f"record {n} of the Security log", "reason": "bad"} for n in range(count)]
+    lines = lines_of(encode(header(), EVENTS, gaps))
+    if tamper:
+        del lines[1]
+    return b"".join(lines)
+
+
+@pytest.mark.parametrize("count", [999, 1000, 1001, 5000])
+def test_every_gap_is_a_problem_however_many_the_end_line_lists(tmp_path: Path, count: int) -> None:
+    items = read(write(tmp_path, _with_gaps(count)))
+    reasons = [item.reason for item in items if isinstance(item, Problem)]
+    listed = [r for r in reasons if r.startswith("The collector could not read record")]
+    assert len(listed) == min(count, bundle.MAX_GAPS)
+    over = [r for r in reasons if "more gaps than the" in r]
+    assert len(over) == (1 if count > bundle.MAX_GAPS else 0)
+    if over:
+        assert f"{count - bundle.MAX_GAPS} more gaps" in over[0]
+    assert len(reasons) == len(listed) + len(over)  # the count and the hash both matched
+    assert len([item for item in items if isinstance(item, Event)]) == 2
+
+
+def test_a_tampered_file_with_too_many_gaps_still_fails_the_count_and_the_hash(
+    tmp_path: Path,
+) -> None:
+    reasons = [
+        item.reason
+        for item in read(write(tmp_path, _with_gaps(1001, tamper=True)))
+        if isinstance(item, Problem)
+    ]
+    assert any("counts 2 events but 1 were read" in reason for reason in reasons)
+    assert any("do not match the hash" in reason for reason in reasons)
+    assert any("more gaps than the" in reason for reason in reasons)
+
+
 def test_a_file_cut_short_is_read_and_reported(tmp_path: Path) -> None:
     data = b"".join(lines_of(encode(header(), EVENTS))[:-1])
     *rest, last = read(write(tmp_path, data))
@@ -242,15 +278,6 @@ def test_a_bad_event_keeps_its_record_number_when_readable(tmp_path: Path) -> No
                 "gaps": [{"area": "x", "reason": "y", "extra": "z"}],
             },
             "unknown property 'extra'",
-        ),
-        (
-            {
-                "end": True,
-                "events": 2,
-                "sha256": "0" * 64,
-                "gaps": [{"area": "x", "reason": "y"}] * 1001,
-            },
-            "not what the schema says",
         ),
         ({"end": True, "events": 2, "sha256": "ABC", "gaps": []}, "sha256 is not 64 lower-case"),
         ({"end": True, "events": 2, "sha256": 7, "gaps": []}, "sha256 is not 64 lower-case"),

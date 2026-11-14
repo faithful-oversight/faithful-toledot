@@ -108,6 +108,8 @@ A log the script cannot read becomes a gap in the end line, not a failure. The s
 
 `toledot report` shows every gap as a problem, so the account is incomplete.
 
+The end line lists at most 1000 gaps, and each area is at most 255 characters and each reason at most 4096. When more records fail, as when every record of a large log cannot be decoded, the script lists the first 999 and ends the list with one gap that says how many further gaps are not listed. A file that lists more than 1000 gaps is still read: toledot keeps the first 1000, reports one more problem that says how many were not listed, and still compares the event count and the hash. A collection that arrives over `toledot collect` with too many gaps is published, not discarded. This script change has not been run on a real Windows host; its tests run only where PowerShell is installed.
+
 ## Remote collection
 
 `toledot collect` runs the same script on a controller over PowerShell remoting, which uses WinRM. toledot sends the script text to the controller, runs it with `-ToPipeline`, and streams the lines back. Nothing is installed on the controller.

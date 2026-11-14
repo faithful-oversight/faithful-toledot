@@ -254,7 +254,7 @@ The last line says the file is whole:
 | `sha256` | The SHA-256 of every byte before the trailer line. That is the header line and every event line, each with its `\n`. |
 | `gaps` | What the collector could not read, and why. Each gap has an `area` and a `reason`. |
 
-A gap is a sentence the collector wrote, such as the area `the Security log` and a reason from Windows. The collector records a log it cannot read as a gap and carries on. It does not fail.
+A gap is a sentence the collector wrote, such as the area `the Security log` and a reason from Windows. The collector records a log it cannot read as a gap and carries on. It does not fail. The list holds at most 1000 gaps. If more fail, the collector ends the list with one gap that counts the rest, and a reader that meets a longer list keeps the first 1000, reports the rest as one problem, and still checks the count and the hash.
 
 The hash detects a file that was cut short or damaged. It does not prove who wrote the file. Anyone who edits a file can recompute the hash. See the [threat model](threat-model.md).
 

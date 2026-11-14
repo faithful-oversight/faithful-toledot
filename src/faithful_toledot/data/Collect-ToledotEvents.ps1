@@ -91,6 +91,10 @@ $WantedIds = @{
 # Event log queries fail when an XPath filter has too many terms, so IDs are asked
 # for in ranges, a few at a time, and checked again here.
 $MaxTermsPerQuery = 20
+# The end line may list at most 1000 gaps. Further gaps are counted and summarised in the
+# last entry, so a failure on every record can never make the end line invalid.
+$MaxGaps = 1000
+$script:GapsOmitted = 0
 $Invariant = [System.Globalization.CultureInfo]::InvariantCulture
 
 # --- Text and JSON ------------------------------------------------------------------
@@ -273,6 +277,39 @@ function Get-QueryText([string[]] $Terms, [datetime] $From, [Nullable[datetime]]
     "*[System[($($Terms -join ' or ')) and $time]]"
 }
 
+function Limit-Text([string] $Text, [int] $Max, [string] $Empty) {
+    if ($Text.Length -eq 0) { return $Empty }
+    if ($Text.Length -le $Max) { return $Text }
+    $cut = $Text.Substring(0, $Max - 3)
+    # Never end on half of a surrogate pair: the file would hold a lone surrogate.
+    if ([char]::IsHighSurrogate($cut[$cut.Length - 1])) { $cut = $cut.Substring(0, $cut.Length - 1) }
+    $cut + '...'
+}
+
+function Add-Gap($Gaps, [string] $Area, [string] $Reason) {
+    if ($Gaps.Count -ge $MaxGaps) {
+        $script:GapsOmitted++
+        return
+    }
+    $Gaps.Add([ordered] @{
+            area = (Limit-Text $Area 255 'an area the collector did not name')
+            reason = (Limit-Text $Reason 4096 'no reason was given')
+        })
+}
+
+function Get-GapText($Gaps) {
+    $listed = @($Gaps)
+    $omitted = $script:GapsOmitted
+    if ($listed.Count + $omitted -gt $MaxGaps) {
+        $omitted += $listed.Count - ($MaxGaps - 1)
+        $listed = @($listed[0..($MaxGaps - 2)])
+        $listed += [ordered] @{ area = 'further gaps'; reason = "$omitted further gaps are not listed here" }
+    }
+    @($listed | ForEach-Object {
+            '{"area":' + (ConvertTo-JsonText $_.area) + ',"reason":' + (ConvertTo-JsonText $_.reason) + '}'
+        }) -join ','
+}
+
 function Get-LogFacts([string] $Name, $Gaps) {
     $facts = [ordered] @{
         channel = $Name; oldest_record_id = $null; oldest_time = $null; newest_record_id = $null
@@ -306,7 +343,7 @@ function Get-LogFacts([string] $Name, $Gaps) {
             } finally { $reader.Dispose() }
         }
     } catch {
-        $Gaps.Add([ordered] @{ area = "the $Name log's size and oldest record"; reason = $_.Exception.Message })
+        Add-Gap $Gaps "the $Name log's size and oldest record" $_.Exception.Message
     }
     $facts
 }
@@ -390,6 +427,7 @@ function Invoke-Collection {
     $to = $Until
     if ($null -ne $to -and $to -le $from) { throw '-Until must be later than -Since.' }
     $gaps = New-Object System.Collections.Generic.List[object]
+    $script:GapsOmitted = 0
     if (-not $ToPipeline) {
         # .NET resolves a relative path against the process directory, which is not
         # PowerShell's current location; resolve it the way the user sees it.
@@ -422,9 +460,7 @@ function Invoke-Collection {
         foreach ($name in $Channel) {
             Read-Channel $writer $name $from $to $gaps
         }
-        $gapText = @($gaps | ForEach-Object {
-                '{"area":' + (ConvertTo-JsonText $_.area) + ',"reason":' + (ConvertTo-JsonText $_.reason) + '}'
-            }) -join ','
+        $gapText = Get-GapText $gaps
         $hash = Get-HashText $writer
         Write-Line $writer ('{"end":true,"events":' + $writer.Count + ',"sha256":"' + $hash + '","gaps":[' + $gapText + ']}') -Last
         Close-LineWriter $writer
@@ -457,13 +493,13 @@ function Read-Channel($Writer, [string] $Name, [datetime] $From, [Nullable[datet
                 $Name, [System.Diagnostics.Eventing.Reader.PathType]::LogName, (Get-QueryText $terms $From $To))
             $reader = New-Object System.Diagnostics.Eventing.Reader.EventLogReader -ArgumentList $query
         } catch {
-            $Gaps.Add([ordered] @{ area = "the $Name log"; reason = $_.Exception.Message })
+            Add-Gap $Gaps "the $Name log" $_.Exception.Message
             return
         }
         try {
             while ($true) {
                 try { $record = $reader.ReadEvent() } catch {
-                    $Gaps.Add([ordered] @{ area = "the $Name log"; reason = "reading stopped: $($_.Exception.Message)" })
+                    Add-Gap $Gaps "the $Name log" "reading stopped: $($_.Exception.Message)"
                     break
                 }
                 if ($null -eq $record) { break }
@@ -475,7 +511,7 @@ function Read-Channel($Writer, [string] $Name, [datetime] $From, [Nullable[datet
                     Write-Line $Writer $line
                     $Writer.Count++
                 } catch {
-                    $Gaps.Add([ordered] @{ area = "record $($record.RecordId) of the $Name log"; reason = $_.Exception.Message })
+                    Add-Gap $Gaps "record $($record.RecordId) of the $Name log" $_.Exception.Message
                 } finally {
                     $record.Dispose()
                 }
