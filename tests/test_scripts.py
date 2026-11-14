@@ -18,6 +18,9 @@ ROOT = Path(__file__).resolve().parent.parent
 CHECK = ROOT / "scripts" / "check.sh"
 DCO = ROOT / "scripts" / "check_dco.sh"
 CI = ROOT / ".github" / "workflows" / "ci.yml"
+RELEASE = ROOT / ".github" / "workflows" / "release.yml"
+VISIBILITY = ROOT / "scripts" / "check_visibility.sh"
+VERIFY = ROOT / "scripts" / "verify_artifacts.sh"
 
 needs_bash = pytest.mark.skipif(
     os.name != "posix" or shutil.which("bash") is None or shutil.which("git") is None,
@@ -249,3 +252,188 @@ def test_pull_request_checks_rerun_when_the_title_is_edited() -> None:
     assert match is not None, "pull_request must list its activity types"
     types = {t.strip() for t in match.group(1).split(",")}
     assert {"opened", "synchronize", "reopened", "edited"} <= types
+
+
+def _run_script(
+    script: Path, *args: str, home: Path, **extra: str
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # noqa: S603 - fixed script path, no shell
+        ["bash", str(script), *args],  # noqa: S607 - bash is looked up on PATH on purpose
+        env=_env(home, **extra),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _fake_gh(tmp_path: Path, answer: str, exit_code: int = 0) -> str:
+    """Return a PATH whose gh prints ``answer`` and exits with ``exit_code``."""
+    bin_dir = tmp_path / "gh-bin"
+    bin_dir.mkdir(exist_ok=True)
+    gh = bin_dir / "gh"
+    gh.write_text(f"#!/usr/bin/env bash\necho '{answer}'\nexit {exit_code}\n", encoding="utf-8")
+    gh.chmod(0o755)
+    return f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
+
+
+def _visibility(
+    tmp_path: Path, private: str, public_variable: str | None, gh_exit: int = 0
+) -> tuple[subprocess.CompletedProcess[str], str]:
+    out = tmp_path / "github-output"
+    out.write_text("", encoding="utf-8")
+    extra = {"PATH": _fake_gh(tmp_path, private, gh_exit), "GITHUB_OUTPUT": str(out)}
+    if public_variable is not None:
+        extra["FO_PUBLIC"] = public_variable
+    result = _run_script(VISIBILITY, "faithful-oversight/example", home=tmp_path, **extra)
+    return result, out.read_text(encoding="utf-8")
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    ("private", "variable", "expected"),
+    [
+        ("false", "true", "public=true"),
+        ("true", "false", "public=false"),
+        ("true", None, "public=false"),
+    ],
+)
+def test_visibility_accepts_a_variable_that_matches_the_repository(
+    tmp_path: Path, private: str, variable: str | None, expected: str
+) -> None:
+    result, output = _visibility(tmp_path, private, variable)
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert output.strip() == expected
+
+
+@needs_bash
+@pytest.mark.parametrize("variable", [None, "", "false", "True", "yes"])
+def test_a_public_repository_with_the_variable_off_cannot_release(
+    tmp_path: Path, variable: str | None
+) -> None:
+    """Releasing then would skip provenance and PyPI and still finish green (CI-06)."""
+    result, output = _visibility(tmp_path, "false", variable)
+    assert result.returncode == 1
+    assert "is public but the FO_PUBLIC variable is" in result.stdout
+    assert "public=" not in output
+
+
+@needs_bash
+def test_a_private_repository_with_the_variable_on_cannot_release(tmp_path: Path) -> None:
+    result, output = _visibility(tmp_path, "true", "true")
+    assert result.returncode == 1
+    assert "is private but the FO_PUBLIC variable is 'true'" in result.stdout
+    assert "public=" not in output
+
+
+@needs_bash
+def test_visibility_fails_when_the_repository_cannot_be_read(tmp_path: Path) -> None:
+    result, output = _visibility(tmp_path, "", "true", gh_exit=1)
+    assert result.returncode == 1
+    assert "cannot read the visibility" in result.stderr
+    assert "public=" not in output
+
+
+@needs_bash
+@pytest.mark.parametrize("answer", ["", "null", "maybe"])
+def test_visibility_fails_on_an_answer_it_does_not_understand(tmp_path: Path, answer: str) -> None:
+    result, output = _visibility(tmp_path, answer, "true")
+    assert result.returncode == 1
+    assert "unexpected visibility answer" in result.stderr
+    assert "public=" not in output
+
+
+def _release_jobs() -> dict[str, str]:
+    """Split release.yml into its jobs, keyed by job id."""
+    text = RELEASE.read_text(encoding="utf-8").split("\njobs:\n", 1)[1]
+    parts = re.split(r"^  ([a-z][a-z-]*):\n", text, flags=re.MULTILINE)
+    return dict(zip(parts[1::2], parts[2::2], strict=True))
+
+
+def test_the_release_decides_public_status_from_the_repository_not_the_variable() -> None:
+    if not RELEASE.exists():
+        pytest.skip("workflows are not part of the source distribution")
+    jobs = _release_jobs()
+    uses_variable = [job for job, body in jobs.items() if "vars.FO_PUBLIC" in body]
+    assert uses_variable == ["preflight"], "only the visibility check may read the variable"
+    assert "scripts/check_visibility.sh" in jobs["preflight"]
+    for job in ("github-draft", "pypi", "github-publish"):
+        assert "needs.preflight.outputs.public" in jobs[job]
+    assert "needs.pypi.result == 'skipped' && needs.preflight.outputs.public != 'true'" in re.sub(
+        r"\s+", " ", jobs["github-publish"]
+    )
+
+
+def test_every_release_job_verifies_the_downloaded_artifact_before_using_it() -> None:
+    if not RELEASE.exists():
+        pytest.skip("workflows are not part of the source distribution")
+    consumers = ("attest-build-provenance", "publish_release.py", "gh-action-pypi-publish", "cp ")
+    checked = 0
+    for job, body in _release_jobs().items():
+        if "actions/download-artifact" not in body:
+            continue
+        download = body.index("actions/download-artifact")
+        verify = body.find("scripts/verify_artifacts.sh release/dist", download)
+        assert verify != -1, f"{job} downloads the artifact without verifying it"
+        for marker in consumers:
+            use = body.find(marker, download)
+            assert use == -1 or verify < use, f"{job} uses the artifact ({marker}) before verifying"
+        checked += 1
+    assert checked == 3  # github-draft, pypi, github-publish
+
+
+def _dist(tmp_path: Path) -> Path:
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "pkg-1.0-py3-none-any.whl").write_bytes(b"wheel")
+    (dist / "pkg-1.0.tar.gz").write_bytes(b"sdist")
+    (dist / "sbom-base.cdx.json").write_bytes(b"{}")
+    sums = subprocess.run(  # noqa: S603 - fixed command in a temporary directory
+        ["sha256sum", "--", *sorted(p.name for p in dist.iterdir())],  # noqa: S607
+        cwd=dist,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    (dist / "SHA256SUMS").write_text(sums, encoding="utf-8")
+    return dist
+
+
+def _verify(tmp_path: Path, dist: Path) -> subprocess.CompletedProcess[str]:
+    return _run_script(VERIFY, str(dist), home=tmp_path)
+
+
+@needs_bash
+@pytest.mark.skipif(shutil.which("sha256sum") is None, reason="needs sha256sum")
+class TestVerifyArtifacts:
+    """The release jobs act only on the bytes the build wrote."""
+
+    def test_accepts_an_intact_directory(self, tmp_path: Path) -> None:
+        result = _verify(tmp_path, _dist(tmp_path))
+        assert result.returncode == 0, result.stderr
+        assert "verified 3 files" in result.stdout
+
+    def test_rejects_a_changed_file(self, tmp_path: Path) -> None:
+        dist = _dist(tmp_path)
+        (dist / "pkg-1.0-py3-none-any.whl").write_bytes(b"tampered")
+        result = _verify(tmp_path, dist)
+        assert result.returncode == 1
+        assert "do not match SHA256SUMS" in result.stderr
+
+    def test_rejects_a_missing_file(self, tmp_path: Path) -> None:
+        dist = _dist(tmp_path)
+        (dist / "pkg-1.0.tar.gz").unlink()
+        assert _verify(tmp_path, dist).returncode == 1
+
+    def test_rejects_a_file_the_list_does_not_name(self, tmp_path: Path) -> None:
+        dist = _dist(tmp_path)
+        (dist / "extra-1.0-py3-none-any.whl").write_bytes(b"not built here")
+        result = _verify(tmp_path, dist)
+        assert result.returncode == 1
+        assert "differ from the files SHA256SUMS lists" in result.stderr
+
+    def test_rejects_a_directory_without_checksums(self, tmp_path: Path) -> None:
+        dist = _dist(tmp_path)
+        (dist / "SHA256SUMS").unlink()
+        result = _verify(tmp_path, dist)
+        assert result.returncode == 1
+        assert "SHA256SUMS is missing" in result.stderr
