@@ -656,3 +656,83 @@ def test_workflow_findings_keep_their_exit_code_and_output(tmp_path: Path) -> No
     assert result.returncode == 14
     assert "credential persistence" in result.stdout
     assert "could not finish" not in result.stderr
+
+
+def _stage_config(
+    tmp_path: Path, *, with_pwsh: int | None, require: bool
+) -> subprocess.CompletedProcess[str]:
+    """Run the config stage with a fake uv, and a fake pwsh exiting ``with_pwsh`` if not None.
+
+    PATH holds only the tools the stage needs, so a pwsh on the machine running the tests
+    cannot change the result.
+    """
+    bin_dir = tmp_path / "bin-pwsh"
+    bin_dir.mkdir()
+    for tool in ("bash", "git", "xargs", "dirname"):
+        found = shutil.which(tool)
+        assert found is not None
+        (bin_dir / tool).symlink_to(found)
+    uv = bin_dir / "uv"
+    uv.write_text(FAKE_UV, encoding="utf-8")
+    uv.chmod(0o755)
+    if with_pwsh is not None:
+        pwsh = bin_dir / "pwsh"
+        pwsh.write_text(f"#!/usr/bin/env bash\nexit {with_pwsh}\n", encoding="utf-8")
+        pwsh.chmod(0o755)
+    name = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["name"]
+    variable = f"{name.removeprefix('faithful-').upper()}_REQUIRE_PWSH"
+    env = {k: v for k, v in _env(tmp_path).items() if not k.endswith("_REQUIRE_PWSH")}
+    env |= {"PATH": str(bin_dir), "UV_LOG": str(tmp_path / "uv.log")}
+    if require:
+        env[variable] = "1"
+    bash = shutil.which("bash")
+    assert bash is not None
+    return subprocess.run(  # noqa: S603 - fixed script path, no shell
+        [bash, str(CHECK), "config"],
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+has_powershell_check = "check_powershell" in CHECK.read_text(encoding="utf-8")
+needs_powershell_check = pytest.mark.skipif(
+    not has_powershell_check or os.name != "posix" or shutil.which("git") is None,
+    reason="this product has no PowerShell syntax check",
+)
+
+
+@needs_powershell_check
+def test_a_required_powershell_check_fails_when_pwsh_is_missing(tmp_path: Path) -> None:
+    """CI sets the REQUIRE variable, so a runner without pwsh must fail, not skip."""
+    result = _stage_config(tmp_path, with_pwsh=None, require=True)
+    assert result.returncode == 1
+    assert "_REQUIRE_PWSH is set but pwsh is not installed" in result.stderr
+
+
+@needs_powershell_check
+def test_the_powershell_check_skips_with_a_note_when_pwsh_is_missing_and_not_required(
+    tmp_path: Path,
+) -> None:
+    result = _stage_config(tmp_path, with_pwsh=None, require=False)
+    assert result.returncode == 0
+    assert "pwsh not found; skipping the PowerShell syntax check" in result.stderr
+
+
+@needs_powershell_check
+@pytest.mark.parametrize(("exit_code", "expected"), [(0, 0), (1, 1)])
+def test_the_powershell_check_reports_what_the_parser_says(
+    tmp_path: Path, exit_code: int, expected: int
+) -> None:
+    assert _stage_config(tmp_path, with_pwsh=exit_code, require=True).returncode == expected
+
+
+@needs_powershell_check
+def test_the_docs_job_requires_powershell_for_the_config_stage() -> None:
+    if not CI.exists():
+        pytest.skip("workflows are not part of the source distribution")
+    text = CI.read_text(encoding="utf-8")
+    assert re.search(
+        r"scripts/check\.sh docs site config reuse\n\s+env:\n\s+[A-Z]+_REQUIRE_PWSH: \"1\"", text
+    ), "the job that runs the config stage must set the REQUIRE variable"
