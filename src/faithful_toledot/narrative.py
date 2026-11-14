@@ -26,7 +26,7 @@ _NOUNS = {
     "trust": "trust",
     "rights": "account",
 }
-_VERBS = {
+VERBS = {
     "created": "created the {noun} {target}",
     "deleted": "deleted the {noun} {target}",
     "enabled": "enabled the {noun} {target}",
@@ -128,7 +128,7 @@ def origin(where: Origin) -> str:
 
 def sentence(change: Change) -> str:
     """Describe one change in a sentence: who did what to what."""
-    template = _VERBS.get(change.action, "made a change ({title}) to {target}")
+    template = VERBS.get(change.action, "made a change ({title}) to {target}")
     noun = _NOUNS.get(change.category, "object")
     if change.category == "directory" and change.target.object_class:
         noun = f"{change.target.object_class} object"

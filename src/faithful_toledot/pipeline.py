@@ -49,6 +49,11 @@ def display_name(path: Path) -> str:
     return os.fsencode(path.name).decode("utf-8", "backslashreplace")
 
 
+def display_path(path: Path) -> str:
+    r"""Return a path as the user gave it, as valid text (bytes that are not UTF-8 as ``\xff``)."""
+    return os.fsencode(str(path)).decode("utf-8", "backslashreplace")
+
+
 class _TextNamed:
     """A path whose ``name`` is always valid text; everything else is the real path's.
 
@@ -60,6 +65,9 @@ class _TextNamed:
     def __init__(self, path: Path) -> None:
         self._path = path
         self.name = display_name(path)
+
+    def __str__(self) -> str:
+        return str(self._path)
 
     def __getattr__(self, attribute: str) -> Any:
         return getattr(self._path, attribute)
@@ -79,7 +87,7 @@ def fingerprint(path: Path) -> tuple[int, str]:
                 digest.update(block)
                 size += len(block)
     except OSError as exc:
-        msg = f"cannot read {display_name(path)}: {exc.strerror or exc}"
+        msg = f"cannot read {display_path(path)}: {exc.strerror or exc}"
         raise InputError(msg) from None
     return size, digest.hexdigest()
 

@@ -15,7 +15,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from faithful_toledot import catalog
+from faithful_toledot import catalog, narrative
 from faithful_toledot.catalog import Catalog, CatalogError
 from faithful_toledot.events import ReadOptions
 
@@ -87,8 +87,6 @@ _CONTEXT_ONLY = {4648}
 
 
 def test_every_failed_or_attempted_event_is_worded_as_an_attempt(cat: Catalog) -> None:
-    from faithful_toledot import narrative
-
     seen = set()
     for entry in cat.events:
         title = entry.title.lower()
@@ -98,7 +96,7 @@ def test_every_failed_or_attempted_event_is_worded_as_an_attempt(cat: Catalog) -
         if entry.id in _CONTEXT_ONLY:
             assert entry.category == "logon", entry.id
             continue
-        template = narrative._VERBS[entry.action]
+        template = narrative.VERBS[entry.action]
         assert "attempted" in template, (entry.id, entry.action, template)
         assert "attempted" in entry.action or entry.action.endswith("-failed"), entry.id
         if "failed" in title:

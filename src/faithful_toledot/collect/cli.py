@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from faithful_toledot.arguments import bounded, moment
 from faithful_toledot.collect import names, remote, script, secrets
+from faithful_toledot.console import say
 from faithful_toledot.errors import UsageError
 from faithful_toledot.outputs.files import write_files
 from faithful_toledot.outputs.safety import command_line, terminal
@@ -107,11 +108,11 @@ def run_collect(args: argparse.Namespace) -> int:
     channels = args.channel or ["Security", "System"]
     values = remote.parameters(args.since, args.until, args.days, channels, every_event=args.all)
     result = remote.collect(target, script.text(), values, args.output, force=args.force)
-    print(terminal(f"Collected {result.events} events from {server} into {result.path}."))  # noqa: T201
+    say(terminal(f"Collected {result.events} events from {server} into {result.path}."))
     for gap in result.gaps:
-        print(terminal(f"  not read: {gap}"))  # noqa: T201
+        say(terminal(f"  not read: {gap}"))
     command = command_line("toledot", "report", str(result.path), "-o", "report")
-    print(terminal(f"Write the account with: {command}"))  # noqa: T201
+    say(terminal(f"Write the account with: {command}"))
     return 0
 
 
@@ -120,6 +121,6 @@ def run_collector(args: argparse.Namespace) -> int:
     path: Path = args.output
     written = write_files(path.parent, {path.name: script.text()}, force=args.force)
     command = f".\\{script.NAME} -OutFile dc01-events.jsonl -Days 30"
-    print(terminal(f"Wrote {written[0]}. On the domain controller, in an elevated PowerShell:"))  # noqa: T201
-    print(terminal(f"  {command}"))  # noqa: T201
+    say(terminal(f"Wrote {written[0]}. On the domain controller, in an elevated PowerShell:"))
+    say(terminal(f"  {command}"))
     return 0

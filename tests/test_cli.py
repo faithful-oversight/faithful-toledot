@@ -9,6 +9,7 @@ import json
 import os
 import runpy
 import shutil
+import subprocess
 import sys
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -349,3 +350,101 @@ def test_names_that_print_the_same_are_refused(
         main(["report", str(hidden), str(literal), "-o", str(sample / "r")]) == ExitCode.INPUT_ERROR
     )
     assert "rename one" in capsys.readouterr().err
+
+
+# --- printing never changes the exit code ------------------------------------------------------
+
+
+class _ClosedPipe:
+    """A stdout whose reader has gone away."""
+
+    def write(self, text: str) -> int:
+        raise BrokenPipeError(32, "Broken pipe")
+
+    def flush(self) -> None:
+        raise BrokenPipeError(32, "Broken pipe")
+
+
+FIVE_FILES = [
+    "toledot-changes.csv",
+    "toledot-manifest.json",
+    "toledot-report.html",
+    "toledot-report.json",
+    "toledot-report.md",
+]
+
+
+def _run_with_stdout(stream: object, monkeypatch: pytest.MonkeyPatch, argv: list[str]) -> int:
+    monkeypatch.setattr(sys, "stdout", stream)
+    return main(argv)
+
+
+def test_a_closed_pipe_keeps_the_real_exit_code_and_complete_files(
+    sample: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "reports"
+    argv = ["report", *files_of(sample), "-o", str(out)]
+    # The example is an incomplete account: exit 1, not 4.
+    assert _run_with_stdout(_ClosedPipe(), monkeypatch, argv) == ExitCode.FINDINGS
+    assert sorted(p.name for p in out.iterdir()) == FIVE_FILES
+    json.loads((out / "toledot-report.json").read_text(encoding="utf-8"))
+    again = tmp_path / "never"
+    assert (
+        _run_with_stdout(_ClosedPipe(), monkeypatch, [*argv[:-1], str(again), "--fail-on", "never"])
+        == ExitCode.OK
+    )
+
+
+@pytest.mark.parametrize("command", [["events"], ["schema", "report"], ["--help"], ["--version"]])
+def test_a_closed_pipe_is_never_an_internal_error(
+    command: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert _run_with_stdout(_ClosedPipe(), monkeypatch, command) == ExitCode.OK
+
+
+def test_example_and_collector_survive_a_closed_pipe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert _run_with_stdout(_ClosedPipe(), monkeypatch, ["example", str(tmp_path / "e")]) == 0
+    assert len(list((tmp_path / "e").iterdir())) == 2
+    argv = ["collector", "-o", str(tmp_path / "c" / "Collect.ps1")]
+    assert _run_with_stdout(_ClosedPipe(), monkeypatch, argv) == 0
+    assert (tmp_path / "c" / "Collect.ps1").is_file()
+
+
+def test_ascii_only_output_with_a_non_ascii_path_keeps_the_exit_code(
+    sample: Path, tmp_path: Path
+) -> None:
+    out = tmp_path / "out-é中"
+    env = {**os.environ, "PYTHONIOENCODING": "ascii", "SOURCE_DATE_EPOCH": "1762905600"}
+    env.pop("PYTHONUTF8", None)
+    run = subprocess.run(  # noqa: S603 - the interpreter running these tests
+        [sys.executable, "-m", "faithful_toledot", "report", *files_of(sample), "-o", str(out)],
+        env=env, capture_output=True, check=False, timeout=120,
+    )  # fmt: skip
+    assert run.returncode == ExitCode.FINDINGS, run.stderr
+    assert b"internal error" not in run.stderr
+    assert b"out-\\xe9\\u4e2d" in run.stdout
+    assert sorted(p.name for p in out.iterdir()) == FIVE_FILES
+
+
+def test_a_closed_pipe_in_a_real_pipeline_is_not_exit_4() -> None:
+    reader, writer = os.pipe()
+    os.close(reader)  # nobody will read: every write fails with a broken pipe
+    run = subprocess.run(
+        [sys.executable, "-m", "faithful_toledot", "events"],
+        stdout=writer, stderr=subprocess.PIPE, check=False, timeout=120,
+    )  # fmt: skip
+    os.close(writer)
+    assert run.returncode == ExitCode.OK, run.stderr
+    assert b"internal error" not in run.stderr
+
+
+def test_an_unreadable_input_is_named_with_the_path_the_user_gave(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    missing = tmp_path / "no" / "such" / "dir" / "a.jsonl"
+    assert main(["report", str(missing), "-o", str(tmp_path / "r")]) == ExitCode.INPUT_ERROR
+    err = capsys.readouterr().err
+    assert str(missing) in err
+    assert "cannot read" in err
