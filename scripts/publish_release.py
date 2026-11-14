@@ -31,8 +31,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -239,12 +241,43 @@ class GhApi:  # pragma: no cover - thin wrapper over the gh command, exercised i
         self._gh("-X", "PATCH", f"repos/{repo}/releases/{release_id}", "-F", "draft=false")
 
     def tag_commit(self, repo: str, tag: str) -> str | None:
-        """Return the commit a tag points to, or None if the tag does not exist."""
-        command = ["gh", "api", f"repos/{repo}/commits/{tag}", "--jq", ".sha"]
-        result = subprocess.run(  # noqa: S603 - fixed command, arguments are not shell-parsed
-            command, capture_output=True, text=True, check=False
-        )
-        return result.stdout.strip() or None if result.returncode == 0 else None
+        """Return the commit a tag points to, or None only when GitHub says it is absent.
+
+        Absent means a clean "not found" answer from the references endpoint. Every
+        other outcome, such as a rejected token, a rate limit, a network failure, a
+        server error, or an answer that is not a commit hash, raises ``ReleaseError``,
+        so an unknown state is never mistaken for a missing tag.
+        """
+        quoted = urllib.parse.quote(tag, safe="/")
+        ref = ["gh", "api", f"repos/{repo}/git/ref/tags/{quoted}", "--jq", ".object.sha"]
+        if _lookup(ref) is None:
+            return None
+        commit = _lookup(["gh", "api", f"repos/{repo}/commits/{quoted}", "--jq", ".sha"])
+        if commit is None:
+            msg = f"tag {tag} exists but did not resolve to a commit"
+            raise ReleaseError(msg)
+        return commit
+
+
+def _lookup(command: list[str]) -> str | None:
+    """Run one ``gh api`` call that returns a hash. None means a clean HTTP 404.
+
+    A token that cannot see a private repository also gets 404, but the release
+    calls made earlier in the same run would then have failed first.
+    """
+    result = subprocess.run(  # noqa: S603 - fixed command, arguments are not shell-parsed
+        command, capture_output=True, text=True, check=False
+    )
+    if result.returncode == 0:
+        answer = result.stdout.strip()
+        if not re.fullmatch(r"[0-9a-f]{40}", answer):
+            msg = "GitHub answered a tag lookup with something that is not a commit hash"
+            raise ReleaseError(msg)
+        return answer
+    if "HTTP 404" in result.stderr:
+        return None
+    msg = f"tag lookup failed, so the tag's state is unknown: {result.stderr.strip()[:300]}"
+    raise ReleaseError(msg)
 
 
 def main(argv: list[str] | None = None, api: Api | None = None) -> int:

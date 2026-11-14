@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,13 @@ assert _spec.loader is not None
 pr = importlib.util.module_from_spec(_spec)
 sys.modules["publish_release"] = pr
 _spec.loader.exec_module(pr)
+_inv_spec = importlib.util.spec_from_file_location(
+    "check_audit_inventory", ROOT / "scripts" / "check_audit_inventory.py"
+)
+assert _inv_spec is not None
+assert _inv_spec.loader is not None
+inventory = importlib.util.module_from_spec(_inv_spec)
+_inv_spec.loader.exec_module(inventory)
 
 REPO = "faithful-oversight/faithful-toledot"
 TAG = "v0.1.0"
@@ -234,11 +242,16 @@ def test_main_reports_errors_and_runs_steps(
 
 
 @pytest.mark.skipif(
-    os.name != "posix" or shutil.which("git") is None or shutil.which("uv") is None,
-    reason="release evidence is built on Linux, with git and uv",
+    os.name != "posix"
+    or shutil.which("git") is None
+    or shutil.which("uv") is None
+    or not (ROOT / "uv.lock").exists(),
+    reason="release evidence needs a Linux checkout with git, uv, and uv.lock",
 )
-def test_release_evidence_is_reproducible(tmp_path: Path) -> None:
-    """Two runs of scripts/release_evidence.sh give the same SBOM and SHA256SUMS."""
+def test_release_evidence_is_reproducible_and_scoped(tmp_path: Path) -> None:
+    """Two runs give the same bytes; each SBOM states its scope and holds what it should."""
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    extras = project.get("optional-dependencies", {})
     outputs = []
     for run in ("first", "second"):
         dist = tmp_path / run
@@ -249,21 +262,103 @@ def test_release_evidence_is_reproducible(tmp_path: Path) -> None:
         )
         outputs.append({p.name: p.read_bytes() for p in dist.iterdir()})
     assert outputs[0] == outputs[1]
-    assert sorted(outputs[0]) == [
-        "SHA256SUMS", "package.whl", "sbom-all-extras.cdx.json", "sbom-base.cdx.json",
-    ]  # fmt: skip
-    names = {}
-    for kind in ("base", "all-extras"):
+    kinds = ["base", "all-extras"] if extras else ["base"]
+    assert sorted(outputs[0]) == sorted(
+        ["SHA256SUMS", "package.whl", *(f"sbom-{kind}.cdx.json" for kind in kinds)]
+    )
+    components = {}
+    scopes = {}
+    for kind in kinds:
         sbom = json.loads(outputs[0][f"sbom-{kind}.cdx.json"])
         assert "serialNumber" not in sbom
         (scope,) = (
-            p["value"] for p in sbom["metadata"]["properties"]
-            if p["name"] == "faithful-toledot:sbom-scope"
-        )  # fmt: skip
+            p["value"]
+            for p in sbom["metadata"]["properties"]
+            if p["name"] == f"{project['name']}:sbom-scope"
+        )
         assert scope.startswith("base install" if kind == "base" else "every optional extra")
-        names[kind] = {c["name"] for c in sbom.get("components", [])}
-    # The analyzer has no runtime dependencies; remote collection and secret sources do.
-    assert names["base"] == set()
-    assert {"pypsrp", "pyspnego", "keyring", "hvac", "boto3", "azure-identity"} <= names[
-        "all-extras"
-    ]
+        assert f"pip install {project['name']}" in scope
+        scopes[kind] = scope
+        components[kind] = {c["name"].lower().replace("_", "-") for c in sbom.get("components", [])}
+    if extras:
+        # Every package an extra names is in the all-extras SBOM and not in the base one.
+        named = set(inventory.required(ROOT / "pyproject.toml"))
+        assert named <= components["all-extras"]
+        assert not named & components["base"]
+        assert f"[{','.join(sorted(extras))}]" in scopes["all-extras"]
+
+
+def _gh(code: int, out: str = "", err: str = "") -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(args=[], returncode=code, stdout=out, stderr=err)
+
+
+def _script_gh(
+    monkeypatch: pytest.MonkeyPatch, *answers: subprocess.CompletedProcess[str]
+) -> list[list[str]]:
+    """Replace subprocess.run in the script with queued answers and record the commands."""
+    queue = list(answers)
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return queue.pop(0)
+
+    monkeypatch.setattr(pr.subprocess, "run", fake_run)
+    return commands
+
+
+def test_tag_lookup_reports_absent_only_for_a_clean_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands = _script_gh(monkeypatch, _gh(1, err="gh: Not Found (HTTP 404)"))
+    assert pr.GhApi().tag_commit(REPO, TAG) is None
+    assert commands[0][2] == f"repos/{REPO}/git/ref/tags/{TAG}"
+    assert len(commands) == 1
+
+
+def test_tag_lookup_resolves_an_existing_tag_to_its_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    commands = _script_gh(monkeypatch, _gh(0, "b" * 40 + "\n"), _gh(0, SHA + "\n"))
+    assert pr.GhApi().tag_commit(REPO, TAG) == SHA
+    assert commands[1][2] == f"repos/{REPO}/commits/{TAG}"
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        _gh(1, err="gh: Bad credentials (HTTP 401)"),
+        _gh(1, err="gh: API rate limit exceeded (HTTP 403)"),
+        _gh(1, err="gh: Too Many Requests (HTTP 429)"),
+        _gh(1, err="gh: Server Error (HTTP 502)"),
+        _gh(1, err="error connecting to api.github.com"),
+        _gh(0, "not a hash"),
+        _gh(0, ""),
+    ],
+    ids=["auth", "rate-limit", "throttled", "server", "network", "garbage", "empty"],
+)
+def test_tag_lookup_failure_is_not_mistaken_for_an_absent_tag(
+    monkeypatch: pytest.MonkeyPatch, answer: subprocess.CompletedProcess[str]
+) -> None:
+    _script_gh(monkeypatch, answer)
+    with pytest.raises(pr.ReleaseError):
+        pr.GhApi().tag_commit(REPO, TAG)
+
+
+def test_tag_that_exists_but_does_not_resolve_stops(monkeypatch: pytest.MonkeyPatch) -> None:
+    _script_gh(monkeypatch, _gh(0, "b" * 40), _gh(1, err="gh: Not Found (HTTP 404)"))
+    with pytest.raises(pr.ReleaseError, match="did not resolve"):
+        pr.GhApi().tag_commit(REPO, TAG)
+
+
+def test_indeterminate_tag_lookup_never_reaches_a_release_change(assets: list[Path]) -> None:
+    class Unknown(FakeGitHub):
+        def tag_commit(self, repo: str, tag: str) -> str | None:
+            raise pr.ReleaseError("tag lookup failed, so the tag's state is unknown")
+
+    gh = Unknown()
+    gh.create_draft(REPO, TAG, SHA, "notes")
+    with pytest.raises(pr.ReleaseError, match="unknown"):
+        pr.stage(gh, REF, "notes", assets)
+    with pytest.raises(pr.ReleaseError, match="unknown"):
+        pr.publish(gh, REF, assets)
+    assert gh.uploads == []
+    assert gh.release_list[0]["draft"] is True

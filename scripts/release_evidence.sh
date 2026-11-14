@@ -2,14 +2,12 @@
 # SPDX-FileCopyrightText: 2026 Faithful Oversight, LLC
 # SPDX-License-Identifier: Apache-2.0
 #
-# Write the release evidence next to the built packages: two CycloneDX software
-# bills of materials and SHA256SUMS for every file.
+# Write the release evidence next to the built packages: CycloneDX software bills
+# of materials and SHA256SUMS for every file.
 #
-#   sbom-base.cdx.json        what `pip install faithful-toledot` installs: the
-#                             analyzer, which has no runtime dependencies
-#   sbom-all-extras.cdx.json  everything every optional extra can add: remote
-#                             collection (pypsrp) and the keyring, Vault, AWS,
-#                             and Azure secret sources
+#   sbom-base.cdx.json        what `pip install faithful-toledot` installs
+#   sbom-all-extras.cdx.json  everything every optional extra can add; written only
+#                             when pyproject.toml defines extras
 #
 # Each SBOM states its scope in metadata.properties.
 #
@@ -62,7 +60,16 @@ with open(target, "w", encoding="utf-8", newline="\n") as handle:
 PY
 }
 
+extras="$(uv run --no-sync python - <<'PY'
+import tomllib
+
+with open("pyproject.toml", "rb") as handle:
+    print(",".join(sorted(tomllib.load(handle)["project"].get("optional-dependencies", {}))))
+PY
+)"
+
 sbom sbom-base "base install: pip install faithful-toledot"
-sbom sbom-all-extras "every optional extra: pip install faithful-toledot[live,keyring,vault,aws,azure]" \
-  --all-extras
+if [[ -n "$extras" ]]; then
+  sbom sbom-all-extras "every optional extra: pip install faithful-toledot[$extras]" --all-extras
+fi
 (cd "$dist" && sha256sum -- * > SHA256SUMS)
