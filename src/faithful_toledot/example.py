@@ -141,7 +141,11 @@ def _dc01() -> _Log:
     }  # fmt: skip
     log.add(6.5, 4728, _fields(4728, staff))
     log.logon(190, *desk)
-    reset = {"TargetUserName": "blake.sample", "TargetDomainName": "CORP", "TargetSid": _sid("1188")}
+    reset = {
+        "TargetUserName": "blake.sample",
+        "TargetDomainName": "CORP",
+        "TargetSid": _sid("1188"),
+    }
     log.add(192, 4724, _fields(4724, {**reset, **_subject(*desk)}))
     log.add(192.2, 4767, _fields(4767, {**reset, **_subject(*desk)}))
     log.logon(1505, *admin)
