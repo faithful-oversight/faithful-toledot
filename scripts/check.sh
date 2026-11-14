@@ -72,8 +72,8 @@ stage_deps() {
   # the same time would overwrite each other's input.
   local work rc=0
   work="$(mktemp -d)"
-  # --all-extras puts remote collection and the secret sources in the audit; without it
-  # their pins would never be checked. The inventory check fails if any are absent.
+  # --all-extras puts every optional extra in the audit; without it their pins would never
+  # be checked. The inventory check fails if any package an extra names is absent.
   uv export --color never --locked --all-groups --all-extras --no-emit-project \
     --format requirements-txt > "$work/requirements-audit.txt" || rc=$?
   if [[ $rc -eq 0 ]]; then

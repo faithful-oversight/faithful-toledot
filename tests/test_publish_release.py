@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,13 @@ assert _spec.loader is not None
 pr = importlib.util.module_from_spec(_spec)
 sys.modules["publish_release"] = pr
 _spec.loader.exec_module(pr)
+_inv_spec = importlib.util.spec_from_file_location(
+    "check_audit_inventory", ROOT / "scripts" / "check_audit_inventory.py"
+)
+assert _inv_spec is not None
+assert _inv_spec.loader is not None
+inventory = importlib.util.module_from_spec(_inv_spec)
+_inv_spec.loader.exec_module(inventory)
 
 REPO = "faithful-oversight/faithful-toledot"
 TAG = "v0.1.0"
@@ -240,8 +248,10 @@ def test_main_reports_errors_and_runs_steps(
     or not (ROOT / "uv.lock").exists(),
     reason="release evidence needs a Linux checkout with git, uv, and uv.lock",
 )
-def test_release_evidence_is_reproducible(tmp_path: Path) -> None:
-    """Two runs of scripts/release_evidence.sh give the same SBOM and SHA256SUMS."""
+def test_release_evidence_is_reproducible_and_scoped(tmp_path: Path) -> None:
+    """Two runs give the same bytes; each SBOM states its scope and holds what it should."""
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    extras = project.get("optional-dependencies", {})
     outputs = []
     for run in ("first", "second"):
         dist = tmp_path / run
@@ -252,24 +262,30 @@ def test_release_evidence_is_reproducible(tmp_path: Path) -> None:
         )
         outputs.append({p.name: p.read_bytes() for p in dist.iterdir()})
     assert outputs[0] == outputs[1]
-    assert sorted(outputs[0]) == [
-        "SHA256SUMS", "package.whl", "sbom-all-extras.cdx.json", "sbom-base.cdx.json",
-    ]  # fmt: skip
-    names = {}
-    for kind in ("base", "all-extras"):
+    kinds = ["base", "all-extras"] if extras else ["base"]
+    assert sorted(outputs[0]) == sorted(
+        ["SHA256SUMS", "package.whl", *(f"sbom-{kind}.cdx.json" for kind in kinds)]
+    )
+    components = {}
+    scopes = {}
+    for kind in kinds:
         sbom = json.loads(outputs[0][f"sbom-{kind}.cdx.json"])
         assert "serialNumber" not in sbom
         (scope,) = (
-            p["value"] for p in sbom["metadata"]["properties"]
-            if p["name"] == "faithful-toledot:sbom-scope"
-        )  # fmt: skip
+            p["value"]
+            for p in sbom["metadata"]["properties"]
+            if p["name"] == f"{project['name']}:sbom-scope"
+        )
         assert scope.startswith("base install" if kind == "base" else "every optional extra")
-        names[kind] = {c["name"] for c in sbom.get("components", [])}
-    # The analyzer has no runtime dependencies; remote collection and secret sources do.
-    assert names["base"] == set()
-    assert {"pypsrp", "pyspnego", "keyring", "hvac", "boto3", "azure-identity"} <= names[
-        "all-extras"
-    ]
+        assert f"pip install {project['name']}" in scope
+        scopes[kind] = scope
+        components[kind] = {c["name"].lower().replace("_", "-") for c in sbom.get("components", [])}
+    if extras:
+        # Every package an extra names is in the all-extras SBOM and not in the base one.
+        named = set(inventory.required(ROOT / "pyproject.toml"))
+        assert named <= components["all-extras"]
+        assert not named & components["base"]
+        assert f"[{','.join(sorted(extras))}]" in scopes["all-extras"]
 
 
 def _gh(code: int, out: str = "", err: str = "") -> subprocess.CompletedProcess[str]:

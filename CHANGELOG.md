@@ -13,6 +13,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The dependency audit writes its export to a private temporary directory, so a planted link or a second run at the same time cannot interfere.
 - The DCO check now fails when it cannot list the commits to check, instead of reporting success.
 - The release script now treats only a clean "not found" answer as an absent tag; an authentication, rate-limit, network, or malformed answer stops the release.
+- The dependency audit always includes every optional extra, and a new check fails it when a package named by an extra is missing from the audited export.
+- The release evidence is now one SBOM per scope: `sbom-base.cdx.json` for the base install, and `sbom-all-extras.cdx.json` when the project defines optional extras. Each states its scope, and tests check what each one holds.
 
 ## [0.1.0] - 2026-11-11
 
