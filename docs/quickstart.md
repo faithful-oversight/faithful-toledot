@@ -62,7 +62,7 @@ Open `./toledot-demo/report/toledot-report.html` in a browser. The Markdown vers
 
 Read the **Completeness** section first. It says whether the account is complete, not confirmed, or incomplete, and why. In the example it is incomplete, and it names two things:
 
-- A notice: the Security log on `DC02.corp.example` was cleared at 2026-11-06T07:52:00Z, by `CORP\alice.admin`. Events may be missing around that time.
+- A notice: the Security log on `DC02.corp.example` was cleared at 2026-11-06T07:52:00Z, by `CORP\admin.example`. Events may be missing around that time.
 - A table of what each log holds. For `DC02.corp.example`, the collection asked for events from before the log's oldest record, so earlier events had been overwritten and are missing. For `DC01.corp.example`, 412 record numbers are absent, but the collector says it kept chosen events only, so that is expected.
 
 Then read the changes. Each change is one sentence, followed by what changed, where it came from, and the evidence:
@@ -71,7 +71,7 @@ Then read the changes. Each change is one sentence, followed by what changed, wh
 - **From where.** toledot follows the logon ID of the actor's session to the logon event on the same computer. If that logon event is not in the input, the report says so. See [Limitations](limitations.md#how-toledot-links-events).
 - **Evidence.** The event ID, the record number, and the file and line of every event the change is built from.
 
-Look at change C0015, where `CORP\helpdesk.sam` deleted a user account. Its logon event is not in the input, so the origin is not known. The report says that instead of guessing.
+Look at change C0015, where `CORP\helpdesk.example` deleted a user account. Its logon event is not in the input, so the origin is not known. The report says that instead of guessing.
 
 ## 5. Use your own logs
 

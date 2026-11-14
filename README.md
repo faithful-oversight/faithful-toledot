@@ -11,7 +11,7 @@
 
 When someone asks `who added that account to Domain Admins?`, the answer sits in the Security logs of your domain controllers, spread over thousands of events. toledot reads those logs and writes the answer in sentences:
 
-> CORP\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) created the user account CORP\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).
+> CORP\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) created the user account CORP\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207).
 >
 > Session 0x2a51c began at 2026-11-02 08:05:00 UTC as Network from 198.51.100.20 port 49731.
 

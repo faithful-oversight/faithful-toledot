@@ -224,7 +224,7 @@ A time in a collection file is a UTC time with a `Z` suffix and up to seven frac
 Each event is one line with exactly these properties:
 
 ```json
-{"record_id":48212,"event_id":4720,"version":0,"time":"2026-11-02T08:06:00.0000000Z","computer":"DC01.corp.example","channel":"Security","provider":"Microsoft-Windows-Security-Auditing","system":{},"data":{"TargetUserName":"dana.whitfield","TargetDomainName":"CORP"}}
+{"record_id":48212,"event_id":4720,"version":0,"time":"2026-11-02T08:06:00.0000000Z","computer":"DC01.corp.example","channel":"Security","provider":"Microsoft-Windows-Security-Auditing","system":{},"data":{"TargetUserName":"avery.example","TargetDomainName":"CORP"}}
 ```
 
 | Property | Meaning |

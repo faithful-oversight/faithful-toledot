@@ -78,7 +78,7 @@ Each change is one sentence, followed by its details. This change comes from the
   "category": "user",
   "action": "created",
   "title": "User account created",
-  "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) created the user account CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).",
+  "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) created the user account CORP\\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207).",
   "actor": {
     "sid": "S-1-5-21-1111111111-2222222222-3333333333-1150",
     "name": "svc_provision",
@@ -90,10 +90,10 @@ Each change is one sentence, followed by its details. This change comes from the
     "known_as": null,
     "display": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150)"
   },
-  "target": {"sid": "S-1-5-21-1111111111-2222222222-3333333333-1207", "name": "dana.whitfield", "...": "..."},
+  "target": {"sid": "S-1-5-21-1111111111-2222222222-3333333333-1207", "name": "avery.example", "...": "..."},
   "member": null,
   "details": [
-    {"label": "SAM account name", "kind": "initial", "old": null, "new": "dana.whitfield",
+    {"label": "SAM account name", "kind": "initial", "old": null, "new": "avery.example",
      "meaning": null, "attribute": "SamAccountName"}
   ],
   "origin": {
@@ -141,7 +141,7 @@ An actor, target, or member holds what the event recorded: `sid`, `name`, `domai
 
 Two properties add information from outside the event. toledot shows each apart from the recorded name, so you can tell them apart:
 
-- `known_as` is a name that other events in the input give for the same SID. toledot sets it only when every event that names the SID agrees on one name, and only when that name differs from the recorded one. After an account rename (4781) the account has had two names, so toledot shows no `known_as` for it. The sentence reads "named CORP\\omar.reyes in other events".
+- `known_as` is a name that other events in the input give for the same SID. toledot sets it only when every event that names the SID agrees on one name, and only when that name differs from the recorded one. After an account rename (4781) the account has had two names, so toledot shows no `known_as` for it. The sentence reads "named CORP\\blake.sample in other events".
 - `well_known` is the name of a well-known SID, such as `S-1-5-18`, or of a well-known relative identifier (RID) under a domain SID, such as 512 for Domain Admins. A RID means that group only in a domain, so toledot words it `Domain Admins, if this is a domain SID`.
 
 ### Details

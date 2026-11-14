@@ -11,15 +11,15 @@
       "name": "dc01-events.jsonl",
       "format": "collection",
       "scope": "unknown",
-      "size": 13166,
-      "sha256": "eb388fee6542ded0cee9527c958ded99da375bde5df52b6204cdc8bfd69c2dc6"
+      "size": 13184,
+      "sha256": "eba9fa18f971f192ee5e5d05c720f886045a91366dc07ffba0b30431f523327b"
     },
     {
       "name": "dc02-events.jsonl",
       "format": "collection",
       "scope": "unknown",
-      "size": 3894,
-      "sha256": "b55ce353dd0e62eeff4bb9babdb50869d7e5d80db04882dbeb09b7ac4eb7f2df"
+      "size": 3906,
+      "sha256": "fa92b748e36a5fcfe8863b8fe96d4d5f0bb4c77143bf71bd668ab594eadc9a4f"
     }
   ],
   "window": {
@@ -62,7 +62,7 @@
     },
     "actors": [
       {
-        "name": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)",
+        "name": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104)",
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
         "changes": 7
       },
@@ -72,7 +72,7 @@
         "changes": 5
       },
       {
-        "name": "CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131)",
+        "name": "CORP\\helpdesk.example (S-1-5-21-1111111111-2222222222-3333333333-1131)",
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1131",
         "changes": 3
       }
@@ -89,14 +89,14 @@
       "text": "The log was cleared. Events may be missing from this account around this time.",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
-        "name": "alice.admin",
+        "name": "admin.example",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+        "display": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104)"
       },
       "event": {
         "event_id": 1102,
@@ -155,7 +155,7 @@
       "category": "user",
       "action": "created",
       "title": "User account created",
-      "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) created the user account CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).",
+      "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) created the user account CORP\\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207).",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1150",
         "name": "svc_provision",
@@ -169,14 +169,14 @@
       },
       "target": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1207",
-        "name": "dana.whitfield",
+        "name": "avery.example",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207)"
+        "display": "CORP\\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207)"
       },
       "member": null,
       "details": [
@@ -184,7 +184,7 @@
           "label": "SAM account name",
           "kind": "initial",
           "old": null,
-          "new": "dana.whitfield",
+          "new": "avery.example",
           "meaning": null,
           "attribute": "SamAccountName"
         },
@@ -192,7 +192,7 @@
           "label": "display name",
           "kind": "initial",
           "old": null,
-          "new": "Dana Whitfield",
+          "new": "Avery Example",
           "meaning": null,
           "attribute": "DisplayName"
         },
@@ -200,7 +200,7 @@
           "label": "user principal name",
           "kind": "initial",
           "old": null,
-          "new": "dana.whitfield@corp.example",
+          "new": "avery.example@corp.example",
           "meaning": null,
           "attribute": "UserPrincipalName"
         },
@@ -284,7 +284,7 @@
       "category": "user",
       "action": "password-reset-attempted",
       "title": "Password reset attempted",
-      "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) attempted to reset the password of CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).",
+      "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) attempted to reset the password of CORP\\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207).",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1150",
         "name": "svc_provision",
@@ -298,14 +298,14 @@
       },
       "target": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1207",
-        "name": "dana.whitfield",
+        "name": "avery.example",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207)"
+        "display": "CORP\\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207)"
       },
       "member": null,
       "details": [],
@@ -348,7 +348,7 @@
       "category": "user",
       "action": "changed",
       "title": "User account changed",
-      "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) changed the user account CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).",
+      "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) changed the user account CORP\\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207).",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1150",
         "name": "svc_provision",
@@ -362,14 +362,14 @@
       },
       "target": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1207",
-        "name": "dana.whitfield",
+        "name": "avery.example",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207)"
+        "display": "CORP\\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207)"
       },
       "member": null,
       "details": [
@@ -421,7 +421,7 @@
       "category": "user",
       "action": "enabled",
       "title": "User account enabled",
-      "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) enabled the user account CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).",
+      "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) enabled the user account CORP\\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207).",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1150",
         "name": "svc_provision",
@@ -435,14 +435,14 @@
       },
       "target": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1207",
-        "name": "dana.whitfield",
+        "name": "avery.example",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207)"
+        "display": "CORP\\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207)"
       },
       "member": null,
       "details": [],
@@ -485,7 +485,7 @@
       "category": "group",
       "action": "member-added",
       "title": "Member added to security-enabled global group",
-      "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) added CN=Dana Whitfield,OU=Staff,DC=corp,DC=example (named CORP\\dana.whitfield in other events; S-1-5-21-1111111111-2222222222-3333333333-1207) to the group CORP\\Staff-All (S-1-5-21-1111111111-2222222222-3333333333-2101).",
+      "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) added CN=Avery Example,OU=Staff,DC=corp,DC=example (named CORP\\avery.example in other events; S-1-5-21-1111111111-2222222222-3333333333-1207) to the group CORP\\Staff-All (S-1-5-21-1111111111-2222222222-3333333333-2101).",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1150",
         "name": "svc_provision",
@@ -512,12 +512,12 @@
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1207",
         "name": null,
         "domain": null,
-        "dn": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example",
+        "dn": "CN=Avery Example,OU=Staff,DC=corp,DC=example",
         "object_class": null,
         "guid": null,
         "well_known": null,
-        "known_as": "CORP\\dana.whitfield",
-        "display": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example (named CORP\\dana.whitfield in other events; S-1-5-21-1111111111-2222222222-3333333333-1207)"
+        "known_as": "CORP\\avery.example",
+        "display": "CN=Avery Example,OU=Staff,DC=corp,DC=example (named CORP\\avery.example in other events; S-1-5-21-1111111111-2222222222-3333333333-1207)"
       },
       "details": [],
       "origin": {
@@ -555,28 +555,28 @@
       "category": "user",
       "action": "password-reset-attempted",
       "title": "Password reset attempted",
-      "sentence": "CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131) attempted to reset the password of CORP\\omar.reyes (S-1-5-21-1111111111-2222222222-3333333333-1188).",
+      "sentence": "CORP\\helpdesk.example (S-1-5-21-1111111111-2222222222-3333333333-1131) attempted to reset the password of CORP\\blake.sample (S-1-5-21-1111111111-2222222222-3333333333-1188).",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1131",
-        "name": "helpdesk.sam",
+        "name": "helpdesk.example",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131)"
+        "display": "CORP\\helpdesk.example (S-1-5-21-1111111111-2222222222-3333333333-1131)"
       },
       "target": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1188",
-        "name": "omar.reyes",
+        "name": "blake.sample",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\omar.reyes (S-1-5-21-1111111111-2222222222-3333333333-1188)"
+        "display": "CORP\\blake.sample (S-1-5-21-1111111111-2222222222-3333333333-1188)"
       },
       "member": null,
       "details": [],
@@ -615,28 +615,28 @@
       "category": "user",
       "action": "unlocked",
       "title": "User account unlocked",
-      "sentence": "CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131) unlocked the user account CORP\\omar.reyes (S-1-5-21-1111111111-2222222222-3333333333-1188).",
+      "sentence": "CORP\\helpdesk.example (S-1-5-21-1111111111-2222222222-3333333333-1131) unlocked the user account CORP\\blake.sample (S-1-5-21-1111111111-2222222222-3333333333-1188).",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1131",
-        "name": "helpdesk.sam",
+        "name": "helpdesk.example",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131)"
+        "display": "CORP\\helpdesk.example (S-1-5-21-1111111111-2222222222-3333333333-1131)"
       },
       "target": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1188",
-        "name": "omar.reyes",
+        "name": "blake.sample",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\omar.reyes (S-1-5-21-1111111111-2222222222-3333333333-1188)"
+        "display": "CORP\\blake.sample (S-1-5-21-1111111111-2222222222-3333333333-1188)"
       },
       "member": null,
       "details": [],
@@ -675,28 +675,28 @@
       "category": "directory",
       "action": "changed",
       "title": "Directory object modified",
-      "sentence": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) changed the user object CN=Dana Whitfield,OU=Staff,DC=corp,DC=example.",
+      "sentence": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104) changed the user object CN=Avery Example,OU=Staff,DC=corp,DC=example.",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
-        "name": "alice.admin",
+        "name": "admin.example",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+        "display": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104)"
       },
       "target": {
         "sid": null,
         "name": null,
         "domain": null,
-        "dn": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example",
+        "dn": "CN=Avery Example,OU=Staff,DC=corp,DC=example",
         "object_class": "user",
         "guid": "{6f1c2a9e-5b7d-4c3a-9e1f-0a2b3c4d5e6f}",
         "well_known": null,
         "known_as": null,
-        "display": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example"
+        "display": "CN=Avery Example,OU=Staff,DC=corp,DC=example"
       },
       "member": null,
       "details": [
@@ -751,17 +751,17 @@
       "category": "group",
       "action": "member-added",
       "title": "Member added to security-enabled global group",
-      "sentence": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) added CN=Dana Whitfield,OU=Staff,DC=corp,DC=example (named CORP\\dana.whitfield in other events; S-1-5-21-1111111111-2222222222-3333333333-1207) to the group CORP\\Domain Admins (well-known: Domain Admins, if this is a domain SID; S-1-5-21-1111111111-2222222222-3333333333-512).",
+      "sentence": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104) added CN=Avery Example,OU=Staff,DC=corp,DC=example (named CORP\\avery.example in other events; S-1-5-21-1111111111-2222222222-3333333333-1207) to the group CORP\\Domain Admins (well-known: Domain Admins, if this is a domain SID; S-1-5-21-1111111111-2222222222-3333333333-512).",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
-        "name": "alice.admin",
+        "name": "admin.example",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+        "display": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104)"
       },
       "target": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-512",
@@ -778,12 +778,12 @@
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1207",
         "name": null,
         "domain": null,
-        "dn": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example",
+        "dn": "CN=Avery Example,OU=Staff,DC=corp,DC=example",
         "object_class": null,
         "guid": null,
         "well_known": null,
-        "known_as": "CORP\\dana.whitfield",
-        "display": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example (named CORP\\dana.whitfield in other events; S-1-5-21-1111111111-2222222222-3333333333-1207)"
+        "known_as": "CORP\\avery.example",
+        "display": "CN=Avery Example,OU=Staff,DC=corp,DC=example (named CORP\\avery.example in other events; S-1-5-21-1111111111-2222222222-3333333333-1207)"
       },
       "details": [],
       "origin": {
@@ -821,28 +821,28 @@
       "category": "directory",
       "action": "changed",
       "title": "Directory object modified",
-      "sentence": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) changed the user object CN=Dana Whitfield,OU=Staff,DC=corp,DC=example.",
+      "sentence": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104) changed the user object CN=Avery Example,OU=Staff,DC=corp,DC=example.",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
-        "name": "alice.admin",
+        "name": "admin.example",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+        "display": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104)"
       },
       "target": {
         "sid": null,
         "name": null,
         "domain": null,
-        "dn": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example",
+        "dn": "CN=Avery Example,OU=Staff,DC=corp,DC=example",
         "object_class": "user",
         "guid": "{6f1c2a9e-5b7d-4c3a-9e1f-0a2b3c4d5e6f}",
         "well_known": null,
         "known_as": null,
-        "display": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example"
+        "display": "CN=Avery Example,OU=Staff,DC=corp,DC=example"
       },
       "member": null,
       "details": [
@@ -897,17 +897,17 @@
       "category": "policy",
       "action": "policy-changed",
       "title": "Domain policy changed",
-      "sentence": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) changed policy on DC01.corp.example (domain policy changed).",
+      "sentence": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104) changed policy on DC01.corp.example (domain policy changed).",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
-        "name": "alice.admin",
+        "name": "admin.example",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+        "display": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104)"
       },
       "target": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333",
@@ -982,17 +982,17 @@
       "category": "group",
       "action": "member-removed",
       "title": "Member removed from security-enabled global group",
-      "sentence": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) removed CN=Dana Whitfield,OU=Staff,DC=corp,DC=example (named CORP\\dana.whitfield in other events; S-1-5-21-1111111111-2222222222-3333333333-1207) from the group CORP\\Domain Admins (well-known: Domain Admins, if this is a domain SID; S-1-5-21-1111111111-2222222222-3333333333-512).",
+      "sentence": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104) removed CN=Avery Example,OU=Staff,DC=corp,DC=example (named CORP\\avery.example in other events; S-1-5-21-1111111111-2222222222-3333333333-1207) from the group CORP\\Domain Admins (well-known: Domain Admins, if this is a domain SID; S-1-5-21-1111111111-2222222222-3333333333-512).",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
-        "name": "alice.admin",
+        "name": "admin.example",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+        "display": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104)"
       },
       "target": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-512",
@@ -1009,12 +1009,12 @@
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1207",
         "name": null,
         "domain": null,
-        "dn": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example",
+        "dn": "CN=Avery Example,OU=Staff,DC=corp,DC=example",
         "object_class": null,
         "guid": null,
         "well_known": null,
-        "known_as": "CORP\\dana.whitfield",
-        "display": "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example (named CORP\\dana.whitfield in other events; S-1-5-21-1111111111-2222222222-3333333333-1207)"
+        "known_as": "CORP\\avery.example",
+        "display": "CN=Avery Example,OU=Staff,DC=corp,DC=example (named CORP\\avery.example in other events; S-1-5-21-1111111111-2222222222-3333333333-1207)"
       },
       "details": [],
       "origin": {
@@ -1052,17 +1052,17 @@
       "category": "group",
       "action": "created",
       "title": "Security-enabled global group created",
-      "sentence": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) created the group CORP\\Temp-Vendors (S-1-5-21-1111111111-2222222222-3333333333-2240).",
+      "sentence": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104) created the group CORP\\Temp-Vendors (S-1-5-21-1111111111-2222222222-3333333333-2240).",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
-        "name": "alice.admin",
+        "name": "admin.example",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+        "display": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104)"
       },
       "target": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-2240",
@@ -1121,17 +1121,17 @@
       "category": "group",
       "action": "member-added",
       "title": "Member added to security-enabled global group",
-      "sentence": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) added S-1-5-21-1111111111-2222222222-3333333333-1188 (named CORP\\omar.reyes in other events) to the group CORP\\Temp-Vendors (S-1-5-21-1111111111-2222222222-3333333333-2240).",
+      "sentence": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104) added S-1-5-21-1111111111-2222222222-3333333333-1188 (named CORP\\blake.sample in other events) to the group CORP\\Temp-Vendors (S-1-5-21-1111111111-2222222222-3333333333-2240).",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1104",
-        "name": "alice.admin",
+        "name": "admin.example",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104)"
+        "display": "CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104)"
       },
       "target": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-2240",
@@ -1152,8 +1152,8 @@
         "object_class": null,
         "guid": null,
         "well_known": null,
-        "known_as": "CORP\\omar.reyes",
-        "display": "S-1-5-21-1111111111-2222222222-3333333333-1188 (named CORP\\omar.reyes in other events)"
+        "known_as": "CORP\\blake.sample",
+        "display": "S-1-5-21-1111111111-2222222222-3333333333-1188 (named CORP\\blake.sample in other events)"
       },
       "details": [],
       "origin": {
@@ -1191,17 +1191,17 @@
       "category": "user",
       "action": "deleted",
       "title": "User account deleted",
-      "sentence": "CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131) deleted the user account CORP\\old.contractor (S-1-5-21-1111111111-2222222222-3333333333-1099).",
+      "sentence": "CORP\\helpdesk.example (S-1-5-21-1111111111-2222222222-3333333333-1131) deleted the user account CORP\\old.contractor (S-1-5-21-1111111111-2222222222-3333333333-1099).",
       "actor": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1131",
-        "name": "helpdesk.sam",
+        "name": "helpdesk.example",
         "domain": "CORP",
         "dn": null,
         "object_class": null,
         "guid": null,
         "well_known": null,
         "known_as": null,
-        "display": "CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131)"
+        "display": "CORP\\helpdesk.example (S-1-5-21-1111111111-2222222222-3333333333-1131)"
       },
       "target": {
         "sid": "S-1-5-21-1111111111-2222222222-3333333333-1099",

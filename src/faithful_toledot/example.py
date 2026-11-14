@@ -24,8 +24,8 @@ _PROVIDER = "Microsoft-Windows-Security-Auditing"
 _LOG_PROVIDER = "Microsoft-Windows-Eventlog"  # writes 1100-1108 into the Security log
 _LOG_SERVICE_IDS = range(1100, 1109)
 _PEOPLE = {
-    "alice.admin": ("1104", "192.0.2.44", "ADMIN-PC7"),
-    "helpdesk.sam": ("1131", "192.0.2.61", "HELPDESK-03"),
+    "admin.example": ("1104", "192.0.2.44", "ADMIN-PC7"),
+    "helpdesk.example": ("1131", "192.0.2.61", "HELPDESK-03"),
     "svc_provision": ("1150", "198.51.100.20", "IDM01"),
 }
 
@@ -118,15 +118,15 @@ def _dc01() -> _Log:
     log = _Log("DC01.corp.example", 48210)
     idm, desk, admin = (
         ("svc_provision", "0x2a51c"),
-        ("helpdesk.sam", "0x3b7f02"),
-        ("alice.admin", "0x5f1a2"),
+        ("helpdesk.example", "0x3b7f02"),
+        ("admin.example", "0x5f1a2"),
     )
-    new_sid, new_dn = _sid("1207"), "CN=Dana Whitfield,OU=Staff,DC=corp,DC=example"
-    target = {"TargetUserName": "dana.whitfield", "TargetDomainName": "CORP", "TargetSid": new_sid}
+    new_sid, new_dn = _sid("1207"), "CN=Avery Example,OU=Staff,DC=corp,DC=example"
+    target = {"TargetUserName": "avery.example", "TargetDomainName": "CORP", "TargetSid": new_sid}
     log.logon(5, *idm)
     created = {
-        **target, **_subject(*idm), "SamAccountName": "dana.whitfield",
-        "DisplayName": "Dana Whitfield", "UserPrincipalName": "dana.whitfield@corp.example",
+        **target, **_subject(*idm), "SamAccountName": "avery.example",
+        "DisplayName": "Avery Example", "UserPrincipalName": "avery.example@corp.example",
         "PasswordLastSet": "%%1794", "AccountExpires": "%%1794", "PrimaryGroupId": "513",
         "OldUacValue": "0x0", "NewUacValue": "0x15", "UserAccountControl": "%%2080 %%2082 %%2084",
     }  # fmt: skip
@@ -141,7 +141,7 @@ def _dc01() -> _Log:
     }  # fmt: skip
     log.add(6.5, 4728, _fields(4728, staff))
     log.logon(190, *desk)
-    reset = {"TargetUserName": "omar.reyes", "TargetDomainName": "CORP", "TargetSid": _sid("1188")}
+    reset = {"TargetUserName": "blake.sample", "TargetDomainName": "CORP", "TargetSid": _sid("1188")}
     log.add(192, 4724, _fields(4724, {**reset, **_subject(*desk)}))
     log.add(192.2, 4767, _fields(4767, {**reset, **_subject(*desk)}))
     log.logon(1505, *admin)
@@ -168,7 +168,7 @@ def _dc01() -> _Log:
 
 def _dc02() -> _Log:
     log = _Log("DC02.corp.example", 9100)
-    admin = ("alice.admin", "0x77e310")
+    admin = ("admin.example", "0x77e310")
     log.logon(5750, *admin, kind="10")
     log.add(5752, 1102, _subject(*admin))
     group = {
@@ -183,7 +183,7 @@ def _dc02() -> _Log:
     log.add(5761, 4728, _fields(4728, member))
     orphan = {
         "TargetUserName": "old.contractor", "TargetDomainName": "CORP", "TargetSid": _sid("1099"),
-        **_subject("helpdesk.sam", "0x91c4d7"),
+        **_subject("helpdesk.example", "0x91c4d7"),
     }  # fmt: skip
     log.add(6100, 4726, _fields(4726, orphan))
     return log

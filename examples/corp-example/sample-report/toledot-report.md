@@ -10,7 +10,7 @@ Generated 2026-11-09T12:00:00Z by toledot 0.1.0. Period: everything in the input
 
 These events bear on whether the log can be trusted to be whole (a cleared log, dropped events, a changed audit policy or a clock changed by a person):
 
-- 2026-11-06T07:52:00Z on DC02.corp.example: log-cleared: The log was cleared. Events may be missing from this account around this time. By CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104). Evidence: event 1102, record 9102 (dc02-events.jsonl, line 3).
+- 2026-11-06T07:52:00Z on DC02.corp.example: log-cleared: The log was cleared. Events may be missing from this account around this time. By CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104). Evidence: event 1102, record 9102 (dc02-events.jsonl, line 3).
 
 ### What each log holds
 
@@ -46,18 +46,18 @@ First change 2026-11-02T08:06:00Z, last 2026-11-06T13:40:00Z.
 
 | Actor | SID | Changes |
 | --- | --- | --- |
-| CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) | S-1-5-21-1111111111-2222222222-3333333333-1104 | 7 |
+| CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104) | S-1-5-21-1111111111-2222222222-3333333333-1104 | 7 |
 | CORP\\svc\_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) | S-1-5-21-1111111111-2222222222-3333333333-1150 | 5 |
-| CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131) | S-1-5-21-1111111111-2222222222-3333333333-1131 | 3 |
+| CORP\\helpdesk.example (S-1-5-21-1111111111-2222222222-3333333333-1131) | S-1-5-21-1111111111-2222222222-3333333333-1131 | 3 |
 
 ## Changes on 2026-11-02 (UTC): 7
 
-### C0001 · 08:06:00 UTC · CORP\\svc\_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) created the user account CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).
+### C0001 · 08:06:00 UTC · CORP\\svc\_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) created the user account CORP\\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207).
 
 - Computer: DC01.corp.example. Kind: user, created.
-- SAM account name: created as dana.whitfield \[attribute: SamAccountName\]
-- display name: created as Dana Whitfield \[attribute: DisplayName\]
-- user principal name: created as dana.whitfield@⁠corp.example \[attribute: UserPrincipalName\]
+- SAM account name: created as avery.example \[attribute: SamAccountName\]
+- display name: created as Avery Example \[attribute: DisplayName\]
+- user principal name: created as avery.example@⁠corp.example \[attribute: UserPrincipalName\]
 - password last set: created as %%1794 (meaning: \<never\> \[code meaning not documented by Microsoft\]) \[attribute: PasswordLastSet\]
 - account expiry: created as %%1794 (meaning: \<never\> \[code meaning not documented by Microsoft\]) \[attribute: AccountExpires\]
 - primary group RID: created as 513 \[attribute: PrimaryGroupId\]
@@ -67,14 +67,14 @@ First change 2026-11-02T08:06:00Z, last 2026-11-06T13:40:00Z.
 - Related changes: C0002, C0003, C0004
 - Evidence: event 4720, record 48212 (dc01-events.jsonl, line 3)
 
-### C0002 · 08:06:00 UTC · CORP\\svc\_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) attempted to reset the password of CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).
+### C0002 · 08:06:00 UTC · CORP\\svc\_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) attempted to reset the password of CORP\\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207).
 
 - Computer: DC01.corp.example. Kind: user, password-reset-attempted.
 - From where: Session 0x2a51c began at 2026-11-02 08:05:00 UTC as Network from 198.51.100.20 port 49731.
 - Related changes: C0001, C0003, C0004
 - Evidence: event 4724, record 48213 (dc01-events.jsonl, line 4)
 
-### C0003 · 08:06:01 UTC · CORP\\svc\_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) changed the user account CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).
+### C0003 · 08:06:01 UTC · CORP\\svc\_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) changed the user account CORP\\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207).
 
 - Computer: DC01.corp.example. Kind: user, changed.
 - account control flags: 0x15 → 0x10 (meaning: turned off: USER\_ACCOUNT\_DISABLED, USER\_PASSWORD\_NOT\_REQUIRED) \[attribute: OldUacValue/NewUacValue\]
@@ -82,26 +82,26 @@ First change 2026-11-02T08:06:00Z, last 2026-11-06T13:40:00Z.
 - Related changes: C0001, C0002, C0004
 - Evidence: event 4738, record 48214 (dc01-events.jsonl, line 5)
 
-### C0004 · 08:06:01 UTC · CORP\\svc\_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) enabled the user account CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).
+### C0004 · 08:06:01 UTC · CORP\\svc\_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) enabled the user account CORP\\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207).
 
 - Computer: DC01.corp.example. Kind: user, enabled.
 - From where: Session 0x2a51c began at 2026-11-02 08:05:00 UTC as Network from 198.51.100.20 port 49731.
 - Related changes: C0001, C0002, C0003
 - Evidence: event 4722, record 48215 (dc01-events.jsonl, line 6)
 
-### C0005 · 08:06:30 UTC · CORP\\svc\_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) added CN=Dana Whitfield,OU=Staff,DC=corp,DC=example (named CORP\\dana.whitfield in other events; S-1-5-21-1111111111-2222222222-3333333333-1207) to the group CORP\\Staff-All (S-1-5-21-1111111111-2222222222-3333333333-2101).
+### C0005 · 08:06:30 UTC · CORP\\svc\_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) added CN=Avery Example,OU=Staff,DC=corp,DC=example (named CORP\\avery.example in other events; S-1-5-21-1111111111-2222222222-3333333333-1207) to the group CORP\\Staff-All (S-1-5-21-1111111111-2222222222-3333333333-2101).
 
 - Computer: DC01.corp.example. Kind: group, member-added.
 - From where: Session 0x2a51c began at 2026-11-02 08:05:00 UTC as Network from 198.51.100.20 port 49731.
 - Evidence: event 4728, record 48216 (dc01-events.jsonl, line 7)
 
-### C0006 · 11:12:00 UTC · CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131) attempted to reset the password of CORP\\omar.reyes (S-1-5-21-1111111111-2222222222-3333333333-1188).
+### C0006 · 11:12:00 UTC · CORP\\helpdesk.example (S-1-5-21-1111111111-2222222222-3333333333-1131) attempted to reset the password of CORP\\blake.sample (S-1-5-21-1111111111-2222222222-3333333333-1188).
 
 - Computer: DC01.corp.example. Kind: user, password-reset-attempted.
 - From where: Session 0x3b7f02 began at 2026-11-02 11:10:00 UTC as Network from 192.0.2.61 port 49731.
 - Evidence: event 4724, record 48218 (dc01-events.jsonl, line 9)
 
-### C0007 · 11:12:12 UTC · CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131) unlocked the user account CORP\\omar.reyes (S-1-5-21-1111111111-2222222222-3333333333-1188).
+### C0007 · 11:12:12 UTC · CORP\\helpdesk.example (S-1-5-21-1111111111-2222222222-3333333333-1131) unlocked the user account CORP\\blake.sample (S-1-5-21-1111111111-2222222222-3333333333-1188).
 
 - Computer: DC01.corp.example. Kind: user, unlocked.
 - From where: Session 0x3b7f02 began at 2026-11-02 11:10:00 UTC as Network from 192.0.2.61 port 49731.
@@ -109,20 +109,20 @@ First change 2026-11-02T08:06:00Z, last 2026-11-06T13:40:00Z.
 
 ## Changes on 2026-11-03 (UTC): 3
 
-### C0008 · 09:07:00 UTC · CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) changed the user object CN=Dana Whitfield,OU=Staff,DC=corp,DC=example.
+### C0008 · 09:07:00 UTC · CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104) changed the user object CN=Avery Example,OU=Staff,DC=corp,DC=example.
 
 - Computer: DC01.corp.example. Kind: directory, changed.
 - title: Analyst → Finance Systems Lead \[attribute: title\]
 - From where: Session 0x5f1a2 began at 2026-11-03 09:05:00 UTC as Network from 192.0.2.44 port 49731.
 - Evidence: event 5136, record 48221 (dc01-events.jsonl, line 12); event 5136, record 48222 (dc01-events.jsonl, line 13)
 
-### C0009 · 09:09:00 UTC · CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) added CN=Dana Whitfield,OU=Staff,DC=corp,DC=example (named CORP\\dana.whitfield in other events; S-1-5-21-1111111111-2222222222-3333333333-1207) to the group CORP\\Domain Admins (well-known: Domain Admins, if this is a domain SID; S-1-5-21-1111111111-2222222222-3333333333-512).
+### C0009 · 09:09:00 UTC · CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104) added CN=Avery Example,OU=Staff,DC=corp,DC=example (named CORP\\avery.example in other events; S-1-5-21-1111111111-2222222222-3333333333-1207) to the group CORP\\Domain Admins (well-known: Domain Admins, if this is a domain SID; S-1-5-21-1111111111-2222222222-3333333333-512).
 
 - Computer: DC01.corp.example. Kind: group, member-added.
 - From where: Session 0x5f1a2 began at 2026-11-03 09:05:00 UTC as Network from 192.0.2.44 port 49731.
 - Evidence: event 4728, record 48223 (dc01-events.jsonl, line 14)
 
-### C0010 · 09:09:24 UTC · CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) changed the user object CN=Dana Whitfield,OU=Staff,DC=corp,DC=example.
+### C0010 · 09:09:24 UTC · CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104) changed the user object CN=Avery Example,OU=Staff,DC=corp,DC=example.
 
 - Computer: DC01.corp.example. Kind: directory, changed.
 - userAccountControl: 512 → 66048 (meaning: turned on: DONT\_EXPIRE\_PASSWORD) \[attribute: userAccountControl\]
@@ -131,7 +131,7 @@ First change 2026-11-02T08:06:00Z, last 2026-11-06T13:40:00Z.
 
 ## Changes on 2026-11-04 (UTC): 1
 
-### C0011 · 08:10:00 UTC · CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) changed policy on DC01.corp.example (domain policy changed).
+### C0011 · 08:10:00 UTC · CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104) changed policy on DC01.corp.example (domain policy changed).
 
 - Computer: DC01.corp.example. Kind: policy, policy-changed.
 - policy that changed: set to Password Policy (earlier value not recorded) \[attribute: DomainPolicyChanged\]
@@ -142,7 +142,7 @@ First change 2026-11-02T08:06:00Z, last 2026-11-06T13:40:00Z.
 
 ## Changes on 2026-11-05 (UTC): 1
 
-### C0012 · 07:40:00 UTC · CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) removed CN=Dana Whitfield,OU=Staff,DC=corp,DC=example (named CORP\\dana.whitfield in other events; S-1-5-21-1111111111-2222222222-3333333333-1207) from the group CORP\\Domain Admins (well-known: Domain Admins, if this is a domain SID; S-1-5-21-1111111111-2222222222-3333333333-512).
+### C0012 · 07:40:00 UTC · CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104) removed CN=Avery Example,OU=Staff,DC=corp,DC=example (named CORP\\avery.example in other events; S-1-5-21-1111111111-2222222222-3333333333-1207) from the group CORP\\Domain Admins (well-known: Domain Admins, if this is a domain SID; S-1-5-21-1111111111-2222222222-3333333333-512).
 
 - Computer: DC01.corp.example. Kind: group, member-removed.
 - From where: Session 0x5f1a2 began at 2026-11-03 09:05:00 UTC as Network from 192.0.2.44 port 49731.
@@ -150,20 +150,20 @@ First change 2026-11-02T08:06:00Z, last 2026-11-06T13:40:00Z.
 
 ## Changes on 2026-11-06 (UTC): 3
 
-### C0013 · 08:00:00 UTC · CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) created the group CORP\\Temp-Vendors (S-1-5-21-1111111111-2222222222-3333333333-2240).
+### C0013 · 08:00:00 UTC · CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104) created the group CORP\\Temp-Vendors (S-1-5-21-1111111111-2222222222-3333333333-2240).
 
 - Computer: DC02.corp.example. Kind: group, created.
 - SAM account name: created as Temp-Vendors \[attribute: SamAccountName\]
 - From where: Session 0x77e310 began at 2026-11-06 07:50:00 UTC as RemoteInteractive from 192.0.2.44 port 49731, workstation name ADMIN-PC7.
 - Evidence: event 4727, record 9103 (dc02-events.jsonl, line 4)
 
-### C0014 · 08:01:00 UTC · CORP\\alice.admin (S-1-5-21-1111111111-2222222222-3333333333-1104) added S-1-5-21-1111111111-2222222222-3333333333-1188 (named CORP\\omar.reyes in other events) to the group CORP\\Temp-Vendors (S-1-5-21-1111111111-2222222222-3333333333-2240).
+### C0014 · 08:01:00 UTC · CORP\\admin.example (S-1-5-21-1111111111-2222222222-3333333333-1104) added S-1-5-21-1111111111-2222222222-3333333333-1188 (named CORP\\blake.sample in other events) to the group CORP\\Temp-Vendors (S-1-5-21-1111111111-2222222222-3333333333-2240).
 
 - Computer: DC02.corp.example. Kind: group, member-added.
 - From where: Session 0x77e310 began at 2026-11-06 07:50:00 UTC as RemoteInteractive from 192.0.2.44 port 49731, workstation name ADMIN-PC7.
 - Evidence: event 4728, record 9104 (dc02-events.jsonl, line 5)
 
-### C0015 · 13:40:00 UTC · CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131) deleted the user account CORP\\old.contractor (S-1-5-21-1111111111-2222222222-3333333333-1099).
+### C0015 · 13:40:00 UTC · CORP\\helpdesk.example (S-1-5-21-1111111111-2222222222-3333333333-1131) deleted the user account CORP\\old.contractor (S-1-5-21-1111111111-2222222222-3333333333-1099).
 
 - Computer: DC02.corp.example. Kind: user, deleted.
 - From where: The logon event for session 0x91c4d7 is not in the input, so where it came from is not known.
@@ -173,8 +173,8 @@ First change 2026-11-02T08:06:00Z, last 2026-11-06T13:40:00Z.
 
 | File | Format | Scope | Bytes | SHA-256 |
 | --- | --- | --- | --- | --- |
-| dc01-events.jsonl | collection | unknown | 13166 | eb388fee6542ded0cee9527c958ded99da375bde5df52b6204cdc8bfd69c2dc6 |
-| dc02-events.jsonl | collection | unknown | 3894 | b55ce353dd0e62eeff4bb9babdb50869d7e5d80db04882dbeb09b7ac4eb7f2df |
+| dc01-events.jsonl | collection | unknown | 13184 | eba9fa18f971f192ee5e5d05c720f886045a91366dc07ffba0b30431f523327b |
+| dc02-events.jsonl | collection | unknown | 3906 | fa92b748e36a5fcfe8863b8fe96d4d5f0bb4c77143bf71bd668ab594eadc9a4f |
 
 ## Limitations
 
