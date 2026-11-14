@@ -8,7 +8,7 @@ import unicodedata
 
 import pytest
 
-from faithful_toledot.outputs.safety import terminal, visible
+from faithful_toledot.outputs.safety import csv_cell, neutralize_formula, terminal, visible
 
 BMP_INVISIBLE = [
     0x00, 0x08, 0x0B, 0x0C, 0x1B, 0x7F, 0x85, 0x9F,  # controls
@@ -45,7 +45,6 @@ ORDINARY = [
     chr(0x65E5) + chr(0x672C),  # CJK
     chr(0x41F) + chr(0x440),  # Cyrillic
     chr(0x1F600),  # an emoji without joiners
-    "a" + chr(0xA0) + "b",  # no-break space is visible spacing
 ]
 
 
@@ -70,3 +69,36 @@ def test_escapes_are_unambiguous_next_to_hex_digits() -> None:
 
 def test_terminal_text_cannot_return_the_cursor_or_hide_in_tabs() -> None:
     assert terminal("evil\rtoledot: 0 problems\tx\nnext") == "evil\\rtoledot: 0 problems\\tx\nnext"
+
+
+@pytest.mark.parametrize(
+    "code",
+    [0x00A0, 0x1680, 0x2000, 0x2003, 0x200A, 0x202F, 0x205F, 0x2800, 0x3000],
+)
+def test_look_alike_spaces_are_escaped(code: int) -> None:
+    assert visible(f"admin{chr(code)}") == f"admin\\u{code:04x}"
+
+
+def test_every_space_separator_except_the_ascii_space_is_escaped() -> None:
+    spaces = [chr(code) for code in range(0x110000) if unicodedata.category(chr(code)) == "Zs"]
+    assert " " in spaces
+    for char in spaces:
+        assert (visible(char) == char) is (char == " ")
+
+
+def test_a_look_alike_space_cannot_hide_a_formula() -> None:
+    assert csv_cell("\u00a0=1+1") == "\\u00a0=1+1"
+    assert not csv_cell("\u00a0=1+1").startswith(("=", "+", "-", "@"))
+
+
+@pytest.mark.parametrize("value", ["-1", "-42", "-0.5", "-1000000"])
+def test_a_plain_negative_number_stays_a_number(value: str) -> None:
+    assert neutralize_formula(value) == value
+    assert csv_cell(value) == value
+
+
+@pytest.mark.parametrize(
+    "value", ["-1+1", "-cmd|x", "--1", "-", "-1e5", "-1,5", "-\u0661", "- 1", "-1\n", "=-1"]
+)
+def test_anything_else_starting_with_a_minus_is_still_neutralized(value: str) -> None:
+    assert neutralize_formula(value) == "'" + value

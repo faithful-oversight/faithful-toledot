@@ -25,12 +25,17 @@ Includes the full-width forms, which some spreadsheet programs also accept.
 
 _CANDIDATE = re.compile("[^\x20-\x7e\t\n\r]")
 """Every character that might need escaping; printable ASCII, tab, and line breaks never do."""
-_HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp"})
+_HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp", "Zs"})
 """Controls, format characters (zero width, bidirectional, joiners, soft hyphen, BOM),
-lone surrogates, and the line and paragraph separators."""
-_FILLERS = frozenset({0x034F, 0x115F, 0x1160, 0x180E, 0x3164, 0xFFA0})
+lone surrogates, the line and paragraph separators, and every space other than the
+ASCII space (no-break, en, em, thin, ideographic, and the rest of category Zs), which
+would otherwise make two different values look the same."""
+_FILLERS = frozenset({0x034F, 0x115F, 0x1160, 0x180E, 0x2800, 0x3164, 0xFFA0})
 """Characters that draw nothing but are not in the categories above (U+180E was one
-until Unicode 6.3, so it is listed in case the running Unicode data is older)."""
+until Unicode 6.3, so it is listed in case the running Unicode data is older; U+2800
+is the blank braille pattern)."""
+_PLAIN_NEGATIVE = re.compile(r"-[0-9]+(\.[0-9]+)?")
+"""A negative number in ASCII digits, which a spreadsheet reads as a number."""
 _RANGES = ((0xE0000, 0xE007F), (0xFE00, 0xFE0F), (0xE0100, 0xE01EF))
 """The tag block, and the variation selectors, which change how a neighbour is drawn."""
 _BMP_MAX = 0xFFFF
@@ -71,7 +76,11 @@ def neutralize_formula(value: str) -> str:
 
     A value that starts with a formula trigger gets a leading apostrophe, which
     spreadsheets display as plain text. Applying this twice changes nothing more.
+    A plain negative number such as ``-1`` or ``-0.5`` is left alone: it is a
+    number, not a formula, and a tool reading the file should get the number.
     """
+    if _PLAIN_NEGATIVE.fullmatch(value):
+        return value
     if value.startswith(FORMULA_TRIGGERS):
         return "'" + value
     return value
