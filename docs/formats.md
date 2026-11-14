@@ -237,7 +237,7 @@ Each event is one line with exactly these properties:
 | `system` | Other `System` fields, by name, as text: `Keywords`, `Level`, `Task`, `Opcode`, `ActivityID`, `ProcessID`, `ThreadID`, and `UserID`. |
 | `data` | The `EventData` (or `UserData`) fields, in order, each exactly as the event's XML holds it, as text. `%%1794` stays `%%1794` and a SID stays a SID. |
 
-A repeated field name keeps the first under its name and stores later ones as `name#2`, `name#3`.
+A repeated field name keeps the first under its name and stores later ones as `name#2`, `name#3`. A `Data` element with no name is called `param` followed by its position among all `Data` elements of the event, named or not (`param2` is the second one). The native, XML, and collection readers all number them this way. The collector does not copy the `RelatedActivityID` attribute that the XML and native readers keep in `system`; toledot does not use it.
 
 ### Trailer
 

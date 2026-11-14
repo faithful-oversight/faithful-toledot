@@ -23,6 +23,7 @@ from faithful_toledot.errors import InputError
 from faithful_toledot.events import Event, Problem, ReadOptions
 from faithful_toledot.formats import evtx
 from faithful_toledot.formats.evtx import read_evtx
+from faithful_toledot.formats.xml import read_xml
 from tests import evtx_builder as b
 
 if TYPE_CHECKING:
@@ -139,7 +140,7 @@ def test_embedded_event_data_reads_like_inline_event_data(tmp_path: Path) -> Non
     pairs = [("A", "1"), (None, "x"), ("B", "2")]
     inline = one_event(tmp_path, b.security_event(1, data=pairs, mode="inline"))
     embedded = one_event(tmp_path, b.security_event(1, data=pairs, mode="embedded"))
-    assert dict(inline.data) == dict(embedded.data) == {"A": "1", "param1": "x", "B": "2"}
+    assert dict(inline.data) == dict(embedded.data) == {"A": "1", "param2": "x", "B": "2"}
 
 
 def test_event_without_event_data_has_empty_data(tmp_path: Path) -> None:
@@ -167,13 +168,34 @@ def test_unnamed_and_duplicate_data_names(tmp_path: Path) -> None:
     )
     assert list(event.data.items()) == [
         ("X", "1"),
-        ("param1", "a"),
+        ("param2", "a"),
         ("X#2", "2"),
-        ("param2", "b"),
+        ("param4", "b"),
         ("X#3", "3"),
-        ("param1#2", "c"),
+        ("param1", "c"),
         ("X#2#2", "d"),
     ]
+
+
+def test_unnamed_data_are_numbered_by_position_as_the_xml_reader_does(tmp_path: Path) -> None:
+    """Position among all Data, named or not, so one event reads the same from either format."""
+    event = one_event(
+        tmp_path, data_event(("a", "1"), (None, "2"), ("b", "3"), (None, "4"), ("", "5"))
+    )
+    xml = (
+        "<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System>"
+        "<Provider Name='Microsoft-Windows-Security-Auditing'/><EventID>4720</EventID>"
+        "<TimeCreated SystemTime='2026-11-03T14:00:00.0000000Z'/><EventRecordID>1</EventRecordID>"
+        "<Channel>Security</Channel><Computer>dc01.corp.example</Computer></System>"
+        "<EventData><Data Name='a'>1</Data><Data>2</Data><Data Name='b'>3</Data><Data>4</Data>"
+        "<Data Name=''>5</Data></EventData></Event>"
+    )
+    path = tmp_path / "same.xml"
+    path.write_text(xml, encoding="utf-8")
+    (from_xml,) = list(read_xml(path, ReadOptions()))
+    assert isinstance(from_xml, Event)
+    assert list(event.data.items()) == list(from_xml.data.items())
+    assert list(event.data) == ["a", "param2", "b", "param4", "param5"]
 
 
 def test_many_records_share_names_and_templates(tmp_path: Path) -> None:
