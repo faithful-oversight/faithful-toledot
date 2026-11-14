@@ -448,3 +448,16 @@ def test_an_unreadable_input_is_named_with_the_path_the_user_gave(
     err = capsys.readouterr().err
     assert str(missing) in err
     assert "cannot read" in err
+
+
+def test_the_secret_help_names_the_vault_form_the_docs_and_errors_use(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["collect", "--help"]) == ExitCode.OK
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "vault:MOUNT/PATH#FIELD" in help_text
+
+
+def test_the_events_command_explains_the_catalog(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["events", "--help"]) == ExitCode.OK
+    assert "catalog" in " ".join(capsys.readouterr().out.split())

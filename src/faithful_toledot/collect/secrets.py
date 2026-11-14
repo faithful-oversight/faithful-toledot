@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, quote_plus
 
+from faithful_toledot.collect import names
 from faithful_toledot.errors import CollectionError
 
 PROVIDERS = ("env", "file", "keyring", "vault", "aws", "azure")
@@ -118,7 +119,7 @@ def _need(module: str, extra: str) -> Any:
     except ImportError as exc:
         msg = (
             f"this secret provider needs {module}; "
-            f'install it with: pip install "faithful-toledot[{extra}]"'
+            f"install it with: {names.install_hint('live', extra)}"
         )
         raise CollectionError(msg) from exc
 

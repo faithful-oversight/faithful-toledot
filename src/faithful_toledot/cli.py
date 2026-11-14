@@ -122,7 +122,13 @@ def build_parser() -> argparse.ArgumentParser:
     report.set_defaults(run=_report)
 
     listing = commands.add_parser(
-        "events", help="list the events toledot understands", description="List the catalog."
+        "events",
+        help="list the events toledot understands",
+        description=(
+            "List the Windows events toledot understands, its catalog, one per line, with "
+            "the log, the event ID, the kind of change, and a title. Events marked "
+            "'partly inferred' have details Microsoft's documentation does not confirm."
+        ),
     )
     listing.set_defaults(run=_events)
 

@@ -31,6 +31,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from faithful_toledot.collect import names
 from faithful_toledot.collect.secrets import redact, remember
 from faithful_toledot.errors import CollectionError
 from faithful_toledot.formats import bundle
@@ -47,7 +48,7 @@ POLL_SECONDS = 5
 """How long one wait for output lasts before toledot checks the idle timeout."""
 _END = b'{"end":'
 _END_KEY = b'"end"'
-_INSTALL = 'remote collection needs pypsrp; install it with: pip install "faithful-toledot[live]"'
+_INSTALL = f"remote collection needs pypsrp; install it with: {names.install_hint('live')}"
 
 
 @dataclass(frozen=True)

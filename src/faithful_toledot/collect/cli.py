@@ -41,7 +41,7 @@ def add_arguments(commands: Any) -> None:
     collect.add_argument(
         "--secret", metavar="REF",
         help="where the password is: env:NAME, file:PATH, keyring:SERVICE/USER, "
-        "vault:PATH#FIELD, aws:SECRET_ID[#FIELD], or azure:VAULT/NAME",
+        "vault:MOUNT/PATH#FIELD, aws:SECRET_ID[#FIELD], or azure:VAULT/NAME",
     )  # fmt: skip
     collect.add_argument("--transport", choices=remote.TRANSPORTS, default="https")
     collect.add_argument("--port", type=_port, help="default: 5986 for https, 5985 for http")
