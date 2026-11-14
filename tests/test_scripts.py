@@ -125,7 +125,7 @@ def _deps(
     tmp_path: Path, shared_tmp: Path, name: str = "uv", **extra: str
 ) -> tuple[int, list[str]]:
     """Run the deps stage with a fake uv. Return the exit code and the audit file paths used."""
-    bin_dir = tmp_path / "bin"
+    bin_dir = tmp_path / f"bin-{name}"
     bin_dir.mkdir(exist_ok=True)
     uv = bin_dir / "uv"
     uv.write_text(FAKE_UV, encoding="utf-8")
