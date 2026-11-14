@@ -390,6 +390,10 @@ def _learn_names(state: _State, event: Event, info: EventInfo) -> None:
         name = _text(event, info, f"{prefix}_name")
         if sid is None or name is None or not sid.startswith("S-1-"):
             continue
+        if f"{prefix}_domain" not in info.roles:
+            # No domain is recorded (event 4740 holds a computer name where the domain
+            # would be), so a bare name could disagree with the real one for the same SID.
+            continue
         domain = _text(event, info, f"{prefix}_domain")
         names = state.names.setdefault(sid, set())
         names.add(f"{domain}\\{name}" if domain else name)
@@ -812,6 +816,11 @@ def _details(state: _State, event: Event, info: EventInfo) -> list[Detail]:
             for right in event.data.get(privileges, "").split()
             if right not in _EMPTY
         ]
+    caller = info.roles.get("workstation")
+    value = event.data.get(caller) if caller and info.category != "logon" else None
+    if value is not None and value not in _EMPTY:
+        label = "caller computer" if info.action == "locked" else "workstation"
+        out.append(Detail(label, "info", new=value, attribute=caller))
     out += _paired_and_other(state, event, used, consumed)
     return out
 

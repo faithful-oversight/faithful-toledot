@@ -121,6 +121,41 @@ def test_a_sid_is_named_from_other_events_only_when_they_agree() -> None:
     assert one.changes[1].target.known_as is None
 
 
+def _lockout(seconds: float = 9) -> Event:
+    """Event 4740 as Windows writes it: TargetDomainName holds the caller computer's name."""
+    data = {
+        "TargetUserName": "bob",
+        "TargetDomainName": "WKS01",
+        "TargetSid": BOB,
+        "SubjectUserSid": "S-1-5-18",
+        "SubjectUserName": "DC01$",
+        "SubjectDomainName": "CORP",
+        "SubjectLogonId": "0x3e7",
+    }
+    return event(4740, data, seconds=seconds)
+
+
+def test_a_lockout_shows_the_caller_computer_not_a_domain_for_the_account() -> None:
+    (change,) = account(_lockout()).changes
+    assert change.action == "locked"
+    assert change.target.domain is None
+    assert change.target.name == "bob"
+    assert "WKS01\\bob" not in change.sentence
+    assert "(caller computer WKS01)" in change.sentence
+    assert "recorded that the user account bob" in change.sentence
+    assert "locked out" in change.sentence
+    assert [(d.label, d.new) for d in change.details] == [("caller computer", "WKS01")]
+
+
+def test_a_lockout_does_not_change_the_name_other_events_give_the_sid() -> None:
+    renamed = {**SUBJECT, "TargetSid": BOB, "TargetUserName": "bob", "TargetDomainName": "CORP"}
+    result = account(member_added(MemberName="-"), event(4725, renamed, seconds=5), _lockout())
+    member = result.changes[0].member
+    assert member is not None
+    assert member.known_as == "CORP\\bob"
+    assert "named CORP\\bob in other events" in result.changes[0].sentence
+
+
 # --- origin ---------------------------------------------------------------------------------
 
 

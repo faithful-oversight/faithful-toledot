@@ -39,7 +39,7 @@ VERBS = {
     "member-removed": "removed {member} from the group {target}",
     "password-change-attempted": "attempted to change the password of {target}",
     "password-reset-attempted": "attempted to reset the password of {target}",
-    "locked": "locked out the {noun} {target}",
+    "locked": "recorded that the {noun} {target} was locked out{caller}",
     "unlocked": "unlocked the {noun} {target}",
     "sid-history-added": "added SID history to the {noun} {target}",
     "sid-history-failed": "attempted, unsuccessfully, to add SID history to the {noun} {target}",
@@ -132,7 +132,9 @@ def sentence(change: Change) -> str:
     noun = _NOUNS.get(change.category, "object")
     if change.category == "directory" and change.target.object_class:
         noun = f"{change.target.object_class} object"
+    caller = next((d.new for d in change.details if d.label == "caller computer" and d.new), None)
     text = template.format(
+        caller=f" (caller computer {caller})" if caller else "",
         noun=noun,
         target=party(change.target, nothing=f"a {noun} the event does not name"),
         member=party(change.member),

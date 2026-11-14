@@ -472,7 +472,7 @@ action = "locked"
 source = "https://learn.microsoft.com/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4740"
 confirmed = false
 labels_complete = false
-notes = "Field list is from the sample XML. INFERENCE: the descriptions document a 'Caller Computer Name' that has no element in the sample XML, and the sample's TargetDomainName holds a computer name, so the workstation role and that label map to TargetDomainName. Microsoft does not state the mapping."
+notes = "Field list is from the sample XML. INFERENCE: the descriptions document a 'Caller Computer Name' that has no element in the sample XML, and the sample's TargetDomainName holds a computer name, so the workstation role and that label map to TargetDomainName. Microsoft does not state the mapping. Because that field is a computer name and not the account's domain, this event has no target_domain role: the account is shown without a domain, and its name is not learned as a name for the SID. The caller computer is shown as its own detail. The subject is the computer that recorded the lockout (usually the domain controller's own account), not the person or program that caused it."
 
 [[event.version]]
 version = 0
@@ -484,7 +484,6 @@ actor_name = "SubjectUserName"
 actor_domain = "SubjectDomainName"
 actor_logon_id = "SubjectLogonId"
 target_name = "TargetUserName"
-target_domain = "TargetDomainName"
 target_sid = "TargetSid"
 workstation = "TargetDomainName"
 

@@ -481,14 +481,7 @@ def _parse_message(message: str, labels: Mapping[str, str] | None) -> dict[str, 
             if body.endswith(":"):
                 section = body[:-1].strip()
                 field_indent = 0
-                if labels is not None and section in sections:
-                    msg = (
-                        f"the message is ambiguous: the section {section!r} appears more "
-                        "than once, so the text may have been forged by a line break inside "
-                        "a value; no field of it is used"
-                    )
-                    raise _RowError(msg)
-                sections.add(section)
+                _note_section(sections, section, labels)
             continue  # a section header, or free text
         if open_field and indent > field_indent:
             fields[-1][1].append(body)
@@ -510,9 +503,19 @@ def _parse_message(message: str, labels: Mapping[str, str] | None) -> dict[str, 
     if len(fields) > MAX_FIELDS:
         msg = f"the message has more than {MAX_FIELDS} fields"
         raise _RowError(msg)
-    if labels is not None:
-        _refuse_repeated_labels(fields, labels)
     return _name_fields(fields, labels)
+
+
+def _note_section(sections: set[str], section: str, labels: Mapping[str, str] | None) -> None:
+    """Record a section header; a mapped event may not repeat one (see below)."""
+    if labels is not None and section in sections:
+        msg = (
+            f"the message is ambiguous: the section {section!r} appears more than once, so "
+            "the text may have been forged by a line break inside a value; no field of it "
+            "is used"
+        )
+        raise _RowError(msg)
+    sections.add(section)
 
 
 def _refuse_repeated_labels(fields: list[tuple[str, list[str]]], labels: Mapping[str, str]) -> None:
@@ -539,6 +542,8 @@ def _name_fields(
     fields: list[tuple[str, list[str]]], labels: Mapping[str, str] | None
 ) -> dict[str, str]:
     """Join continuation lines and name each field through ``labels`` if it has a mapping."""
+    if labels is not None:
+        _refuse_repeated_labels(fields, labels)
     data: dict[str, str] = {}
     counts: dict[str, int] = {}
     for key, parts in fields:
