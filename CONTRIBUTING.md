@@ -18,6 +18,10 @@ Signed-off-by: Your Name <you@example.com>
 
 The name and email must match the commit author. Continuous integration rejects commits without a valid sign-off. Merge commits are not checked, because pull requests are squash-merged and merge commits never reach `main`. Resolve conflicts by rebasing rather than merging when you can.
 
+Dependabot's own commits are exempt, but only on pull requests that Dependabot opened. A commit that merely names Dependabot as its author is checked like any other.
+
+Because pull requests are squash-merged, the check runs on the commits of the pull request itself. Their sign-offs stay in the pull request history; the single squashed commit on `main` is not checked again.
+
 ## Set up
 
 Requirements:

@@ -63,11 +63,11 @@ def repo(tmp_path: Path) -> Path:
     return path
 
 
-def _dco(repo: Path, base: str, head: str) -> subprocess.CompletedProcess[str]:
+def _dco(repo: Path, base: str, head: str, **extra: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # noqa: S603 - fixed script path, no shell
         ["bash", str(DCO), base, head],  # noqa: S607 - bash is looked up on PATH on purpose
         cwd=repo,
-        env=_env(repo.parent),
+        env=_env(repo.parent, **extra),
         check=False,
         capture_output=True,
         text=True,
@@ -111,6 +111,47 @@ def test_dco_says_so_when_there_is_nothing_to_check(repo: Path) -> None:
     result = _dco(repo, head, head)
     assert result.returncode == 0
     assert "no commits to check" in result.stdout
+
+
+DEPENDABOT = "dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>"
+
+
+def _unsigned_commit(repo: Path, author: str | None = None) -> str:
+    """Add an unsigned commit, optionally with a chosen author, and return the base before it."""
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "file.txt").write_text("change\n", encoding="utf-8")
+    extra = ["--author", author] if author else []
+    _git(repo, "commit", "-q", "-a", *extra, "-m", "unsigned")
+    return base
+
+
+@needs_bash
+@pytest.mark.parametrize("pr_author", [None, "", "someone-else", "dependabot", "dependabot[bot]x"])
+def test_dco_does_not_exempt_a_forged_dependabot_author(repo: Path, pr_author: str | None) -> None:
+    """A commit author is only text; without Dependabot's own pull request it earns no exemption."""
+    base = _unsigned_commit(repo, DEPENDABOT)
+    extra = {} if pr_author is None else {"PR_AUTHOR": pr_author}
+    result = _dco(repo, base, "HEAD", **extra)
+    assert result.returncode == 1
+    assert "no 'Signed-off-by" in result.stdout
+    assert "every commit is signed off" not in result.stdout
+
+
+@needs_bash
+def test_dco_exempts_dependabot_on_its_own_pull_request(repo: Path) -> None:
+    base = _unsigned_commit(repo, DEPENDABOT)
+    result = _dco(repo, base, "HEAD", PR_AUTHOR="dependabot[bot]")
+    assert result.returncode == 0
+    assert "every commit is signed off" in result.stdout
+
+
+@needs_bash
+def test_dco_still_checks_other_authors_on_a_dependabot_pull_request(repo: Path) -> None:
+    """The exemption is for Dependabot's own commits, not for the whole pull request."""
+    base = _unsigned_commit(repo)
+    result = _dco(repo, base, "HEAD", PR_AUTHOR="dependabot[bot]")
+    assert result.returncode == 1
+    assert "no 'Signed-off-by: Test Author <author@example.com>'" in result.stdout
 
 
 FAKE_UV = """#!/usr/bin/env bash

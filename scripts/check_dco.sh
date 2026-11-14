@@ -5,12 +5,21 @@
 # Verify that every commit in a range carries a Developer Certificate of
 # Origin sign-off matching its author.
 #
-# Usage: scripts/check_dco.sh <base-sha> <head-sha>
+# Dependabot's commits are generated and cannot be signed off, so they are
+# exempt, but only on a pull request that Dependabot itself opened. The commit
+# author is text any contributor can set, so it is never enough on its own:
+# set PR_AUTHOR to the login of the pull request's author
+# (github.event.pull_request.user.login). Unset, empty, or any other value
+# means there is no exemption at all.
+#
+# Usage: PR_AUTHOR=<login> scripts/check_dco.sh <base-sha> <head-sha>
 
 set -euo pipefail
 
 base="${1:?base commit required}"
 head="${2:?head commit required}"
+pr_author="${PR_AUTHOR:-}"
+dependabot_author="dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>"
 status=0
 
 # List the range first. An error inside a process substitution would not stop
@@ -27,8 +36,10 @@ fi
 
 while read -r sha; do
   author="$(git show -s --format='%an <%ae>' "$sha")"
-  # Dependabot cannot sign off; its commits are generated, not authored.
-  if [[ "$author" == "dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>" ]]; then
+  # Dependabot cannot sign off; its commits are generated, not authored. The
+  # exemption needs the pull request itself to be Dependabot's, because anyone
+  # can write that author on a commit of their own.
+  if [[ "$pr_author" == "dependabot[bot]" && "$author" == "$dependabot_author" ]]; then
     continue
   fi
   if ! git show -s --format='%(trailers:key=Signed-off-by,valueonly)' "$sha" | grep -qxF "$author"; then
