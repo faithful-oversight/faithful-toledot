@@ -9,23 +9,23 @@
   "files": [
     {
       "name": "toledot-report.json",
-      "size": 41104,
-      "sha256": "54c83380aee7ac2a9fcf69a3426370d57c0a383f1fad87571454e59d2b845643"
+      "size": 41134,
+      "sha256": "939eda90ea0355be0ce1c95336f985ea7889c4a1ebb77ae4ac9db55c14700ee7"
     },
     {
       "name": "toledot-report.md",
-      "size": 12758,
-      "sha256": "928bfaebe74b27971b59caeab8ca30467aa96061b17e1d2b03632217713ec703"
+      "size": 12788,
+      "sha256": "ee15fcd03f7821e9b6aa3555782f3fc44e8714e6c1c11bebf05a58b6e90e95eb"
     },
     {
       "name": "toledot-report.html",
-      "size": 26760,
-      "sha256": "92ae093ff12888eb97abe616b3d30bfc4f17e3a8db2ea686dbb73419b051aa9f"
+      "size": 26790,
+      "sha256": "b3607ac3582fb1c0afe4f8a6c86cdd6cbfb2e5bde2f1c93a2d66fede76e4d44a"
     },
     {
       "name": "toledot-changes.csv",
-      "size": 10720,
-      "sha256": "40bb84539ed5e6b1752446ef1ed46260a0d7950c0c852f15582d6d31f16f7568"
+      "size": 10740,
+      "sha256": "6feea8423f956853ea92338730a4276df06d493d026c875d4617ab0fc94f3a97"
     }
   ],
   "inputs": [

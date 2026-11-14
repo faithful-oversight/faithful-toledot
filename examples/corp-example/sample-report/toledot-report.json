@@ -53,7 +53,7 @@
       "changed": 3,
       "member-added": 3,
       "created": 2,
-      "password-reset": 2,
+      "password-reset-attempted": 2,
       "deleted": 1,
       "enabled": 1,
       "member-removed": 1,
@@ -282,7 +282,7 @@
       "time": "2026-11-02T08:06:00.6Z",
       "computer": "DC01.corp.example",
       "category": "user",
-      "action": "password-reset",
+      "action": "password-reset-attempted",
       "title": "Password reset attempted",
       "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) attempted to reset the password of CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).",
       "actor": {
@@ -553,7 +553,7 @@
       "time": "2026-11-02T11:12:00Z",
       "computer": "DC01.corp.example",
       "category": "user",
-      "action": "password-reset",
+      "action": "password-reset-attempted",
       "title": "Password reset attempted",
       "sentence": "CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131) attempted to reset the password of CORP\\omar.reyes (S-1-5-21-1111111111-2222222222-3333333333-1188).",
       "actor": {

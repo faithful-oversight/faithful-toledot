@@ -77,6 +77,47 @@ def test_every_scope_event_is_present(cat: Catalog, channel: str, event_id: int)
     assert (channel, event_id) in cat.wanted_ids
 
 
+# Microsoft's published description of each catalog event whose title says it failed or was
+# attempted. 4766 is a failure event only. 4723, 4724 and 4794 are logged for success and failure
+# and the event does not say which, so they may only be narrated as attempts. 4648 is context
+# for a logon and is never narrated as a change.
+_ATTEMPT_EVENTS = {4723, 4724, 4794}
+_FAILURE_EVENTS = {4766}
+_CONTEXT_ONLY = {4648}
+
+
+def test_every_failed_or_attempted_event_is_worded_as_an_attempt(cat: Catalog) -> None:
+    from faithful_toledot import narrative
+
+    seen = set()
+    for entry in cat.events:
+        title = entry.title.lower()
+        if "failed" not in title and "attempt" not in title:
+            continue
+        seen.add(entry.id)
+        if entry.id in _CONTEXT_ONLY:
+            assert entry.category == "logon", entry.id
+            continue
+        template = narrative._VERBS[entry.action]
+        assert "attempted" in template, (entry.id, entry.action, template)
+        assert "attempted" in entry.action or entry.action.endswith("-failed"), entry.id
+        if "failed" in title:
+            assert entry.action.endswith("-failed"), entry.id
+            assert "unsuccessfully" in template, entry.id
+    # A new event whose title says failed or attempt must be reviewed against Microsoft's page
+    # and added to one of the sets above.
+    assert seen == _ATTEMPT_EVENTS | _FAILURE_EVENTS | _CONTEXT_ONLY
+
+
+def test_a_failure_event_never_shares_an_action_with_its_success_event(cat: Catalog) -> None:
+    by_id = {entry.id: entry for entry in cat.events if entry.channel == "Security"}
+    assert by_id[4766].action == "sid-history-failed"
+    assert by_id[4765].action == "sid-history-added"
+    for event_id in _FAILURE_EVENTS:
+        sharers = [e for e in cat.events if e.action == by_id[event_id].action]
+        assert sharers == [by_id[event_id]]
+
+
 def test_wanted_ids_is_exactly_the_catalog(cat: Catalog) -> None:
     assert cat.wanted_ids == {(e.channel, e.id) for e in cat.events}
     assert len(cat.wanted_ids) == len(cat.events)

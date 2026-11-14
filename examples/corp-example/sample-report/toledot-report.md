@@ -37,7 +37,7 @@ First change 2026-11-02T08:06:00Z, last 2026-11-06T13:40:00Z.
 | changed | 3 |
 | member-added | 3 |
 | created | 2 |
-| password-reset | 2 |
+| password-reset-attempted | 2 |
 | deleted | 1 |
 | enabled | 1 |
 | member-removed | 1 |
@@ -69,7 +69,7 @@ First change 2026-11-02T08:06:00Z, last 2026-11-06T13:40:00Z.
 
 ### C0002 · 08:06:00 UTC · CORP\\svc\_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) attempted to reset the password of CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).
 
-- Computer: DC01.corp.example. Kind: user, password-reset.
+- Computer: DC01.corp.example. Kind: user, password-reset-attempted.
 - From where: Session 0x2a51c began at 2026-11-02 08:05:00 UTC as Network from 198.51.100.20 port 49731.
 - Related changes: C0001, C0003, C0004
 - Evidence: event 4724, record 48213 (dc01-events.jsonl, line 4)
@@ -97,7 +97,7 @@ First change 2026-11-02T08:06:00Z, last 2026-11-06T13:40:00Z.
 
 ### C0006 · 11:12:00 UTC · CORP\\helpdesk.sam (S-1-5-21-1111111111-2222222222-3333333333-1131) attempted to reset the password of CORP\\omar.reyes (S-1-5-21-1111111111-2222222222-3333333333-1188).
 
-- Computer: DC01.corp.example. Kind: user, password-reset.
+- Computer: DC01.corp.example. Kind: user, password-reset-attempted.
 - From where: Session 0x3b7f02 began at 2026-11-02 11:10:00 UTC as Network from 192.0.2.61 port 49731.
 - Evidence: event 4724, record 48218 (dc01-events.jsonl, line 9)
 

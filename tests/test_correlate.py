@@ -75,6 +75,27 @@ def test_a_membership_change_names_actor_member_group_and_origin() -> None:
     assert result.complete
 
 
+def test_a_failed_sid_history_attempt_is_never_narrated_or_counted_as_an_add() -> None:
+    data = {
+        "SourceUserName": "-",
+        "TargetUserName": "victim",
+        "TargetDomainName": "CORP",
+        "TargetSid": BOB,
+        "SubjectUserName": "alice",
+        "SubjectDomainName": "CORP",
+        "SubjectLogonId": SESSION,
+        "PrivilegeList": "-",
+    }
+    result = account(event(4766, data), event(4765, {**data, "SidList": "-"}, seconds=5))
+    failed, added = result.changes
+    assert failed.action == "sid-history-failed"
+    assert "attempted, unsuccessfully, to add SID history" in failed.sentence
+    assert "added SID history" not in failed.sentence
+    assert added.action == "sid-history-added"
+    assert "attempted" not in added.sentence
+    assert added.sentence.count("added SID history") == 1
+
+
 def test_placeholders_are_absent_not_names() -> None:
     result = account(member_added(MemberName="-", SubjectUserName="-", SubjectDomainName="-"))
     (change,) = result.changes
