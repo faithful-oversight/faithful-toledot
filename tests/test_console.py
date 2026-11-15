@@ -40,7 +40,7 @@ def test_a_stream_that_can_be_reconfigured_escapes_what_it_cannot_encode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     raw = io.BytesIO()
-    stream = io.TextIOWrapper(raw, encoding="ascii")
+    stream = io.TextIOWrapper(raw, encoding="ascii", newline="\n")
     monkeypatch.setattr(sys, "stdout", stream)
     console.harden_streams()
     console.say("na\u00efve")

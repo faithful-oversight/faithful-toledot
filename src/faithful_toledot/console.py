@@ -62,8 +62,9 @@ def say(text: str, *, error: bool = False, end: str = "\n") -> None:
     try:
         sys.stdout.write(text + end)
         sys.stdout.flush()
-    except BrokenPipeError:
+    except (OSError, ValueError):
+        # BrokenPipeError on POSIX; Windows reports a closed pipe as OSError EINVAL. Either
+        # way stdout is replaced, so the flush at interpreter shutdown cannot fail again.
         stop_stdout()
-    except (OSError, ValueError, UnicodeError):
-        # A stream that is closed, full or cannot take the text: stop printing quietly.
+    except UnicodeError:
         _state["stdout_closed"] = True

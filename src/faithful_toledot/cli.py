@@ -246,8 +246,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     except SystemExit as exc:
         code = exc.code
         return int(code) if isinstance(code, int) else int(ExitCode.USAGE)
-    except BrokenPipeError:
-        stop_stdout()  # --help or --version printed into a closed pipe
+    except OSError:
+        stop_stdout()  # --help or --version printed into a closed pipe (EINVAL on Windows)
         return int(ExitCode.OK)
     if not getattr(args, "run", None):
         parser.print_help(sys.stderr)
