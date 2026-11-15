@@ -50,6 +50,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A release now stops with a clear message when the `FO_PUBLIC` setting disagrees with whether the repository is public, so a public release cannot skip provenance and PyPI by mistake.
 - Release jobs check the built files against `SHA256SUMS` before attesting, uploading or publishing.
 - uv and the Vale style packages used in CI are pinned to exact versions, and the style packages are checked against a SHA-256 before use.
+- Khmer and Mongolian marks that draw nothing (U+17B4, U+17B5, U+180B to U+180D, U+180F) now print as visible escapes, and an issue reference such as `#123` from the input is no longer turned into a link in the Markdown report.
 
 ## [0.1.0] - 2026-11-11
 
