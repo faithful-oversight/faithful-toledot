@@ -11,7 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Fixed
 
 - A failed SID history attempt (event 4766) is no longer worded or counted as SID history added. It has its own action, `sid-history-failed`, and reads "attempted, unsuccessfully, to add SID history".
-- Password change, password reset, and DSRM password events are counted as attempts (`password-change-attempted`, `password-reset-attempted`), because Windows logs them for success and failure alike.
+- Password change, password reset, and DSRM password events (4723, 4724, 4794) are worded and counted as changed, reset, or an unsuccessful attempt by the event's Audit Success or Audit Failure keyword bit, in every format that carries it, and as an attempt only when the bit is absent or unreadable.
 - A lockout (event 4740) now shows the caller computer as its own detail and no longer shows it as the account's domain, and it no longer changes the name other events give the same account.
 - A message-only CSV row whose labels or sections repeat, which a directory value with line breaks can cause, is now a problem instead of letting the forged text win.
 - A collection that lists more than 1000 gaps keeps its gaps, still checks the event count and hash, and `toledot collect` publishes it instead of discarding the transfer. The PowerShell collector now caps the list itself.

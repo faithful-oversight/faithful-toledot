@@ -194,7 +194,7 @@ action = "password-change-attempted"
 source = "https://learn.microsoft.com/windows/security/threat-protection/auditing/event-4723"
 confirmed = true
 labels_complete = true
-notes = "Logged for success and failure; the event itself does not say which. Subject is the account that made the attempt; for a self-service change Subject and Target are the same account."
+notes = "Logged for success and failure. The outcome is the event's Keywords audit bit (Audit Success 0x0020000000000000, Audit Failure 0x0010000000000000); without a readable bit it is worded as an attempt. Subject is the account that made the attempt; for a self-service change Subject and Target are the same account."
 
 [[event.version]]
 version = 0
@@ -229,7 +229,7 @@ action = "password-reset-attempted"
 source = "https://learn.microsoft.com/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4724"
 confirmed = true
 labels_complete = true
-notes = "Logged for success and failure; the event itself does not say which."
+notes = "Logged for success and failure. The outcome is the event's Keywords audit bit (Audit Success 0x0020000000000000, Audit Failure 0x0010000000000000); without a readable bit it is worded as an attempt."
 
 [[event.version]]
 version = 0
@@ -676,7 +676,7 @@ action = "password-reset-attempted"
 source = "https://learn.microsoft.com/windows/security/threat-protection/auditing/event-4794"
 confirmed = true
 labels_complete = true
-notes = "Logged for success and failure. Status is 0x0 for success. There is no target account element: the target is always the DSRM administrator."
+notes = "Logged for success and failure. The outcome is the event's Keywords audit bit (Audit Success 0x0020000000000000, Audit Failure 0x0010000000000000); without a readable bit it is worded as an attempt. Status is 0x0 for success. There is no target account element: the target is always the DSRM administrator."
 
 [[event.version]]
 version = 0

@@ -681,6 +681,7 @@ def event_values(  # noqa: PLR0913 - every option is a keyword a test may damage
     activity: uuid.UUID | None = None,
     user_sid: str | None = "S-1-5-18",
     qualifiers: int | None = None,
+    keywords: int = 0x8020000000000000,
 ) -> list[Value]:
     """Return the values for the standard ``System`` slots; slot 13 is the computer name."""
     stamp = when or datetime(2026, 11, 10, 2, 15, 3, 123456, tzinfo=UTC)
@@ -691,7 +692,7 @@ def event_values(  # noqa: PLR0913 - every option is a keyword a test may damage
         integer(T_UINT8, 0),
         integer(T_UINT16, 13824),
         integer(T_UINT8, 0),
-        integer(T_HEX64, 0x8020000000000000),
+        integer(T_HEX64, keywords),
         # Keep the 100 ns digit the datetime cannot hold, so the reader's truncation shows.
         Value(T_FILETIME, struct.pack("<Q", filetime_of(stamp) + 7)),
         integer(T_UINT64, record_id),

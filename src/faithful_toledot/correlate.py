@@ -734,7 +734,7 @@ def _change(state: _State, info: EventInfo, events: list[Event]) -> Change:
         time=first.time,
         computer=first.computer,
         category=info.category,
-        action=info.action,
+        action=_action_for(info, first),
         title=info.title,
         actor=_party(state, first, info, "actor"),
         target=_target(state, first, info),
@@ -745,6 +745,45 @@ def _change(state: _State, info: EventInfo, events: list[Event]) -> Change:
         notes=tuple(notes),
     )
     return _with(change, sentence=narrative.sentence(change))
+
+
+_AUDIT_FAILURE = 1 << 52
+"""Keywords bit for Audit Failure (0x0010000000000000, Microsoft's StandardEventKeywords)."""
+_AUDIT_SUCCESS = 1 << 53
+"""Keywords bit for Audit Success (0x0020000000000000)."""
+_OUTCOMES = {
+    "password-change-attempted": ("password-changed", "password-change-failed"),
+    "password-reset-attempted": ("password-reset", "password-reset-failed"),
+}
+"""Events Windows logs on success and on failure: action when unknown, then success, failure."""
+
+
+def _audit_outcome(event: Event) -> bool | None:
+    """Whether the event says it succeeded (True) or failed (False); ``None`` if it does not.
+
+    The answer comes only from the event's own Keywords mask (exactly one of the two audit
+    bits), or, for Event Viewer CSV, which has no mask, its Level text. Anything absent,
+    unreadable, or contradictory is ``None``: toledot never guesses.
+    """
+    text = event.system.get("Keywords")
+    if text is not None:
+        try:
+            mask = int(text, 16)
+        except ValueError:
+            return None
+        ok, bad = bool(mask & _AUDIT_SUCCESS), bool(mask & _AUDIT_FAILURE)
+        return ok if ok != bad else None
+    level = event.system.get("LevelDisplayName", "").strip().casefold()
+    return {"audit success": True, "audit failure": False}.get(level)
+
+
+def _action_for(info: EventInfo, event: Event) -> str:
+    """The action, using the audit outcome for events logged on success and failure."""
+    pair = _OUTCOMES.get(info.action)
+    outcome = _audit_outcome(event) if pair and info.channel == "Security" else None
+    if pair is None or outcome is None:
+        return info.action
+    return pair[0] if outcome else pair[1]
 
 
 def _with(change: Change, **updates: object) -> Change:
