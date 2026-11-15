@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Faithful Oversight, LLC
 # SPDX-License-Identifier: Apache-2.0
 #
-# Event catalog: what each Windows event means, in one place. Read by faithful_toledot.catalog,
+# Event catalog: what each Windows event means, in one place. Not affiliated with or endorsed by Microsoft. Read by faithful_toledot.catalog,
 # which validates every key strictly. Facts only: field names, ids and numeric codes come from Microsoft
 # documentation; titles, labels and notes are written in our own words. Each entry names its source page.
 # confirmed = false means a detail could not be confirmed from a primary source; the note says which.

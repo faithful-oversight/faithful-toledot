@@ -2,7 +2,7 @@
 
 **15 changes described, but the account is incomplete: 1 notice, 1 log with missing events.**
 
-Generated 2026-11-09T12:00:00Z by toledot 0.1.0. Period: everything in the input. All times are UTC.
+Generated 2026-11-09T12:00:00Z by toledot 0.1.1. Period: everything in the input. All times are UTC.
 
 ## Completeness
 

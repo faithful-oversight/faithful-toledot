@@ -43,8 +43,8 @@ def test_a_stream_that_can_be_reconfigured_escapes_what_it_cannot_encode(
     stream = io.TextIOWrapper(raw, encoding="ascii")
     monkeypatch.setattr(sys, "stdout", stream)
     console.harden_streams()
-    console.say("café")
-    assert raw.getvalue() == b"caf\\xe9\n"
+    console.say("na\u00efve")
+    assert raw.getvalue() == b"na\\xefve\n"
 
 
 def test_a_stdout_that_cannot_take_the_text_stops_printing_without_an_error(

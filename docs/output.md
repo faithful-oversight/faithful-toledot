@@ -267,7 +267,7 @@ Every run writes `toledot-manifest.json`, after every other file. It lists each 
 {
   "$schema": "https://faithful-oversight.github.io/faithful-toledot/schema/manifest-v1.schema.json",
   "schema_version": "1.0",
-  "tool": {"name": "toledot", "version": "0.1.0"},
+  "tool": {"name": "toledot", "version": "0.1.1"},
   "generated_at": "2026-11-11T13:23:06Z",
   "files": [
     {"name": "toledot-report.json", "size": 40607, "sha256": "5128031a..."}

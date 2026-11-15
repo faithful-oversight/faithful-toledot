@@ -63,8 +63,8 @@ def test_the_script_is_pure_ascii_for_windows_powershell() -> None:
 
 
 def test_the_script_states_the_version_it_writes() -> None:
-    assert script.version() == "0.1.0"
-    assert "$CollectorVersion = '0.1.0'" in TEXT
+    assert script.version() == "0.1.1"
+    assert "$CollectorVersion = '0.1.1'" in TEXT
 
 
 def test_the_script_asks_for_exactly_the_events_toledot_reads() -> None:

@@ -6,8 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-14
+
 ### Fixed
 
+- A failed SID history attempt (event 4766) is no longer worded or counted as SID history added. It has its own action, `sid-history-failed`, and reads "attempted, unsuccessfully, to add SID history".
+- Password change, password reset, and DSRM password events are counted as attempts (`password-change-attempted`, `password-reset-attempted`), because Windows logs them for success and failure alike.
+- A lockout (event 4740) now shows the caller computer as its own detail and no longer shows it as the account's domain, and it no longer changes the name other events give the same account.
+- A message-only CSV row whose labels or sections repeat, which a directory value with line breaks can cause, is now a problem instead of letting the forged text win.
+- A collection that lists more than 1000 gaps keeps its gaps, still checks the event count and hash, and `toledot collect` publishes it instead of discarding the transfer. The PowerShell collector now caps the list itself.
+- A closed pipe, or an output that cannot show a non-ASCII path, no longer turns a finished run into exit code 4. The exit code is decided before the summary is printed.
+- Linking changes to logon sessions no longer slows down quadratically when one logon ID repeats many times.
+- The `.evtx` reader numbers unnamed `Data` elements by position among all of them, as the XML reader does.
+- `toledot collect --help` shows the Vault form `vault:MOUNT/PATH#FIELD`.
+- Errors about an unreadable input name the path as you typed it.
+- The look-alike space and negative-number fixes in CSV and text output (shared output safety code).
 - The source archive's own tests now run in the build check: it unpacks the archive outside the checkout and runs the whole suite there, instead of only collecting the tests.
 - Editing a pull request title now reruns the title check, so a corrected title clears the required check.
 - The dependency audit writes its export to a private temporary directory, so a planted link or a second run at the same time cannot interfere.
@@ -15,6 +28,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The release script now treats only a clean "not found" answer as an absent tag; an authentication, rate-limit, network, or malformed answer stops the release.
 - The dependency audit always includes every optional extra, and a new check fails it when a package named by an extra is missing from the audited export.
 - The release evidence is now one SBOM per scope: `sbom-base.cdx.json` for the base install, and `sbom-all-extras.cdx.json` when the project defines optional extras. Each states its scope, and tests check what each one holds.
+
+### Changed
+
+- Install instructions use `pipx install git+https://github.com/faithful-oversight/faithful-toledot` until a PyPI release exists, and the missing-extra errors give pipx and pip commands that work.
+- The README states the status, how toledot differs from other approaches, and shows an excerpt of the example report, and the docs say that the project is not affiliated with Microsoft.
+- The example uses obviously synthetic names, and its sample reports were regenerated.
+- The docs now say that a conflicting duplicate record keeps both copies, that memory grows with the number of changes, and that a message-only CSV can be forged.
+- The collector script is version 0.1.1.
 
 ## [0.1.0] - 2026-11-11
 

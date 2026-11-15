@@ -1,6 +1,6 @@
 # Threat model
 
-> **Status: current for 0.1.0.** This model covers the file readers, the report writers, the PowerShell collector, and remote collection. Review it whenever an input format, output format, collection method, or dependency changes. The collectors have not yet been run against a real domain controller or a real WinRM endpoint, so the controls that concern them are tested against simulations only. See [Limitations](limitations.md#collectors).
+> **Status: current for 0.1.1.** This model covers the file readers, the report writers, the PowerShell collector, and remote collection. Review it whenever an input format, output format, collection method, or dependency changes. The collectors have not yet been run against a real domain controller or a real WinRM endpoint, so the controls that concern them are tested against simulations only. See [Limitations](limitations.md#collectors).
 
 ## What the tool protects
 

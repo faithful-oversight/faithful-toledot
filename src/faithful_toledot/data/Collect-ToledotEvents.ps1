@@ -74,7 +74,7 @@ Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
 $CollectorName = 'Collect-ToledotEvents.ps1'
-$CollectorVersion = '0.1.0'
+$CollectorVersion = '0.1.1'
 # The events toledot understands, by log. Kept in step with toledot's catalog by a
 # test in the toledot repository.
 $WantedIds = @{

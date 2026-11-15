@@ -5,15 +5,12 @@ This walk-through takes about ten minutes. It starts with synthetic data, so not
 ## 1. Install
 
 ```shell
-pipx install faithful-toledot
+pipx install git+https://github.com/faithful-oversight/faithful-toledot
+pipx ensurepath
 toledot --version
 ```
 
-Until the first release is on PyPI, install the wheel attached to a [GitHub release](https://github.com/faithful-oversight/faithful-toledot/releases) instead:
-
-```shell
-pipx install ./faithful_toledot-0.1.0-py3-none-any.whl
-```
+PyPI publishing is being set up; until a PyPI release exists, install from GitHub as shown. For a fixed version, add a tag, as in `git+https://github.com/faithful-oversight/faithful-toledot@v0.1.1`. `pipx ensurepath` puts pipx's tools on your PATH; run it once and open a new terminal.
 
 toledot runs on Windows, macOS, and Linux with Python 3.11 or newer. Reading files needs nothing else. Remote collection needs an extra, which [Collecting events](collecting.md#remote-collection) explains.
 
@@ -43,7 +40,7 @@ On Windows PowerShell, put the command on one line.
 The terminal shows a summary, then the files it wrote:
 
 ```text
-toledot 0.1.0
+toledot 0.1.1
 15 changes described, but the account is incomplete: 1 notice, 1 log with missing events.
   user: 7
   group: 5
@@ -51,7 +48,7 @@ toledot 0.1.0
   policy: 1
   first change 2026-11-02T08:06:00Z, last 2026-11-06T13:40:00Z
   See the Completeness section of the report before relying on this account.
-Reports written to ./toledot-demo/report: toledot-report.json, toledot-report.md, toledot-report.html, toledot-changes.csv, toledot-manifest.json
+Reports written to toledot-demo/report: toledot-report.json, toledot-report.md, toledot-report.html, toledot-changes.csv, toledot-manifest.json
 ```
 
 toledot exits with code `1` because the account is incomplete. That is the expected result here. Add `--fail-on never` to see exit code `0`.
@@ -106,7 +103,7 @@ Run the script on every domain controller. toledot reports only on the logs it i
 `toledot collect` runs the same script on a controller over PowerShell remoting (WinRM), so you install nothing on it. It needs the `live` extra:
 
 ```shell
-pipx install "faithful-toledot[live]"
+pipx install --force "faithful-toledot[live] @ git+https://github.com/faithful-oversight/faithful-toledot"
 export TOLEDOT_PASSWORD='...'
 toledot collect --server dc01.corp.example --auth ntlm --username 'CORP\auditor' \
   --secret env:TOLEDOT_PASSWORD --ca-file corp-root-ca.pem --days 30 -o dc01-events.jsonl

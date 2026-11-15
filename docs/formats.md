@@ -179,7 +179,7 @@ The first line starts, byte for byte, with `{"toledot_events":`. That marker is 
 ```json
 {
   "toledot_events": 1,
-  "collector": {"name": "Collect-ToledotEvents.ps1", "version": "0.1.0", "method": "powershell"},
+  "collector": {"name": "Collect-ToledotEvents.ps1", "version": "0.1.1", "method": "powershell"},
   "collected_at": "2026-11-09T08:00:00.0000000Z",
   "computer": "DC01.corp.example",
   "operator": "CORP\\auditor",

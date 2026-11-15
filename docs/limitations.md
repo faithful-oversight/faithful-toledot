@@ -54,6 +54,8 @@ toledot understands 84 events: 83 in the Security log and event 104 (log cleared
 - **Where this matters.** A `.evtx`, XML, or collection file carries each event's own field names, so a doubtful catalog detail affects little. A JSON export names values by position from the catalog, and a CSV export names them by the labels the catalog maps. For those two, check any result built from an event marked partly inferred against the event in Event Viewer.
 - **Codes.** A `%%NNNN` code in event data is decoded from the catalog. A meaning that Microsoft's documentation does not confirm is marked `[code meaning not documented by Microsoft]` in the report.
 
+- **No affiliation.** toledot is not affiliated with or endorsed by Microsoft. The catalog uses event IDs and field names from Microsoft's public documentation and cites the page for each entry.
+
 ## How toledot links events
 
 Each rule below is chosen so that toledot never says more than the events do.
