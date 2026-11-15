@@ -28,6 +28,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The release script now treats only a clean "not found" answer as an absent tag; an authentication, rate-limit, network, or malformed answer stops the release.
 - The dependency audit always includes every optional extra, and a new check fails it when a package named by an extra is missing from the audited export.
 - The release evidence is now one SBOM per scope: `sbom-base.cdx.json` for the base install, and `sbom-all-extras.cdx.json` when the project defines optional extras. Each states its scope, and tests check what each one holds.
+- The sign-off check no longer lets a commit skip sign-off by claiming Dependabot as its author. Dependabot is exempt only on its own pull requests.
+- The required "All checks passed" check now fails if a CI job is missing, and a skipped title or sign-off check no longer counts as a pass on a pull request.
+- `scripts/check.sh workflows` prints a clear message instead of a stack trace when GitHub rejects the token.
+- `SECURITY.md` no longer says that no release has been published. It says the latest release is supported.
+- The PowerShell syntax check now fails in CI when PowerShell is missing, instead of skipping.
 
 ### Changed
 
@@ -36,6 +41,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The example uses obviously synthetic names, and its sample reports were regenerated.
 - The docs now say that a conflicting duplicate record keeps both copies, that memory grows with the number of changes, and that a message-only CSV can be forged.
 - The collector script is version 0.1.1.
+- Dependabot groups minor and patch updates of runtime dependencies into one pull request.
+- `CONTRIBUTING.md` lists every tool a clean machine needs and which checks need network access or a token.
+- The releasing guide covers the first PyPI publish, a failed PyPI step, scheduled checks that stop after 60 idle days, both SBOM files, and the pinned tools.
+
+### Security
+
+- A release now stops with a clear message when the `FO_PUBLIC` setting disagrees with whether the repository is public, so a public release cannot skip provenance and PyPI by mistake.
+- Release jobs check the built files against `SHA256SUMS` before attesting, uploading or publishing.
+- uv and the Vale style packages used in CI are pinned to exact versions, and the style packages are checked against a SHA-256 before use.
 
 ## [0.1.0] - 2026-11-11
 
