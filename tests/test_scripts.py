@@ -698,8 +698,11 @@ def _stage_config(
 
 has_powershell_check = "check_powershell" in CHECK.read_text(encoding="utf-8")
 needs_powershell_check = pytest.mark.skipif(
-    not has_powershell_check or os.name != "posix" or shutil.which("git") is None,
-    reason="this product has no PowerShell syntax check",
+    not has_powershell_check
+    or os.name != "posix"
+    or shutil.which("git") is None
+    or not (ROOT / ".git").exists(),
+    reason="needs a PowerShell syntax check and a git checkout (not a source distribution)",
 )
 
 
