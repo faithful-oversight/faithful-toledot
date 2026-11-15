@@ -8,7 +8,13 @@ import unicodedata
 
 import pytest
 
-from faithful_toledot.outputs.safety import csv_cell, neutralize_formula, terminal, visible
+from faithful_toledot.outputs.safety import (
+    csv_cell,
+    escape_markdown,
+    neutralize_formula,
+    terminal,
+    visible,
+)
 
 BMP_INVISIBLE = [
     0x00, 0x08, 0x0B, 0x0C, 0x1B, 0x7F, 0x85, 0x9F,  # controls
@@ -102,3 +108,15 @@ def test_a_plain_negative_number_stays_a_number(value: str) -> None:
 )
 def test_anything_else_starting_with_a_minus_is_still_neutralized(value: str) -> None:
     assert neutralize_formula(value) == "'" + value
+
+
+@pytest.mark.parametrize("code", [0x17B4, 0x17B5, 0x180B, 0x180C, 0x180D, 0x180F])
+def test_khmer_and_mongolian_invisible_marks_are_escaped(code: int) -> None:
+    assert visible(f"admin{chr(code)}") == f"admin\\u{code:04x}"
+
+
+def test_an_issue_reference_from_the_input_is_not_linked() -> None:
+    joiner = "\u2060"
+    assert escape_markdown("see #123") == f"see #{joiner}123"
+    assert escape_markdown("owner/repo#7") == f"owner/repo#{joiner}7"
+    assert escape_markdown("item #a") == "item #a"
