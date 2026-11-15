@@ -298,7 +298,7 @@ function Add-Gap($Gaps, [string] $Area, [string] $Reason) {
 }
 
 function Get-GapText($Gaps) {
-    $listed = @($Gaps)
+    $listed = [object[]] $Gaps.ToArray()
     $omitted = $script:GapsOmitted
     if ($listed.Count + $omitted -gt $MaxGaps) {
         $omitted += $listed.Count - ($MaxGaps - 1)
