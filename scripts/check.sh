@@ -39,8 +39,13 @@ stage_config() {
 }
 check_powershell() {
   # Parse every PowerShell script with the real PowerShell parser. GitHub's runners
-  # include pwsh; elsewhere the check is skipped with a note.
+  # include pwsh. Elsewhere the check is skipped with a note, unless TOLEDOT_REQUIRE_PWSH=1
+  # (set in CI), which makes a missing pwsh a failure.
   if ! command -v pwsh >/dev/null; then
+    if [[ "${TOLEDOT_REQUIRE_PWSH:-}" == "1" ]]; then
+      echo "TOLEDOT_REQUIRE_PWSH is set but pwsh is not installed" >&2
+      return 1
+    fi
     echo "pwsh not found; skipping the PowerShell syntax check" >&2
     return 0
   fi
@@ -49,7 +54,7 @@ check_powershell() {
     # -Command does not pass extra arguments to the command as $args, so the path goes
     # through the environment.
     # shellcheck disable=SC2016 # $errors and $env: are PowerShell syntax
-    PS_PARSE_PATH="$script" pwsh -NoProfile -NonInteractive -Command '
+    POWERSHELL_TELEMETRY_OPTOUT=1 PS_PARSE_PATH="$script" pwsh -NoProfile -NonInteractive -Command '
       $errors = $null
       $path = (Resolve-Path -LiteralPath $env:PS_PARSE_PATH).Path
       [void][System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errors)

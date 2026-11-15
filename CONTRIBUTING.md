@@ -30,6 +30,8 @@ Requirements for a clean machine:
 - A full clone, not a shallow one (`--depth`). The `secrets` stage and the sign-off check read the whole history.
 - Bash 4 or newer for `scripts/check.sh`, and `curl`, `tar`, `sha256sum`, `xargs`, and `diff`. Linux has all of these. macOS ships Bash 3.2 and has no `sha256sum`, so install a newer Bash and the GNU core utilities (for example with Homebrew). On Windows, use WSL or Git Bash. CI runs only the `test` stage on Windows and macOS, so the other stages are checked on Linux only.
 - [Gitleaks](https://github.com/gitleaks/gitleaks) on your `PATH`, for the `secrets` stage and the pre-commit hook. On Linux x64, `scripts/install_gitleaks.sh [directory]` downloads the pinned release from github.com, checks its SHA-256, and installs it into `~/.local/bin` or the directory you give. It needs `curl`, `tar`, `sha256sum`, and `install`. Make sure that directory is on your `PATH`. On other platforms, install Gitleaks yourself.
+- PowerShell 7 (`pwsh`) for the PowerShell tests and for the PowerShell syntax check in the `config` stage. Locally both skip with a note when `pwsh` is missing. CI sets `TOLEDOT_REQUIRE_PWSH=1`, which turns a missing `pwsh` into a failure; set it yourself to get the same result.
+- The optional extras that CI installs (`--extra live` with `uv sync --locked`), for the tests that exercise the real remote transport. Without them those tests skip. CI sets `TOLEDOT_REQUIRE_LIVE=1`, which turns that skip into a failure.
 - Network access for the stages marked in the table below. Vale and every other check tool come from the project environment, so there is nothing else to install. The link check runs in CI only.
 
 ```shell
@@ -54,10 +56,10 @@ Run one stage at a time with `scripts/check.sh <stage>`:
 | `format` | Code formatting (Ruff) | Nothing |
 | `lint` | Code lint rules, including security rules (Ruff) | Nothing |
 | `types` | Strict static typing (mypy) | Nothing |
-| `test` | Unit and property-based tests, with at least 95% combined line and branch coverage (pytest, Hypothesis) | Nothing |
+| `test` | Unit and property-based tests, with at least 95% combined line and branch coverage (pytest, Hypothesis) | `pwsh` and the extras, for the tests that need them (see the requirements) |
 | `docs` | Markdown structure (PyMarkdown), spelling (codespell), and wording (Vale) | Network: downloads the pinned Vale styles from github.com |
 | `site` | Documentation site build, with warnings treated as errors (Sphinx) | Nothing |
-| `config` | YAML style (yamllint), workflow correctness (actionlint), and shell scripts (ShellCheck) | Nothing |
+| `config` | YAML style (yamllint), workflow correctness (actionlint), and shell scripts (ShellCheck) | `pwsh`, for the PowerShell syntax check |
 | `workflows` | Workflow security (zizmor) | Optional GitHub token, see below |
 | `secrets` | Committed secrets across the full history (Gitleaks) | Gitleaks on `PATH`; full history |
 | `deps` | Known vulnerabilities in locked dependencies (pip-audit) | Network: queries the vulnerability database |

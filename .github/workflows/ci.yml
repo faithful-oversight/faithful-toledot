@@ -101,6 +101,8 @@ jobs:
           enable-cache: false
       - run: uv sync --locked
       - run: scripts/check.sh docs site config reuse
+        env:
+          TOLEDOT_REQUIRE_PWSH: "1"
       - run: scripts/check.sh workflows
         env:
           # Only zizmor sees the token. It lets zizmor run its online audits,
