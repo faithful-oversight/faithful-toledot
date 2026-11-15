@@ -27,6 +27,34 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). 
 
 The steps that publish are in `scripts/publish_release.py`, which has its own tests.
 
+## First publish to PyPI
+
+Until the first PyPI release exists, the package is not on PyPI, and the name `faithful-toledot` is unclaimed: anyone could register it. Set up trusted publishing, then release a new version, as soon as possible.
+
+1. On the PyPI website, open **Your account**, then **Publishing**, and add a **pending publisher** with these fields. They must match `.github/workflows/release.yml` exactly.
+   - PyPI project name: `faithful-toledot`
+   - Owner: `faithful-oversight`
+   - Repository name: `faithful-toledot`
+   - Workflow name: `release.yml`
+   - Environment name: `pypi`
+2. A pending publisher does **not** reserve the name. PyPI creates the project, and the name becomes yours, only when the first upload succeeds. Until then, someone else can still register it, and the pending publisher then stops working.
+3. The first publish needs a version that has no tag yet. Preflight accepts an existing tag only when it points at the release commit, and `main` has moved past every earlier tag, so rerunning an old version cannot work. Open a release pull request for the next version (see Steps), merge it, and run **Release**.
+4. The `pypi` environment has a required reviewer once the repository is public. Approve the run when it waits.
+
+## If the PyPI step fails
+
+PyPI trusted publishing cannot be checked before the upload, so a missing or mismatched publisher shows up in the **Publish to PyPI** job, after the build, the attestations, and the draft release. The sequence is:
+
+1. Preflight, checks, and build pass. The draft release is staged and provenance attestations are issued.
+2. The **Publish to PyPI** job waits for the `pypi` reviewer, then the upload fails with an invalid-publisher or authorization error.
+3. **Publish GitHub release** is skipped, because it needs the PyPI job to succeed. No tag exists and the release stays a draft that only maintainers can see. Attestations exist for files that were never published; they describe the real build and do no harm.
+
+Fix the publisher fields on PyPI, then run **Release** again on the same commit. The draft is reused, the attestations are issued again for identical files, and the upload and the PyPI digest check are safe to repeat.
+
+## Scheduled checks stop on a quiet repository
+
+GitHub disables scheduled workflows in a public repository after 60 days without repository activity. The weekly vulnerability audit and link check in `ci.yml`, the CodeQL schedule, and the Scorecard run all stop silently. Dependabot is separate and keeps running. After a quiet stretch, open the **Actions** tab, re-enable any workflow that is turned off, and start **CI** by hand with **Run workflow**.
+
 ## If a release fails partway
 
 Run the workflow again on the same commit. Each step checks the real state rather than assuming it: missing uploads are added, existing files are verified against the build, and the release is published only when complete. If anything already published differs from the build, the workflow stops and says what differs. It never replaces or ignores a difference.

@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-The project has not published a release yet. After the first release, only the latest minor version receives security fixes.
+Only the latest release receives security fixes. Check the [releases page](https://github.com/faithful-oversight/faithful-toledot/releases) and `CHANGELOG.md` for the current version.
 
 | Version | Supported |
 | --- | --- |
