@@ -175,6 +175,7 @@ Directory service change events (5136) record one event for each value. toledot 
 | `not-in-input` | The change names a session, but the input holds no logon or logoff event for it before the change. Where it came from is not known. |
 | `restarted` | The latest logon for the session is not clearly after Windows started (4608) or the log service stopped (1100) on that computer. Events with the same timestamp are ordered by record number when they are in the same log; when they cannot be ordered, the logon is not trusted. Logon IDs are only unique between restarts, so that logon is not used. |
 | `conflicting` | The input holds two different logons for the session at the same moment, or two copies of one logon record that disagree in any way, including their time. toledot does not choose one. |
+| `unordered` | A logon or logoff of the session has the same timestamp as the change, and the input cannot show which came first: record numbers order events only within one log, and an export may have none. The two orders would give different answers (a session that started, replaced, or ended at that moment), so toledot does not choose. The same is reported when more than 64 entries of one session share the change's timestamp. |
 | `other-account` | The logon was for a different account from the one that made the change, so it is not used. |
 | `none` | The change event names no session. |
 

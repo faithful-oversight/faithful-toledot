@@ -365,10 +365,128 @@ def test_a_burst_of_changes_lists_a_bounded_number_of_related_ones() -> None:
     assert sum(len(c.related) for c in result.changes) <= 300 * correlate.MAX_RELATED
 
 
-def test_a_logoff_at_the_same_moment_as_the_change_may_have_come_after_it() -> None:
-    # Event Viewer CSV times have whole seconds, so equal times do not show the order.
-    result = account(logon(seconds=-60), logoff(seconds=0), member_added())
+def unnumbered(item: Event) -> Event:
+    return replace(item, record_id=None)
+
+
+def test_a_logoff_at_the_same_moment_as_the_change_with_no_order_gives_no_origin() -> None:
+    # Event Viewer CSV times have whole seconds, so equal times do not show the order,
+    # and toledot does not guess which came first.
+    result = account(
+        unnumbered(logon(seconds=-60)), unnumbered(logoff(seconds=0)), unnumbered(member_added())
+    )
+    assert result.changes[0].origin.status == "unordered"
+
+
+def test_a_logon_at_the_same_moment_as_the_change_with_no_order_gives_no_origin() -> None:
+    result = account(unnumbered(logon(seconds=0)), unnumbered(member_added()))
+    origin = result.changes[0].origin
+    assert origin.status == "unordered"
+    assert origin.address is None
+    assert "cannot show" in narrative.origin(origin)
+
+
+def test_a_tied_logon_that_says_what_the_earlier_one_says_changes_nothing() -> None:
+    result = account(
+        unnumbered(logon(seconds=-60)),
+        unnumbered(logon(seconds=0)),  # same address: either way the origin is the same
+        unnumbered(member_added()),
+    )
     assert result.changes[0].origin.status == "session"
+    assert result.changes[0].origin.address == "192.0.2.44"
+
+
+# Review finding TOL-1: record numbers order events that share a timestamp.
+# Each case lists (kind, record) in the log, all at the change's own time except the
+# first logon, which is a minute earlier.
+@pytest.mark.parametrize(
+    ("entries", "status", "address"),
+    [
+        # change 101, then a logon 102 at the same time: that logon is not its origin
+        ([("change", 101), ("logon", 102)], "not-in-input", None),
+        ([("logon", 101), ("change", 102)], "session", "198.51.100.9"),
+        # logon 100 a minute earlier, logoff 101 and change 102 at the same time: ended
+        ([("early", 100), ("logoff", 101), ("change", 102)], "ended", None),
+        ([("early", 100), ("change", 101), ("logoff", 102)], "session", "192.0.2.44"),
+        # a logon at the tied moment that replaces the earlier one only if it came first
+        ([("early", 100), ("logon", 101), ("change", 102)], "session", "198.51.100.9"),
+        ([("early", 100), ("change", 101), ("logon", 102)], "session", "192.0.2.44"),
+        # logoff then logon, then the change: the new logon is the origin
+        ([("early", 100), ("logoff", 101), ("logon", 102), ("change", 103)], "session",
+         "198.51.100.9"),
+        ([("early", 100), ("logoff", 101), ("change", 102), ("logon", 103)], "ended", None),
+    ],
+)  # fmt: skip
+def test_record_numbers_order_session_events_that_share_the_changes_time(
+    entries: list[tuple[str, int]], status: str, address: str | None
+) -> None:
+    def build_event(kind: str, record: int) -> Event:
+        if kind == "early":
+            return numbered_at(logon(address="192.0.2.44"), record, -60)
+        if kind == "logon":
+            return numbered_at(logon(address="198.51.100.9"), record, 0)
+        if kind == "logoff":
+            return numbered_at(logoff(), record, 0)
+        return numbered_at(member_added(), record, 0)
+
+    items = [build_event(kind, record) for kind, record in entries]
+    for ordering in (items, items[::-1], items[1:] + items[:1]):
+        (change,) = account(*ordering).changes
+        assert change.origin.status == status
+        assert change.origin.address == address
+
+
+@pytest.mark.parametrize("missing", ["change", "logon"])
+def test_a_missing_record_number_at_the_changes_time_leaves_the_order_unknown(
+    missing: str,
+) -> None:
+    early = numbered_at(logon(address="192.0.2.44"), 100, -60)
+    tied = numbered_at(logon(address="198.51.100.9"), 101, 0)
+    change = numbered_at(member_added(), 102, 0)
+    if missing == "change":
+        change = unnumbered(change)
+    else:
+        tied = unnumbered(tied)
+    for ordering in ([early, tied, change], [change, tied, early]):
+        assert account(*ordering).changes[0].origin.status == "unordered"
+
+
+def test_events_in_different_logs_at_the_same_time_leave_the_order_unknown() -> None:
+    other_log = replace(numbered_at(logon(address="198.51.100.9"), 101, 0), channel="")
+    early = numbered_at(logon(address="192.0.2.44"), 100, -60)
+    change = numbered_at(member_added(), 102, 0)  # a lower or higher number says nothing
+    for ordering in ([early, other_log, change], [change, other_log, early]):
+        assert account(*ordering).changes[0].origin.status == "unordered"
+
+
+def test_a_logoff_in_another_log_at_the_changes_time_leaves_the_order_unknown() -> None:
+    early = numbered_at(logon(), 100, -60)
+    elsewhere = replace(numbered_at(logoff(), 101, 0), channel="")
+    result = account(early, elsewhere, numbered_at(member_added(), 102, 0))
+    assert result.changes[0].origin.status == "unordered"
+
+
+def test_session_entries_that_tie_before_the_change_are_ordered_by_record_number() -> None:
+    # Two logons in one earlier second: the later record is the session in use.
+    first = numbered_at(logon(address="192.0.2.44"), 100, -60)
+    second = numbered_at(logon(address="198.51.100.9"), 101, -60)
+    change = numbered_at(member_added(), 102, 0)
+    for ordering in ([first, second, change], [second, first, change]):
+        origin = account(*ordering).changes[0].origin
+        assert (origin.status, origin.address) == ("session", "198.51.100.9")
+    ended = numbered_at(logoff(), 101, -60)  # the logoff came after the logon: ended
+    assert account(first, ended, change).changes[0].origin.status == "ended"
+    unordered = unnumbered(numbered_at(logoff(), 101, -60))
+    assert account(first, unordered, change).changes[0].origin.status == "unordered"
+
+
+def test_an_enormous_block_of_entries_at_one_moment_is_not_scanned_for_every_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(correlate, "MAX_TIED", 3)
+    logons = [numbered_at(logon(address=f"192.0.2.{n}"), 100 + n, 0) for n in range(1, 6)]
+    result = account(*logons, numbered_at(member_added(), 200, 0))
+    assert result.changes[0].origin.status == "unordered"
 
 
 def test_system_sessions_and_events_without_a_session() -> None:

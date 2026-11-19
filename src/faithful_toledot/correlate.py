@@ -54,6 +54,9 @@ CLOCK_SYNC_LIMIT = timedelta(minutes=5)
 """Changes by one session this close together are marked as related."""
 MAX_MISSING_RANGES = 1000
 """Absent record ranges listed per log; beyond this only the count is kept."""
+MAX_TIED = 64
+"""Most entries of one session examined at a change's own moment; beyond it, the answer is
+that the order is unknown."""
 MAX_PROBLEMS = 10_000
 """Problems kept in full. Further ones are counted, and one problem says so."""
 
@@ -151,6 +154,18 @@ class _Logon:
     """The log and record number, to order events that share a timestamp."""
 
 
+@dataclass(frozen=True, slots=True)
+class _Entry:
+    """A logon or a logoff of one session: its time, its place in its log, and the logon."""
+
+    time: datetime
+    place: tuple[str, int | None]
+    """The log and record number, to order events that share a timestamp."""
+    source: Source
+    logon: _Logon | None
+    """The logon, or ``None`` for a logoff."""
+
+
 @dataclass
 class _State:
     catalog: Catalog
@@ -158,9 +173,7 @@ class _State:
     logs: dict[tuple[str, str], _Log] = field(default_factory=dict)
     kept: dict[tuple[str, str, int], bytes] = field(default_factory=dict)
     events: list[tuple[Event, EventInfo]] = field(default_factory=list)
-    sessions: dict[tuple[str, int], list[tuple[datetime, int, _Logon | None]]] = field(
-        default_factory=dict
-    )
+    sessions: dict[tuple[str, int], list[_Entry]] = field(default_factory=dict)
     names: dict[str, set[str]] = field(default_factory=dict)
     dropped_problems: int = 0
     unnumbered: dict[tuple[str, str, bytes], int] = field(default_factory=dict)
@@ -169,8 +182,8 @@ class _State:
     """Records read more than once with different content (computer, log, number)."""
     disputed_sessions: set[tuple[str, int]] = field(default_factory=set)
     input_number: int = 0
-    rivals: dict[tuple[tuple[str, int], int], bool] = field(default_factory=dict)
-    """Per session and latest logon: whether two different logons share its moment."""
+    latest: dict[tuple[tuple[str, int], int], _Verdict] = field(default_factory=dict)
+    """Per session and moment: what the session's latest entry at that moment says."""
 
     def problem(self, problem: Problem) -> None:
         if len(self.account.problems) < MAX_PROBLEMS:
@@ -410,13 +423,13 @@ def _note_session(state: _State, event: Event, info: EventInfo) -> None:
     computer = event.computer.casefold()
     if info.action == "logon":
         number = _number_of(_text(event, info, "logon_id"))
-        kind = 1
+        is_logon = True
     elif info.action == "logoff":
         # Logoff events name the ended session in their target fields.
         number = _number_of(_text(event, info, "logon_id") or _text(event, info, "actor_logon_id"))
         if number is None:
             number = _number_of(event.data.get("TargetLogonId"))
-        kind = 0
+        is_logon = False
     else:
         return
     if number is None:
@@ -425,8 +438,9 @@ def _note_session(state: _State, event: Event, info: EventInfo) -> None:
         # Copies of one logon record disagree, perhaps only on the time: no copy of that
         # session can be trusted to say where it came from.
         state.disputed_sessions.add((computer, number))
+    place = (event.channel.casefold(), event.record_id)
     held = None
-    if kind:
+    if is_logon:
         held = _Logon(
             event.record_id,
             event.time,
@@ -436,17 +450,138 @@ def _note_session(state: _State, event: Event, info: EventInfo) -> None:
             _text(event, info, "logon_type"),
             event.source,
             _text(event, info, "target_sid"),
-            (event.channel.casefold(), event.record_id),
+            place,
         )
-    state.sessions.setdefault((computer, number), []).append((event.time, kind, held))
+    state.sessions.setdefault((computer, number), []).append(
+        _Entry(event.time, place, event.source, held)
+    )
+
+
+def _entry_order(entry: _Entry) -> tuple[datetime, str, bool, int, str, str]:
+    """Sort by time, then by log and record number, so the order never depends on the input."""
+    channel, number = entry.place
+    return (
+        entry.time,
+        channel,
+        number is None,
+        number or 0,
+        entry.source.file,
+        entry.source.position,
+    )
 
 
 def _finish_sessions(state: _State) -> None:
-    """Put each session's logons and logoffs in time order; a logoff sorts first."""
+    """Put each session's logons and logoffs in time order."""
     for entries in state.sessions.values():
-        entries.sort(key=lambda entry: (entry[0], entry[1]))
+        entries.sort(key=_entry_order)
     for moments in state.boundaries.values():
         moments.sort(key=lambda moment: moment[0])
+
+
+_Verdict = tuple[str, "_Logon | None"]
+"""What a session's entries say: ``("none", None)`` when there are none, ``("ended", None)``
+after a logoff, ``("session", logon)`` after a logon, or ``("conflicting" | "unordered",
+None)`` when the entries cannot be reduced to one of those."""
+
+
+def _effect(entry: _Entry) -> tuple[str, tuple[str | None, ...]]:
+    """What one entry does to a session, comparable between entries."""
+    if entry.logon is None:
+        return ("ended", ())
+    return ("session", _session_facts(entry.logon))
+
+
+def _verdict_effect(verdict: _Verdict) -> tuple[str, tuple[str | None, ...]]:
+    logon = verdict[1]
+    return (verdict[0], _session_facts(logon) if logon is not None else ())
+
+
+def _order_against(entry: _Entry, place: tuple[str, int | None]) -> int | None:
+    """Whether an entry of the change's own moment came before (-1) or after (1) the change.
+
+    Record numbers order two events only within one log. ``None`` means the input cannot say.
+    """
+    channel, number = entry.place
+    if channel != place[0] or number is None or place[1] is None or number == place[1]:
+        return None
+    return -1 if number < place[1] else 1
+
+
+def _latest_of(entries: list[_Entry]) -> _Verdict:
+    """What the latest of entries that share one time says.
+
+    Record numbers order entries of one log. Entries that cannot be ordered, because
+    they are in different logs or lack a record number, are each possibly the latest;
+    they give an answer only when they agree. Two different logons are ``conflicting``;
+    any other disagreement is ``unordered``.
+    """
+    by_log: dict[str, list[_Entry]] = {}
+    for entry in entries:
+        by_log.setdefault(entry.place[0], []).append(entry)
+    last: list[_Entry] = []
+    for group in by_log.values():
+        if any(entry.place[1] is None for entry in group):
+            last += group
+        else:
+            top = max(entry.place[1] or 0 for entry in group)
+            last += [entry for entry in group if entry.place[1] == top]
+    effects = {_effect(entry) for entry in last}
+    if len(effects) > 1:
+        both_logons = all(entry.logon is not None for entry in last)
+        return ("conflicting" if both_logons else "unordered", None)
+    first = min(last, key=_entry_order)
+    if first.logon is None:
+        return ("ended", None)
+    return ("session", first.logon)
+
+
+def _before_moment(
+    state: _State, key: tuple[str, int], entries: list[_Entry], index: int
+) -> _Verdict:
+    """What the session says after every entry up to index, which ends a moment."""
+    if index < 0:
+        return ("none", None)
+    moment = entries[index].time
+    start = bisect.bisect_left(entries, moment, key=lambda entry: entry.time)
+    place = (key, start)
+    found = state.latest.get(place)
+    if found is None:
+        found = state.latest[place] = _latest_of(entries[start : index + 1])
+    return found
+
+
+def _session_at(
+    state: _State, key: tuple[str, int], when: datetime, place: tuple[str, int | None]
+) -> _Verdict:
+    """What a session says at a change, using record numbers to order entries that tie.
+
+    Entries earlier than the change count. An entry stamped with the change's own time
+    counts only when it is in the change's log and has a lower record number; one that
+    cannot be ordered against the change might be before or after it. If any of those
+    would say something other than what the ordered entries say, the answer is
+    ``unordered``: toledot does not choose.
+    """
+    entries = state.sessions.get(key, [])
+    first = bisect.bisect_left(entries, when, key=lambda entry: entry.time)
+    last = bisect.bisect_right(entries, when, key=lambda entry: entry.time)
+    earlier = _before_moment(state, key, entries, first - 1)
+    tied = entries[first:last]
+    if not tied:
+        return earlier
+    if len(tied) > MAX_TIED:
+        # A session with this many entries in one moment is not a real one; each change
+        # would otherwise cost the whole block. The block is not ordered.
+        ordered, unknown = [], tied
+    else:
+        orders = [(entry, _order_against(entry, place)) for entry in tied]
+        ordered = [entry for entry, order in orders if order == -1]
+        unknown = [entry for entry, order in orders if order is None]
+    base = _latest_of(ordered) if ordered else earlier
+    if base[0] in {"conflicting", "unordered"}:
+        return base
+    if all(_effect(entry) == _verdict_effect(base) for entry in unknown):
+        return base
+    return ("unordered", None)
 
 
 def _origin(state: _State, event: Event, info: EventInfo) -> Origin:
@@ -457,14 +592,10 @@ def _origin(state: _State, event: Event, info: EventInfo) -> Origin:
     if number in _SYSTEM_SESSIONS:
         return Origin("local", logon_id=recorded)
     key = (event.computer.casefold(), number)
-    entries = state.sessions.get(key, [])
-    last = _latest_before(entries, event.time)
-    if last is None:
-        return Origin("not-in-input", logon_id=recorded)
-    logon = entries[last][2]
-    if logon is None:
-        return Origin("ended", logon_id=recorded)
-    doubt = _doubt(state, event, info, logon, (key, last))
+    status, logon = _session_at(state, key, event.time, (event.channel.casefold(), event.record_id))
+    if logon is None:  # no entry, a logoff, or entries that cannot be reduced to one logon
+        return Origin("not-in-input" if status == "none" else status, logon_id=recorded)
+    doubt = _doubt(state, event, info, logon)
     if doubt is not None:
         return Origin(doubt, logon_id=recorded, logon_time=logon.time)
     return Origin(
@@ -480,63 +611,13 @@ def _origin(state: _State, event: Event, info: EventInfo) -> Origin:
     )
 
 
-def _latest_before(
-    entries: list[tuple[datetime, int, _Logon | None]], when: datetime
-) -> int | None:
-    """The index of the latest logon or logoff that may come before a change, or ``None``.
-
-    Entries are sorted by time, a logoff first. An entry counts when it is earlier than
-    the change, or is a logon at the change's own time; a logoff stamped with the change's
-    own time may have come just after it. Only the entries at the change's own time can
-    fail that test, and they are a block of logoffs ahead of that time's logons, so the
-    answer is found by bisection and not by scanning the session's history.
-    """
-    index = bisect.bisect_right(entries, when, key=lambda entry: entry[0])
-    if index and (entries[index - 1][0] < when or entries[index - 1][1]):
-        return index - 1
-    earlier = bisect.bisect_left(entries, when, key=lambda entry: entry[0])
-    return earlier - 1 if earlier else None
-
-
-def _rivals(state: _State, place: tuple[tuple[str, int], int]) -> bool:
-    """Whether two different logons for one session share the latest logon's moment.
-
-    ``place`` is the session and the index of its latest logon that comes before the
-    change. The answer depends on nothing else, so it is kept for the next change by the
-    same session.
-    """
-    found = state.rivals.get(place)
-    if found is None:
-        key, last = place
-        entries = state.sessions[key]
-        moment = entries[last][0]
-        first = bisect.bisect_left(entries, moment, key=lambda entry: entry[0])
-        facts = {
-            _session_facts(item)
-            for _, _, item in itertools.islice(entries, first, last + 1)
-            if item is not None
-        }
-        found = state.rivals[place] = len(facts) > 1
-    return found
-
-
-def _doubt(
-    state: _State,
-    event: Event,
-    info: EventInfo,
-    logon: _Logon,
-    place: tuple[tuple[str, int], int],
-) -> str | None:
+def _doubt(state: _State, event: Event, info: EventInfo, logon: _Logon) -> str | None:
     """Why the latest logon for a change's session cannot be taken as its origin, if it can't."""
     number = _number_of(_text(event, info, "actor_logon_id"))
     if (event.computer.casefold(), number) in state.disputed_sessions:
         return "conflicting"
     if _restarted_between(state, event, logon):
         return "restarted"
-    if _rivals(state, place):
-        # Two different logons for one session at one moment: choosing either would be
-        # a guess that depends on the order the inputs were read.
-        return "conflicting"
     actor = _text(event, info, "actor_sid")
     if logon.account and actor and logon.account.casefold() != actor.casefold():
         return "other-account"

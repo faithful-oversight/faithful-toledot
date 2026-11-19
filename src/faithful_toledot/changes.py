@@ -69,6 +69,9 @@ class Origin:
             the logon and the change: logon IDs are unique only between reboots;
             ``conflicting`` when the input holds two different logons for the session
             at the same moment;
+            ``unordered`` when a logon or logoff of the session shares the change's
+            timestamp and the input cannot show, by record number in one log, which
+            came first, and the two orders would say different things;
             ``other-account`` when the logon was for a different account from the one
             that made the change;
             ``none`` when the change event names no session.

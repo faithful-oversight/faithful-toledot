@@ -95,6 +95,11 @@ _UNLINKED = {
         "The input holds two different logons for session {id} at the same moment, so "
         "where this change came from is not known."
     ),
+    "unordered": (
+        "The input cannot show whether the logon or logoff of session {id} that shares this "
+        "change's timestamp came before or after it, so where this change came from is "
+        "not known."
+    ),
     "other-account": (
         "The logon recorded for session {id} was for a different account from the one "
         "that made this change, so it is not taken as where the change came from."
