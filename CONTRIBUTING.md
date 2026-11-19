@@ -63,7 +63,7 @@ Run one stage at a time with `scripts/check.sh <stage>`:
 | `workflows` | Workflow security (zizmor) | Optional GitHub token, see below |
 | `secrets` | Committed secrets across the full history (Gitleaks) | Gitleaks on `PATH`; full history |
 | `deps` | Known vulnerabilities in every locked package, whatever its platform or Python version (pip-audit) | Network: queries the vulnerability database |
-| `licenses` | Licenses of the installed runtime dependencies against the allow list | Installs the optional extras, so network on the first run |
+| `licenses` | Licenses of every locked runtime dependency against the allow list | Installs the optional extras, so network on the first run; downloads the locked artifacts of packages for other platforms |
 | `reuse` | Copyright and license information on every file (REUSE) | Nothing |
 | `build` | Package build with the pinned backend, metadata check, and an end-to-end test of the built wheel (uv, twine) | Network on the first run, for the pinned build backend; full history, because the reproducible build reads the commit time |
 
@@ -73,7 +73,7 @@ The `workflows` stage uses a GitHub token if `GH_TOKEN`, `GITHUB_TOKEN`, or `ZIZ
 
 The `deps` stage audits every package and version in `uv.lock`, not only the ones the machine running it would install. `pip-audit` drops a requirement whose environment marker is false on its own host, such as a Windows-only package or the version only another Python installs, so the stage rewrites the lock export as marker-free requirement files (one version of each package per file) and audits those. It then reads pip-audit's own JSON results and fails unless every locked package was reported, none skipped, and it prints each vulnerability found. It also fails if `uv.lock` and the export disagree.
 
-The `licenses` stage reads licenses from installed packages, so it cannot read a package that is locked only for another platform or Python version. It names each one as not checked and says so in its success message. A reviewed exception for that exact version in `scripts/license_exceptions.toml` settles it. The vulnerability audit has no such limit.
+The `licenses` stage reads the license of an installed package from its metadata. For a package locked only for another platform or Python version, which is not installed here, it downloads the exact artifact `uv.lock` names (the wheel, else the source distribution), checks its sha256 against the lock, and reads only its `METADATA` or `PKG-INFO` without unpacking or running anything. It fails if the download, the hash, the metadata or the license is not acceptable. A reviewed exception for that exact version in `scripts/license_exceptions.toml` settles it without a download.
 
 The pre-commit hooks use the project environment and Gitleaks, and download nothing.
 

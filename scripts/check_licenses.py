@@ -23,9 +23,13 @@ An explicit license is never replaced by a classifier, so ``License: BSD-4-Claus
 with a generic BSD classifier fails rather than passing as BSD-3-Clause.
 
 A dependency locked only for another platform or Python version is not installed here, so
-its metadata cannot be read. It is never dropped silently: a reviewed exception for that
-exact version decides it, and otherwise it is named as not checked and the success message
-says so. The vulnerability audit has no such limit; it covers every locked package.
+its installed metadata cannot be read. Its license is then read from the exact locked
+artifact: the wheel (else the source distribution) that ``uv.lock`` names by URL, downloaded
+over HTTPS, checked against the sha256 in ``uv.lock``, and read for ``METADATA`` or
+``PKG-INFO`` only, never unpacked or executed. The same rules above then apply. A download
+that fails, a hash that differs, metadata that is missing or names another package or
+version, or a license that is not allowed, fails the check, unless a reviewed exception
+names that exact version.
 
 Some identifiers are allowed only through a reviewed exception (``REVIEW_ONLY``):
 public domain dedications vary, so metadata alone does not establish one.
@@ -33,12 +37,19 @@ public domain dedications vary, so metadata alone does not establish one.
 
 from __future__ import annotations
 
+import email.parser
+import hashlib
+import re
 import subprocess
 import sys
+import tarfile
+import tempfile
 import tomllib
+import urllib.request
+import zipfile
 from importlib.metadata import PackageNotFoundError, metadata, version
 from pathlib import Path
-from typing import Any, NamedTuple, Protocol
+from typing import IO, Any, NamedTuple, Protocol
 
 from packaging.licenses import InvalidLicenseExpression, canonicalize_license_expression
 from packaging.markers import Marker
@@ -229,8 +240,147 @@ def runtime_requirements() -> list[str]:
     return names
 
 
-def _decide(item: Locked, exceptions: dict[tuple[str, str], str]) -> tuple[str, str]:
-    """Return ("ok" | "unchecked" | "failed", detail) for one locked runtime package."""
+LOCK_FILE = Path(__file__).resolve().parent.parent / "uv.lock"
+MAX_ARTIFACT = 256 * 1024 * 1024
+"""The largest artifact downloaded to read one package's metadata."""
+MAX_METADATA = 4 * 1024 * 1024
+"""The most bytes read from the metadata file inside an artifact."""
+TIMEOUT = 60
+
+
+class ArtifactError(Exception):
+    """A locked artifact could not be fetched, verified or read."""
+
+
+class Artifact(NamedTuple):
+    """A file uv.lock names for a package version, with the sha256 it must have."""
+
+    url: str
+    sha256: str
+    wheel: bool
+    size: int
+
+
+def locked_artifacts(lock: Path = LOCK_FILE) -> dict[tuple[str, str], list[Artifact]]:
+    """Return the artifacts uv.lock names, keyed by (normalized name, exact version)."""
+    found: dict[tuple[str, str], list[Artifact]] = {}
+    for package in tomllib.loads(lock.read_text(encoding="utf-8")).get("package", []):
+        files = [(entry, True) for entry in package.get("wheels", [])]
+        if package.get("sdist"):
+            files.append((package["sdist"], False))
+        artifacts = []
+        for entry, wheel in files:
+            digest = str(entry.get("hash", ""))
+            if entry.get("url") and digest.startswith("sha256:"):
+                artifacts.append(
+                    Artifact(
+                        entry["url"], digest.removeprefix("sha256:"), wheel, entry.get("size", 0)
+                    )
+                )
+        key = (normalize(str(package.get("name", ""))), str(package.get("version", "")))
+        found.setdefault(key, []).extend(artifacts)
+    return found
+
+
+def _open(url: str) -> IO[bytes]:
+    """Open an HTTPS URL for reading."""
+    if not url.startswith("https://"):
+        msg = f"refusing to download {url!r}: not an https URL"
+        raise ArtifactError(msg)
+    request = urllib.request.Request(url, headers={"User-Agent": "faithful-license-check"})  # noqa: S310
+    return urllib.request.urlopen(request, timeout=TIMEOUT)  # type: ignore[no-any-return]  # noqa: S310
+
+
+def download(artifact: Artifact, cache: Path) -> Path:
+    """Fetch an artifact into ``cache``, verified against its locked sha256, and return it."""
+    target = cache / artifact.sha256
+    if target.exists():
+        return target
+    digest = hashlib.sha256()
+    partial = cache / f"{artifact.sha256}.partial"
+    try:
+        with _open(artifact.url) as source, partial.open("wb") as out:
+            while chunk := source.read(1024 * 1024):
+                digest.update(chunk)
+                if out.tell() + len(chunk) > MAX_ARTIFACT:
+                    msg = f"{artifact.url} is larger than {MAX_ARTIFACT} bytes"
+                    raise ArtifactError(msg)
+                out.write(chunk)
+    except OSError as exc:
+        msg = f"could not download {artifact.url}: {type(exc).__name__}"
+        raise ArtifactError(msg) from exc
+    if digest.hexdigest() != artifact.sha256:
+        partial.unlink(missing_ok=True)
+        msg = f"{artifact.url} does not match the sha256 in uv.lock"
+        raise ArtifactError(msg)
+    partial.rename(target)
+    return target
+
+
+def _read_member(opened: Any, label: str) -> bytes:
+    data: bytes = opened.read(MAX_METADATA + 1)
+    if len(data) > MAX_METADATA:
+        msg = f"{label} is larger than {MAX_METADATA} bytes"
+        raise ArtifactError(msg)
+    return data
+
+
+def read_metadata(path: Path, wheel: bool) -> Metadata:  # noqa: FBT001
+    """Return the package metadata inside an artifact, reading one file and nothing else."""
+    pattern = re.compile(r"^[^/]+\.dist-info/METADATA$" if wheel else r"^[^/]+/PKG-INFO$")
+    try:
+        if wheel:
+            with zipfile.ZipFile(path) as archive:
+                names = [n for n in archive.namelist() if pattern.match(n)]
+                if len(names) != 1:
+                    msg = "no single METADATA file in the wheel"
+                    raise ArtifactError(msg)
+                with archive.open(names[0]) as opened:
+                    data = _read_member(opened, "METADATA")
+        else:
+            with tarfile.open(path, "r:gz") as tar:
+                members = [m for m in tar if m.isfile() and pattern.match(m.name)]
+                if len(members) != 1:
+                    msg = "no single PKG-INFO file in the source distribution"
+                    raise ArtifactError(msg)
+                member = tar.extractfile(members[0])
+                if member is None:
+                    msg = "PKG-INFO cannot be read"
+                    raise ArtifactError(msg)
+                data = _read_member(member, "PKG-INFO")
+    except (OSError, zipfile.BadZipFile, tarfile.TarError, EOFError) as exc:
+        msg = f"cannot open the artifact ({type(exc).__name__})"
+        raise ArtifactError(msg) from exc
+    return email.parser.BytesParser().parsebytes(data, headersonly=True)
+
+
+def licenses_from_artifact(
+    item: Locked, artifacts: dict[tuple[str, str], list[Artifact]], cache: Path
+) -> set[str]:
+    """Return the licenses of a locked package, read from its exact locked artifact."""
+    candidates = sorted(
+        artifacts.get((normalize(item.name), item.version), []), key=lambda a: (not a.wheel, a.size)
+    )
+    if not candidates:
+        msg = "uv.lock names no wheel or source distribution with a sha256 for it"
+        raise ArtifactError(msg)
+    chosen = candidates[0]
+    meta = read_metadata(download(chosen, cache), wheel=chosen.wheel)
+    said_name = (meta.get_all("Name") or [""])[0] or ""
+    said_version = (meta.get_all("Version") or [""])[0] or ""
+    if normalize(said_name) != normalize(item.name) or said_version != item.version:
+        msg = f"the artifact says it is {said_name} {said_version}, not {item.name} {item.version}"
+        raise ArtifactError(msg)
+    return licenses_from(meta)
+
+
+def _decide(
+    item: Locked,
+    exceptions: dict[tuple[str, str], str],
+    artifacts: dict[tuple[str, str], list[Artifact]],
+    cache: Path,
+) -> tuple[str, str]:
+    """Return ("ok" | "failed", detail) for one locked runtime package."""
     if item.here:
         try:
             found = licenses_for(item.name, exceptions)
@@ -238,14 +388,17 @@ def _decide(item: Locked, exceptions: dict[tuple[str, str], str]) -> tuple[str, 
             return "failed", f"{item.name}: not installed, cannot read license"
         name = f"{item.name} {version(item.name)}"
     else:
-        # Not installed here, so its metadata cannot be read. A reviewed exception for
-        # this exact version still decides it; otherwise say plainly that it was not
-        # checked, rather than let a pass imply that it was.
-        reviewed = exceptions.get((normalize(item.name), item.version))
-        if reviewed is None:
-            return "unchecked", f"{item.name}=={item.version}"
-        found = identifiers(reviewed)
+        # Not installed here, so there is no installed metadata. A reviewed exception for
+        # this exact version decides it; otherwise read the locked artifact itself.
         name = f"{item.name} {item.version}"
+        reviewed = exceptions.get((normalize(item.name), item.version))
+        if reviewed is not None:
+            found = identifiers(reviewed)
+        else:
+            try:
+                found = licenses_from_artifact(item, artifacts, cache)
+            except ArtifactError as exc:
+                return "failed", f"{name}: cannot read its license from the locked artifact: {exc}"
     if found <= ALLOWED:
         return "ok", name
     return "failed", f"{name}: {', '.join(sorted(found - ALLOWED))}"
@@ -254,26 +407,21 @@ def _decide(item: Locked, exceptions: dict[tuple[str, str], str]) -> tuple[str, 
 def main() -> int:
     """Check every runtime dependency and report violations."""
     exceptions = load_exceptions()
-    results = [_decide(item, exceptions) for item in locked_runtime()]
+    locked = locked_runtime()
+    artifacts = locked_artifacts(LOCK_FILE) if not all(item.here for item in locked) else {}
+    with tempfile.TemporaryDirectory(prefix="licenses-") as cache:
+        results = [_decide(item, exceptions, artifacts, Path(cache)) for item in locked]
     failures = [detail for status, detail in results if status == "failed"]
-    unchecked = [detail for status, detail in results if status == "unchecked"]
-    checked = sum(1 for status, _ in results if status == "ok")
     for failure in failures:
         print(f"license not allowed: {failure}", file=sys.stderr)  # noqa: T201
-    if unchecked:
-        print(  # noqa: T201
-            "licenses NOT checked on this host (locked for another platform or Python "
-            f"version, so not installed here): {', '.join(sorted(unchecked))}. "
-            "Read each license and record a reviewed exception to have it checked.",
-            file=sys.stderr,
+    if not failures:
+        elsewhere = sum(1 for item in locked if not item.here)
+        note = (
+            f" ({elsewhere} for other platforms read from their locked artifacts)"
+            if elsewhere
+            else ""
         )
-    if not failures and unchecked:
-        print(  # noqa: T201
-            f"the licenses of {checked} locked runtime dependencies are allowed; "
-            f"{len(unchecked)} locked for other platforms or Python versions were not checked"
-        )
-    elif not failures:
-        print("all runtime dependency licenses are allowed")  # noqa: T201
+        print(f"all runtime dependency licenses are allowed{note}")  # noqa: T201
     return 1 if failures else 0
 
 

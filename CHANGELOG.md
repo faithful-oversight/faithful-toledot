@@ -58,6 +58,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Release jobs check the built files against `SHA256SUMS` before attesting, uploading or publishing.
 - uv and the Vale style packages used in CI are pinned to exact versions, and the style packages are checked against a SHA-256 before use.
 - Khmer and Mongolian marks that draw nothing (U+17B4, U+17B5, U+180B to U+180D, U+180F) now print as visible escapes, and an issue reference such as `#123` from the input is no longer turned into a link in the Markdown report.
+- The dependency audit now covers every locked package and version, including Windows-only packages and versions only another Python installs, and fails if the auditor leaves any out. The license check now reads the license of such packages from their exact locked artifact, checked against the sha256 in `uv.lock`, and fails if it cannot, instead of skipping them. The docs theme is limited to Python 3.11.5 and later, so the lock no longer pulls in a `soupsieve` with known advisories.
 
 ## [0.1.0] - 2026-11-11
 
