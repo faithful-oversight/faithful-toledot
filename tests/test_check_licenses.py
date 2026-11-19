@@ -165,7 +165,8 @@ def test_main_reports_each_failure(
             raise gate.PackageNotFoundError(name)
         return packages[name]
 
-    monkeypatch.setattr(gate, "runtime_requirements", lambda: ["good", "bad", "gone"])
+    locked = [gate.Locked(name, "1.0", here=True) for name in ("good", "bad", "gone")]
+    monkeypatch.setattr(gate, "locked_runtime", lambda: locked)
     monkeypatch.setattr(gate, "load_exceptions", dict)
     monkeypatch.setattr(gate, "metadata", lookup)
     monkeypatch.setattr(gate, "version", lambda _: "1.0")
@@ -173,5 +174,73 @@ def test_main_reports_each_failure(
     err = capsys.readouterr().err
     assert "bad 1.0: BSD-4-Clause" in err
     assert "gone: not installed" in err
-    monkeypatch.setattr(gate, "runtime_requirements", lambda: ["good"])
+    monkeypatch.setattr(gate, "locked_runtime", lambda: locked[:1])
     assert gate.main() == 0
+
+
+EXPORT = """\
+good==1.0
+winonly==2.0 ; sys_platform == 'never-an-os'
+old==1.0 ; python_full_version < '3.0'
+old==2.0 ; python_full_version >= '3.0'
+"""
+
+
+def _uv_export(gate: Any, monkeypatch: pytest.MonkeyPatch, text: str) -> None:
+    class Done:
+        stdout = text
+
+    monkeypatch.setattr(gate.subprocess, "run", lambda *_a, **_k: Done())
+
+
+def test_locked_runtime_keeps_every_identity_and_marks_the_ones_not_installed_here(
+    gate: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _uv_export(gate, monkeypatch, EXPORT)
+    assert gate.locked_runtime() == [
+        gate.Locked("good", "1.0", here=True),
+        gate.Locked("winonly", "2.0", here=False),
+        gate.Locked("old", "1.0", here=False),
+        gate.Locked("old", "2.0", here=True),
+    ]
+    assert gate.runtime_requirements() == ["good", "old"]
+
+
+def test_an_unreadable_locked_requirement_is_an_error(
+    gate: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _uv_export(gate, monkeypatch, "pkg @ https://example.com/pkg.tgz\n")
+    with pytest.raises(ValueError, match="cannot read this locked requirement"):
+        gate.locked_runtime()
+
+
+def test_licenses_for_other_platforms_are_reported_as_not_checked(
+    gate: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _uv_export(gate, monkeypatch, EXPORT)
+    monkeypatch.setattr(gate, "load_exceptions", dict)
+    monkeypatch.setattr(gate, "metadata", lambda _: meta("MIT"))
+    monkeypatch.setattr(gate, "version", lambda _: "1.0")
+    assert gate.main() == 0
+    captured = capsys.readouterr()
+    assert "NOT checked on this host" in captured.err
+    assert "old==1.0, winonly==2.0" in captured.err
+    assert "all runtime dependency licenses" not in captured.out
+    assert "2 locked for other platforms or Python versions were not checked" in captured.out
+
+
+def test_a_reviewed_exception_decides_a_package_not_installed_here(
+    gate: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _uv_export(gate, monkeypatch, EXPORT)
+    monkeypatch.setattr(gate, "metadata", lambda _: meta("MIT"))
+    monkeypatch.setattr(gate, "version", lambda _: "1.0")
+    reviewed = {("winonly", "2.0"): "MIT", ("old", "1.0"): "MIT"}
+    monkeypatch.setattr(gate, "load_exceptions", lambda: reviewed)
+    assert gate.main() == 0
+    captured = capsys.readouterr()
+    assert "NOT checked" not in captured.err
+    assert "all runtime dependency licenses are allowed" in captured.out
+    reviewed[("winonly", "2.0")] = "GPL-3.0-only"
+    assert gate.main() == 1
+    assert "winonly 2.0: GPL-3.0-only" in capsys.readouterr().err

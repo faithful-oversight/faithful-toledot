@@ -101,17 +101,32 @@ stage_deps() {
   # A private directory for every run. A fixed path in a shared temporary
   # directory could be a symlink planted beforehand, and two checks running at
   # the same time would overwrite each other's input.
-  local work rc=0
+  local work inputs input n rc=0
   work="$(mktemp -d)"
+  inputs="$work/audit"
   # --all-extras puts every optional extra in the audit; without it their pins would never
-  # be checked. The inventory check fails if any package an extra names is absent.
+  # be checked. The export keeps environment markers, and pip-audit would drop every pin
+  # whose marker is false on this host (a Windows-only package, or the version that only
+  # another Python installs). So the pins are rewritten as marker-free files, one version
+  # of each package per file, and every identity in uv.lock is audited on any host.
   uv export --color never --locked --all-groups --all-extras --no-emit-project \
-    --format requirements-txt > "$work/requirements-audit.txt" || rc=$?
+    --format requirements-txt > "$work/export.txt" || rc=$?
   if [[ $rc -eq 0 ]]; then
-    run python scripts/check_audit_inventory.py "$work/requirements-audit.txt" || rc=$?
+    run python scripts/check_audit_inventory.py split "$work/export.txt" "$inputs" \
+      --lock uv.lock || rc=$?
   fi
   if [[ $rc -eq 0 ]]; then
-    run pip-audit --strict --requirement "$work/requirements-audit.txt" --disable-pip || rc=$?
+    for input in "$inputs"/requirements-audit-*.txt; do
+      [[ -e "$input" ]] || continue
+      n="${input##*requirements-audit-}"
+      n="${n%.txt}"
+      run pip-audit --strict --requirement "$input" --disable-pip --progress-spinner off \
+        --format json --output "$inputs/audit-$n.json" || rc=$?
+    done
+    # Read what the auditor reported, not what was sent: every locked identity must be in
+    # its results, none skipped. This also prints each vulnerability found.
+    run python scripts/check_audit_inventory.py verify "$work/export.txt" "$inputs" \
+      --lock uv.lock || rc=$?
   fi
   rm -rf "$work"
   return "$rc"

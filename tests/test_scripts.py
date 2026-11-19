@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tomllib
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
@@ -168,26 +169,124 @@ case "$1" in
 esac
 """
 
+FAKE_UV_DEPS = """#!/usr/bin/env bash
+case "$1" in
+  export) cat "$FAKE_EXPORT" ;;
+  run)
+    shift
+    while [[ "${1:-}" == --* ]]; do shift; done
+    printf '%s\\n' "$*" >> "$UV_LOG"
+    sleep "${UV_SLEEP:-0}"
+    if [[ "$1" == python ]]; then shift; exec "$FAKE_PY" "$@"; fi
+    exec "$@" ;;
+esac
+"""
+
+# A stand-in for pip-audit. Like the real one it reads the requirement file it is given, but
+# it records every (name, version) it receives and answers from that alone, so a test can
+# see exactly what was submitted. AUDITOR_* variables make it misbehave on purpose.
+FAKE_AUDITOR = """#!{python}
+import json, os, sys, time
+from pathlib import Path
+
+argv = sys.argv[1:]
+requirement = Path(argv[argv.index("--requirement") + 1])
+output = Path(argv[argv.index("--output") + 1])
+time.sleep(float(os.environ.get("UV_SLEEP", "0")))
+deps = []
+with Path(os.environ["AUDIT_LOG"]).open("a", encoding="utf-8") as log:
+    log.write("FILE\\n" + requirement.read_text(encoding="utf-8"))
+    for line in requirement.read_text(encoding="utf-8").replace("\\\\\\n", " ").splitlines():
+        if not line or line.startswith("#"):
+            continue
+        name, _, rest = line.partition("==")
+        version = rest.split()[0]
+        log.write(f"SUBMITTED {{name}}=={{version}}\\n")
+        if name in os.environ.get("AUDITOR_DROP", "").split():
+            continue
+        if name in os.environ.get("AUDITOR_SKIP", "").split():
+            deps.append({{"name": name, "skip_reason": "skipped"}})
+            continue
+        bad = name == os.environ.get("AUDITOR_VULN")
+        vulns = [{{"id": "PYSEC-0", "fix_versions": []}}] if bad else []
+        deps.append({{"name": name, "version": version, "vulns": vulns}})
+if "AUDITOR_EXIT" in os.environ:
+    sys.exit(int(os.environ["AUDITOR_EXIT"]))
+output.write_text(json.dumps({{"dependencies": deps, "fixes": []}}), encoding="utf-8")
+"""
+
+
+def _pin(name: str, version: str, marker: str = "") -> str:
+    digest = (name + version).encode().hex().ljust(64, "0")[:64]
+    return f"{name}=={version}{' ; ' + marker if marker else ''} \\\n    --hash=sha256:{digest}\n"
+
+
+# A Windows-only pin, two Python-specific versions of one package, and an ordinary pin.
+EXPORT = (
+    _pin("colorama", "0.4.6", "sys_platform == 'win32'")
+    + _pin("sphinx", "9.0.4", "python_full_version < '3.12'")
+    + _pin("sphinx", "9.2.0", "python_full_version >= '3.12'")
+    + _pin("zipp", "3.23.0")
+    + _pin("pyspnego", "0.12.0")  # some products require it as well as the extras
+)
+IDENTITIES = {
+    "colorama==0.4.6",
+    "pyspnego==0.12.0",
+    "sphinx==9.0.4",
+    "sphinx==9.2.0",
+    "zipp==3.23.0",
+}
+
+
+def _repo_with_deps_stage(tmp_path: Path, name: str, lock_extra: str = "") -> Path:
+    """A throwaway repository holding the real scripts and a synthetic lock and project."""
+    repo = tmp_path / f"repo-{name}"
+    shutil.copytree(
+        ROOT / "scripts", repo / "scripts", ignore=shutil.ignore_patterns("__pycache__")
+    )
+    (repo / "pyproject.toml").write_text(
+        '[project]\nname = "example-tool"\nversion = "1"\n', encoding="utf-8"
+    )
+    lock = '[[package]]\nname = "example-tool"\nversion = "1"\nsource = { editable = "." }\n'
+    for ident in sorted(IDENTITIES):
+        pkg, _, version = ident.partition("==")
+        lock += f'\n[[package]]\nname = "{pkg}"\nversion = "{version}"\n'
+    (repo / "uv.lock").write_text(lock + lock_extra, encoding="utf-8")
+    return repo
+
 
 def _deps(
     tmp_path: Path, shared_tmp: Path, name: str = "uv", **extra: str
-) -> tuple[int, list[str]]:
-    """Run the deps stage with a fake uv. Return the exit code and the audit file paths used."""
+) -> tuple[int, list[str], str, Path]:
+    """Run the deps stage with a fake uv and a fake auditor.
+
+    Return the exit code, the audit file paths used, the error output, and the audit log.
+    """
+    repo = _repo_with_deps_stage(tmp_path, name, extra.pop("LOCK_EXTRA", ""))
     bin_dir = tmp_path / f"bin-{name}"
     bin_dir.mkdir(exist_ok=True)
     uv = bin_dir / "uv"
-    uv.write_text(FAKE_UV, encoding="utf-8")
+    uv.write_text(FAKE_UV_DEPS, encoding="utf-8")
     uv.chmod(0o755)
+    auditor = bin_dir / "pip-audit"
+    auditor.write_text(FAKE_AUDITOR.format(python=sys.executable), encoding="utf-8")
+    auditor.chmod(0o755)
+    export = tmp_path / f"{name}-export.txt"
+    export.write_text(extra.pop("EXPORT", EXPORT), encoding="utf-8")
     log = tmp_path / f"{name}.log"
+    audit_log = tmp_path / f"{name}-audit.log"
     env = _env(
         tmp_path,
         PATH=f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
         TMPDIR=str(shared_tmp),
         UV_LOG=str(log),
+        AUDIT_LOG=str(audit_log),
+        FAKE_EXPORT=str(export),
+        FAKE_PY=sys.executable,
         **extra,
     )
     result = subprocess.run(  # noqa: S603 - fixed script path, no shell
-        ["bash", str(CHECK), "deps"],  # noqa: S607 - bash is looked up on PATH on purpose
+        ["bash", str(repo / "scripts" / "check.sh"), "deps"],  # noqa: S607 - bash is on PATH
         env=env,
         check=False,
         capture_output=True,
@@ -195,27 +294,83 @@ def _deps(
     )
     lines = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
     paths = [
-        m.group(1) for line in lines if (m := re.search(r"(\S+requirements-audit\.txt)", line))
+        m.group(1) for line in lines if (m := re.search(r"(\S+requirements-audit-\d+\.txt)", line))
     ]
-    return result.returncode, paths
+    return result.returncode, paths, result.stderr, audit_log
+
+
+def _submitted(audit_log: Path) -> set[str]:
+    text = audit_log.read_text(encoding="utf-8") if audit_log.exists() else ""
+    return {
+        line.split(maxsplit=1)[1] for line in text.splitlines() if line.startswith("SUBMITTED ")
+    }
 
 
 @needs_bash
-def test_dependency_audit_uses_a_private_file_and_leaves_planted_links_alone(
+def test_the_deps_stage_submits_every_locked_identity_whatever_its_markers(
+    tmp_path: Path,
+) -> None:
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    code, _, err, audit_log = _deps(tmp_path, shared)
+    assert code == 0, err
+    # The Windows-only pin and both Python-specific versions reached the auditor.
+    assert _submitted(audit_log) == IDENTITIES
+    submitted_files = audit_log.read_text(encoding="utf-8").split("FILE\n")[1:]
+    assert len(submitted_files) == 2, "the two sphinx versions go in separate files"
+    assert all(" ; " not in text and "\\\n    --hash=sha256:" in text for text in submitted_files)
+
+
+@needs_bash
+@pytest.mark.parametrize("variable", ["AUDITOR_DROP", "AUDITOR_SKIP"])
+def test_the_deps_stage_fails_when_the_auditor_drops_or_skips_a_locked_pin(
+    tmp_path: Path, variable: str
+) -> None:
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    code, _, err, _ = _deps(tmp_path, shared, **{variable: "colorama"})
+    assert code != 0
+    assert "colorama" in err
+    assert list(shared.iterdir()) == []
+
+
+@needs_bash
+def test_the_deps_stage_fails_on_a_vulnerability_and_names_it(tmp_path: Path) -> None:
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    code, _, err, _ = _deps(tmp_path, shared, AUDITOR_VULN="zipp")
+    assert code != 0
+    assert "vulnerable: zipp==3.23.0: PYSEC-0" in err
+
+
+@needs_bash
+def test_the_deps_stage_refuses_a_lock_the_export_does_not_cover(tmp_path: Path) -> None:
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    extra = '\n[[package]]\nname = "hidden"\nversion = "2.0"\n'
+    code, _, err, audit_log = _deps(tmp_path, shared, LOCK_EXTRA=extra)
+    assert code != 0
+    assert "locked but not exported, so not audited: hidden==2.0" in err
+    assert not audit_log.exists(), "nothing is audited from a partial export"
+
+
+@needs_bash
+def test_dependency_audit_uses_a_private_directory_and_leaves_planted_links_alone(
     tmp_path: Path,
 ) -> None:
     shared = tmp_path / "shared"
     shared.mkdir()
     sentinel = tmp_path / "sentinel"
     sentinel.write_text("keep me\n", encoding="utf-8")
-    (shared / "requirements-audit.txt").symlink_to(sentinel)
-    code, first = _deps(tmp_path, shared)
+    for planted in ("export.txt", "requirements-audit-1.txt", "audit"):
+        (shared / planted).symlink_to(sentinel)
+    code, first, _, _ = _deps(tmp_path, shared)
     assert code == 0
     assert sentinel.read_text(encoding="utf-8") == "keep me\n"
     assert first
-    assert first[0] != str(shared / "requirements-audit.txt")
+    assert first[0] != str(shared / "requirements-audit-1.txt")
     assert not Path(first[0]).exists()
-    assert not Path(first[0]).parent.exists()
+    assert not Path(first[0]).parent.parent.exists()
 
 
 @needs_bash
@@ -224,7 +379,7 @@ def test_concurrent_dependency_audits_do_not_share_a_path(tmp_path: Path) -> Non
     shared.mkdir()
     with ThreadPoolExecutor(max_workers=2) as pool:
         runs = [pool.submit(_deps, tmp_path, shared, name, UV_SLEEP="1") for name in ("a", "b")]
-        (code_a, paths_a), (code_b, paths_b) = (run.result() for run in runs)
+        (code_a, paths_a, _, _), (code_b, paths_b, _, _) = (run.result() for run in runs)
     assert code_a == code_b == 0
     assert paths_a[0] != paths_b[0]
 
@@ -233,9 +388,9 @@ def test_concurrent_dependency_audits_do_not_share_a_path(tmp_path: Path) -> Non
 def test_a_failing_dependency_audit_still_fails_and_cleans_up(tmp_path: Path) -> None:
     shared = tmp_path / "shared"
     shared.mkdir()
-    code, paths = _deps(tmp_path, shared, UV_RUN_EXIT="1")
+    code, paths, _, _ = _deps(tmp_path, shared, AUDITOR_EXIT="1")
     assert code != 0
-    assert not Path(paths[0]).parent.exists()
+    assert not Path(paths[0]).parent.parent.exists()
     assert list(shared.iterdir()) == []
 
 

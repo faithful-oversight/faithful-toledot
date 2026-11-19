@@ -22,6 +22,11 @@ A license is taken from the first source that establishes it:
 An explicit license is never replaced by a classifier, so ``License: BSD-4-Clause``
 with a generic BSD classifier fails rather than passing as BSD-3-Clause.
 
+A dependency locked only for another platform or Python version is not installed here, so
+its metadata cannot be read. It is never dropped silently: a reviewed exception for that
+exact version decides it, and otherwise it is named as not checked and the success message
+says so. The vulnerability audit has no such limit; it covers every locked package.
+
 Some identifiers are allowed only through a reviewed exception (``REVIEW_ONLY``):
 public domain dedications vary, so metadata alone does not establish one.
 """
@@ -33,7 +38,7 @@ import sys
 import tomllib
 from importlib.metadata import PackageNotFoundError, metadata, version
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, NamedTuple, Protocol
 
 from packaging.licenses import InvalidLicenseExpression, canonicalize_license_expression
 from packaging.markers import Marker
@@ -167,8 +172,20 @@ def licenses_for(name: str, exceptions: dict[tuple[str, str], str]) -> set[str]:
     return licenses_from(metadata(name))
 
 
-def runtime_requirements() -> list[str]:
-    """Return the names of locked runtime dependencies, with every optional extra."""
+class Locked(NamedTuple):
+    """A locked runtime package, and whether its environment marker holds on this host."""
+
+    name: str
+    version: str
+    here: bool
+
+
+def locked_runtime() -> list[Locked]:
+    """Return every locked runtime (name, version), with every optional extra.
+
+    Markers are evaluated only to say whether the package is installed here, never to leave
+    a package out: its license can be read from the installed copy only when it is.
+    """
     out = subprocess.run(
         [  # noqa: S607 - uv is resolved from PATH by design
             "uv",
@@ -187,34 +204,75 @@ def runtime_requirements() -> list[str]:
         capture_output=True,
         text=True,
     ).stdout
-    names = []
+    found: dict[tuple[str, str], bool] = {}
     for raw in out.splitlines():
         line = raw.strip()
         if not line or line.startswith(("#", "-")):
             continue
         requirement, _, marker = line.partition(";")
-        # Skip dependencies for other platforms or Python versions, which are not installed here.
-        if marker.strip() and not Marker(marker.strip()).evaluate():
-            continue
-        names.append(requirement.split("==")[0].strip())
+        name, _, pinned = requirement.partition("==")
+        if not pinned.strip():
+            msg = f"cannot read this locked requirement as name==version: {line!r}"
+            raise ValueError(msg)
+        applies = not marker.strip() or Marker(marker.strip()).evaluate()
+        key = (name.strip(), pinned.strip())
+        found[key] = found.get(key, False) or applies
+    return [Locked(name, ver, here) for (name, ver), here in found.items()]
+
+
+def runtime_requirements() -> list[str]:
+    """Return the names of locked runtime dependencies installed on this host."""
+    names: list[str] = []
+    for item in locked_runtime():
+        if item.here and item.name not in names:
+            names.append(item.name)
     return names
+
+
+def _decide(item: Locked, exceptions: dict[tuple[str, str], str]) -> tuple[str, str]:
+    """Return ("ok" | "unchecked" | "failed", detail) for one locked runtime package."""
+    if item.here:
+        try:
+            found = licenses_for(item.name, exceptions)
+        except PackageNotFoundError:
+            return "failed", f"{item.name}: not installed, cannot read license"
+        name = f"{item.name} {version(item.name)}"
+    else:
+        # Not installed here, so its metadata cannot be read. A reviewed exception for
+        # this exact version still decides it; otherwise say plainly that it was not
+        # checked, rather than let a pass imply that it was.
+        reviewed = exceptions.get((normalize(item.name), item.version))
+        if reviewed is None:
+            return "unchecked", f"{item.name}=={item.version}"
+        found = identifiers(reviewed)
+        name = f"{item.name} {item.version}"
+    if found <= ALLOWED:
+        return "ok", name
+    return "failed", f"{name}: {', '.join(sorted(found - ALLOWED))}"
 
 
 def main() -> int:
     """Check every runtime dependency and report violations."""
     exceptions = load_exceptions()
-    failures = []
-    for name in runtime_requirements():
-        try:
-            found = licenses_for(name, exceptions)
-        except PackageNotFoundError:
-            failures.append(f"{name}: not installed, cannot read license")
-            continue
-        if not found <= ALLOWED:
-            failures.append(f"{name} {version(name)}: {', '.join(sorted(found - ALLOWED))}")
+    results = [_decide(item, exceptions) for item in locked_runtime()]
+    failures = [detail for status, detail in results if status == "failed"]
+    unchecked = [detail for status, detail in results if status == "unchecked"]
+    checked = sum(1 for status, _ in results if status == "ok")
     for failure in failures:
         print(f"license not allowed: {failure}", file=sys.stderr)  # noqa: T201
-    if not failures:
+    if unchecked:
+        print(  # noqa: T201
+            "licenses NOT checked on this host (locked for another platform or Python "
+            f"version, so not installed here): {', '.join(sorted(unchecked))}. "
+            "Read each license and record a reviewed exception to have it checked.",
+            file=sys.stderr,
+        )
+    if not failures and unchecked:
+        print(  # noqa: T201
+            f"the licenses of {checked} locked runtime dependencies are allowed; "
+            f"{len(unchecked)} locked for other platforms or Python versions were not checked"
+        )
+    elif not failures:
         print("all runtime dependency licenses are allowed")  # noqa: T201
     return 1 if failures else 0
 
