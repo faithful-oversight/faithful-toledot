@@ -219,13 +219,13 @@ Here are the two rows from the example:
 | DC01.corp.example | Security | gaps | filtered | 48227–48638 | 412 record numbers between the first and the last are absent. The input says it holds chosen events only, so this is expected and does not show whether any chosen event is missing. |
 | DC02.corp.example | Security | complete | filtered | none | Every record number between the first and the last is present. Events before the first or after the last are outside this input. The collection asked for earlier events, but the log's oldest record dates 2026-11-05 08:00:00 UTC. Earlier events had been overwritten and are missing. |
 
-An event that two inputs both hold is counted once. If the two copies of one record disagree, toledot keeps both copies and reports a problem.
+An event that two inputs both hold is counted once. If the two copies of one record disagree, toledot keeps both copies and reports a problem. If the copies are the same event but one says it succeeded and another says it failed (password events 4723, 4724, and 4794), toledot keeps one event, words it as an attempt, adds a note to it, and reports a problem.
 
 ## Problems
 
 A problem is a record or file part that toledot could not read, or a conflict. A problem never stops the rest of a file from being read, but the account is incomplete, because any change that record held is not in it. A problem has the `file`, the `position`, the `record_id` when known, and a `reason`. The reason does not repeat the record's content.
 
-These produce problems: an event that fails its format's rules, a damaged or cut-short file, a collection file whose end line is missing or does not match, every gap a collector recorded, and two copies of a record number with different content. toledot keeps both copies. toledot keeps the first 10,000 problems and adds one problem that says how many more it dropped.
+These produce problems: an event that fails its format's rules, a damaged or cut-short file, a collection file whose end line is missing or does not match, every gap a collector recorded, two copies of a record number with different content (toledot keeps both copies), and copies of one password event that state different outcomes (toledot keeps one event and does not state the outcome). toledot keeps the first 10,000 problems and adds one problem that says how many more it dropped.
 
 ## Other events read
 

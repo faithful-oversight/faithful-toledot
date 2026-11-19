@@ -14,7 +14,8 @@ The rules, each chosen so that toledot never says more than the events do:
   "not in the input", never a guess.
 * A SID is named from other events only when every event that names it agrees.
 * The same record read from two inputs is counted once. Two inputs that disagree
-  about one record are a problem, and the first is kept.
+  about one record are a problem, and the first is kept. Copies that disagree only
+  about success or failure are one event with a problem and no stated outcome.
 * Record numbers that are absent are reported. They mean missing events only when
   the input is the whole log, which toledot cannot tell by itself.
 """
@@ -167,6 +168,17 @@ class _Entry:
 
 
 @dataclass
+class _Slot:
+    """What the copies of one event logged on success and failure say about its outcome."""
+
+    own: str
+    """What the first copy that made this slot said: ``unknown``, ``success`` or ``failure``."""
+    input_number: int
+    effective: str
+    """What every copy says together: ``conflict`` when two known outcomes disagree."""
+
+
+@dataclass
 class _State:
     catalog: Catalog
     account: Account = field(default_factory=Account)
@@ -181,6 +193,8 @@ class _State:
     disputed: set[tuple[str, str, int]] = field(default_factory=set)
     """Records read more than once with different content (computer, log, number)."""
     disputed_sessions: set[tuple[str, int]] = field(default_factory=set)
+    slots: dict[tuple[object, ...], list[_Slot]] = field(default_factory=dict)
+    """Per event (record, or content when unnumbered): what its copies say about its outcome."""
     input_number: int = 0
     latest: dict[tuple[tuple[str, int], int], _Verdict] = field(default_factory=dict)
     """Per session and moment: what the session's latest entry at that moment says."""
@@ -322,6 +336,7 @@ def _take(state: _State, event: Event, scope: str) -> None:
         seen = state.kept.get(key)
         if seen is not None:
             if seen == digest:
+                _merge_outcome(state, event, info, (*key, digest))
                 state.count("duplicates")
                 return
             text = (
@@ -334,14 +349,17 @@ def _take(state: _State, event: Event, scope: str) -> None:
             state.disputed.add(key)
         else:
             state.kept[key] = digest
+        _register_outcome(state, event, info, (*key, digest))
     elif info is not None:
         # With no record number, the same event from two overlapping exports can only
         # be recognised by its content. Within one export, identical rows are kept.
         key_unnumbered = (computer, event.channel.casefold(), _fingerprint(event))
         first = state.unnumbered.setdefault(key_unnumbered, state.input_number)
         if first != state.input_number:
+            _merge_outcome(state, event, info, key_unnumbered)
             state.count("duplicates")
             return
+        _register_outcome(state, event, info, key_unnumbered)
     log = state.logs.setdefault(
         (computer, event.channel.casefold()), _Log(event.computer, event.channel)
     )
@@ -377,6 +395,86 @@ def _fingerprint(event: Event) -> bytes:
         digest.update(len(raw).to_bytes(8, "little"))
         digest.update(raw)
     return digest.digest()
+
+
+_UNKNOWN, _SUCCESS, _FAILURE, _CONFLICT = "unknown", "success", "failure", "conflict"
+
+
+def _outcome_tag(event: Event, info: EventInfo) -> str | None:
+    """What one copy says about success: ``unknown``, ``success`` or ``failure``.
+
+    ``None`` for an event that is not logged on both success and failure, which has
+    nothing to disagree about. The fingerprint leaves this out on purpose, so that copies
+    from exports that carry less outcome metadata are still recognised as copies.
+    """
+    if info.action not in _OUTCOMES or info.channel != "Security":
+        return None
+    said = _audit_outcome(event)
+    return _UNKNOWN if said is None else _SUCCESS if said else _FAILURE
+
+
+def _register_outcome(
+    state: _State, event: Event, info: EventInfo, base: tuple[object, ...]
+) -> None:
+    """Note what a kept event says about its outcome, as the first of its copies."""
+    tag = _outcome_tag(event, info)
+    if tag is None:
+        return
+    slots = state.slots.setdefault(base, [])
+    if all(slot.own != tag for slot in slots):
+        slots.append(_Slot(tag, state.input_number, tag))
+
+
+def _merge_outcome(state: _State, event: Event, info: EventInfo, base: tuple[object, ...]) -> None:
+    """Fold a later copy's outcome into the event it copies, whatever order they arrive in.
+
+    A copy that says nothing changes nothing, and one that says more fills in what an
+    earlier copy left out. Two known outcomes that differ leave the event's outcome
+    unstated and are a problem: neither export is trusted over the other.
+    """
+    said = _outcome_tag(event, info)
+    candidates = state.slots.get(base, [])
+    if said in {None, _UNKNOWN} or not candidates:
+        return
+    slot = next(
+        (
+            candidate
+            for wanted in (said, _UNKNOWN, _CONFLICT)
+            for candidate in candidates
+            if candidate.effective == wanted
+        ),
+        candidates[0],
+    )
+    if slot.effective in {said, _CONFLICT}:
+        return
+    if slot.effective == _UNKNOWN:
+        slot.effective = said or _UNKNOWN
+        return
+    slot.effective = _CONFLICT
+    which = (
+        f"Record {event.record_id} of the {event.channel} log on {event.computer}"
+        if event.record_id is not None
+        else f"An unnumbered event {event.event_id} on {event.computer} at {event.time.isoformat()}"
+    )
+    text = (
+        f"{which} is in the input more than once, and the copies disagree about whether the "
+        "attempt succeeded or failed. One event is kept and its outcome is not stated."
+    )
+    state.problem(Problem(event.source, text, event.record_id))
+
+
+def _outcome_of(state: _State, event: Event, info: EventInfo) -> str | None:
+    """What every copy of an event says about its outcome, or ``None`` if it has no outcome."""
+    own = _outcome_tag(event, info)
+    if own is None:
+        return None
+    computer, channel = event.computer.casefold(), event.channel.casefold()
+    base = (
+        (computer, channel, event.record_id, _fingerprint(event))
+        if event.record_id is not None
+        else (computer, channel, _fingerprint(event))
+    )
+    return next((slot.effective for slot in state.slots.get(base, []) if slot.own == own), own)
 
 
 def _text(event: Event, info: EventInfo, role: str) -> str | None:
@@ -810,12 +908,17 @@ def _change(state: _State, info: EventInfo, events: list[Event]) -> Change:
             f"The event lacks {', '.join(absent)}, which this event normally records; "
             "the description may be incomplete."
         )
+    if _outcome_of(state, first, info) == _CONFLICT:
+        notes.append(
+            "Copies of this event disagree about whether it succeeded or failed, so the "
+            "outcome is not stated."
+        )
     change = Change(
         id="",
         time=first.time,
         computer=first.computer,
         category=info.category,
-        action=_action_for(info, first),
+        action=_action_for(state, info, first),
         title=info.title,
         actor=_party(state, first, info, "actor"),
         target=_target(state, first, info),
@@ -858,13 +961,17 @@ def _audit_outcome(event: Event) -> bool | None:
     return {"audit success": True, "audit failure": False}.get(level)
 
 
-def _action_for(info: EventInfo, event: Event) -> str:
-    """The action, using the audit outcome for events logged on success and failure."""
+def _action_for(state: _State, info: EventInfo, event: Event) -> str:
+    """The action, using the audit outcome for events logged on success and failure.
+
+    The outcome is what every copy of the event says. Copies that contradict each
+    other leave it unstated.
+    """
     pair = _OUTCOMES.get(info.action)
-    outcome = _audit_outcome(event) if pair and info.channel == "Security" else None
-    if pair is None or outcome is None:
+    outcome = _outcome_of(state, event, info)
+    if pair is None or outcome in {None, _UNKNOWN, _CONFLICT}:
         return info.action
-    return pair[0] if outcome else pair[1]
+    return pair[0] if outcome == _SUCCESS else pair[1]
 
 
 def _with(change: Change, **updates: object) -> Change:
