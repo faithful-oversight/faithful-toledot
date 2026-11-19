@@ -269,7 +269,7 @@ toledot reads the file line by line, but it keeps every change it builds in memo
 - Anything after the trailer.
 - Every entry in `gaps`, worded as `The collector could not read AREA: REASON`.
 
-A first line that is not a valid header stops the run with exit code `3`.
+A first line that is not a valid header stops the run with exit code `3`. A valid header meets every constraint of the published schema (`toledot schema events`), not only the ones toledot reads: `toledot_events` must be the whole number `1` (not `2`, text, or a Boolean), `collector` must be an object with `name`, `version`, and a `method` of `powershell` or `psrp`, and `query` and each entry of `logs` must have exactly the properties the schema lists, with their types, ranges, and allowed values. `toledot collect` applies the same check before it publishes a stream.
 
 toledot is strict about what a line holds: a repeated property name, `NaN`, an unpaired surrogate, nesting deeper than 8 levels, or more than 256 fields is refused. A name is at most 255 characters, and a value at most 1 MiB.
 
