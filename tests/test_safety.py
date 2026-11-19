@@ -13,6 +13,7 @@ from faithful_toledot.outputs.safety import (
     escape_markdown,
     neutralize_formula,
     terminal,
+    terminal_line,
     visible,
 )
 
@@ -120,3 +121,19 @@ def test_an_issue_reference_from_the_input_is_not_linked() -> None:
     assert escape_markdown("see #123") == f"see #{joiner}123"
     assert escape_markdown("owner/repo#7") == f"owner/repo#{joiner}7"
     assert escape_markdown("item #a") == "item #a"
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["a\nb", "a\r\nb", "a\rb", "a\tb", "a\x0bb\x0cb\x85b", "a\u2028b\u2029b", "\n\n", "a\x1b[2Jb"],
+)
+def test_terminal_line_never_contains_a_line_break_or_control(value: str) -> None:
+    shown = terminal_line(value)
+    assert len(shown.splitlines()) <= 1
+    assert all(ord(c) >= 0x20 and ord(c) != 0x7F for c in shown)
+
+
+def test_terminal_line_shows_a_line_feed_as_an_escape_and_keeps_text() -> None:
+    assert terminal_line("a\nb\r\nc\td") == "a\\nb\\r\\nc\\td"
+    assert terminal_line("plain text") == "plain text"
+    assert terminal("a\nb") == "a\nb"  # terminal itself still keeps line feeds

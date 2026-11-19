@@ -574,3 +574,50 @@ def test_a_report_into_the_inputs_own_folder_still_works_when_no_name_collides(
     data = _events_file(evidence)
     assert main(["report", str(evidence), "-o", str(tmp_path), "--fail-on", "never"]) == ExitCode.OK
     assert evidence.read_bytes() == data
+
+
+# --- a value with a line break cannot add a terminal line ------------------------------------
+
+FORGED = "No changes found in the input."
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows does not allow line breaks in names")
+def test_names_and_messages_with_line_breaks_stay_on_one_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A path, a file name, or an error message is one line, however it is written."""
+    folder = tmp_path / f"d\n{FORGED}"
+    assert main(["example", str(folder)]) == ExitCode.OK
+    lines = capsys.readouterr().out.splitlines()
+    assert FORGED not in lines
+    assert not any(line.strip().startswith(FORGED) for line in lines)
+    assert lines[0].startswith("Wrote synthetic events to ")
+    assert lines[1].startswith("  toledot report ")
+    assert len(lines) == 2
+
+    out = folder / f"r\r\n{FORGED}"
+    assert main(["report", *files_of(folder), "-o", str(out)]) == ExitCode.FINDINGS
+    lines = capsys.readouterr().out.splitlines()
+    assert FORGED not in lines
+    assert not any(line.strip().startswith(FORGED) for line in lines)
+    assert lines[-1].startswith("Reports written to ")
+    assert "\\n" in lines[-1]
+
+    missing = tmp_path / f"m\n{FORGED}.jsonl"
+    assert main(["report", str(missing), "-o", str(tmp_path / "x")]) == ExitCode.INPUT_ERROR
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1
+    assert "\\n" in err
+
+    from faithful_toledot import cli  # noqa: PLC0415
+
+    def boom(_: object) -> int:
+        msg = f"first\n{FORGED}\r\nthird"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(cli, "_events", boom)
+    assert main(["events"]) == ExitCode.INTERNAL_ERROR
+    lines = capsys.readouterr().err.splitlines()
+    assert lines[0] == f"toledot: internal error: RuntimeError: first\\n{FORGED}\\r\\nthird"
+    assert lines[1].startswith("This is a bug in toledot")
+    assert len(lines) == 2

@@ -23,7 +23,7 @@ from faithful_toledot.errors import ToledotError, UsageError
 from faithful_toledot.events import ReadOptions
 from faithful_toledot.outputs import render
 from faithful_toledot.outputs.files import write_files
-from faithful_toledot.outputs.safety import command_line, terminal
+from faithful_toledot.outputs.safety import command_line, terminal_line
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -197,7 +197,8 @@ def _report(args: argparse.Namespace) -> int:
         else ExitCode.OK
     )
     say(render.terminal_summary(document))
-    say(terminal(f"Reports written to {args.output}: {', '.join(p.name for p in written)}"))
+    names = ", ".join(terminal_line(p.name) for p in written)
+    say(f"Reports written to {terminal_line(str(args.output))}: {names}")
     return int(code)
 
 
@@ -222,7 +223,10 @@ def _example(args: argparse.Namespace) -> int:
     command = command_line(
         "toledot", "report", *map(str, written), "-o", str(args.directory / "report")
     )
-    say(terminal(f"Wrote synthetic events to {args.directory}. Try:\n  {command}"))
+    say(
+        f"Wrote synthetic events to {terminal_line(str(args.directory))}. Try:\n"
+        f"  {terminal_line(command)}"
+    )
     return int(ExitCode.OK)
 
 
@@ -261,11 +265,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         return int(args.run(args))
     except ToledotError as exc:
-        say(f"toledot: error: {terminal(redact(str(exc)))}", error=True)
+        say(f"toledot: error: {terminal_line(redact(str(exc)))}", error=True)
         return int(ExitCode.USAGE if isinstance(exc, UsageError) else ExitCode.INPUT_ERROR)
     except Exception as exc:  # noqa: BLE001 - last-resort handler keeps crashes distinct
         say(
-            f"toledot: internal error: {type(exc).__name__}: {terminal(redact(str(exc)))}\n"
+            f"toledot: internal error: {type(exc).__name__}: {terminal_line(redact(str(exc)))}\n"
             "This is a bug in toledot. Please report it.",
             error=True,
         )

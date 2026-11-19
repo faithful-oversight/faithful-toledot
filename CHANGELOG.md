@@ -39,6 +39,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `SECURITY.md` no longer says that no release has been published. It says the latest release is supported.
 - The PowerShell syntax check now fails in CI when PowerShell is missing, instead of skipping.
 - On Windows, a closed pipe (reported there as an invalid-argument error rather than a broken pipe) also stops the printing and keeps the real exit code, instead of ending with an internal error or exit 120.
+- A file name, report folder, collection path, or error message that contains a line break can no longer add a line to what toledot prints. Previously a value such as `d\nNo changes found in the input.` put a convincing line of its own under toledot's output. These values now print on one line, with the line break shown as `\n`.
 
 ### Changed
 

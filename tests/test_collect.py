@@ -667,6 +667,32 @@ def test_collect_runs_and_says_what_to_do_next(
     assert "'" in printed or '"' in printed  # the path with a space is quoted
 
 
+@pytest.mark.usefixtures("fetched")
+def test_a_gap_or_path_with_a_line_break_cannot_add_a_terminal_line(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    forged = "Collected 0 events from nowhere."
+    gap = f"the System log: Access is denied.\n{forged}"
+
+    def fake_collect(
+        _target: Target, _text: str, _values: dict[str, Any], out: Path, **_options: Any
+    ) -> remote.Result:
+        return remote.Result(out, 1, (gap,))
+
+    monkeypatch.setattr(remote, "collect", fake_collect)
+    args = collect_args(
+        tmp_path / "e.jsonl", "--username", "auditor@corp.example", "--secret", "env:PW"
+    )
+    assert main(args) == ExitCode.OK
+    lines = capsys.readouterr().out.splitlines()
+    assert forged not in lines
+    assert not any(line.strip().startswith(forged) for line in lines)
+    assert f"  not read: the System log: Access is denied.\\n{forged}" in lines
+    assert len(lines) == 3
+
+
 def test_collect_with_the_current_kerberos_ticket(
     tmp_path: Path, fetched: list[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
