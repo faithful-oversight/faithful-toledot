@@ -515,3 +515,62 @@ def test_unnumbered_events_are_not_incomplete_only_unconfirmed(tmp_path: Path) -
     code, report = _run_numbered(tmp_path, [100, None], "--whole-logs", "--fail-on", "incomplete")
     assert code == ExitCode.OK
     assert report["summary"]["completeness"] == "unconfirmed"
+
+
+# --- an output is never an input (the PAK-1 / MER-1 class) -------------------------------------
+
+
+def _events_file(path: Path) -> bytes:
+    """Write a readable collection file at path and return its bytes."""
+    from tests.helpers import member_added  # noqa: PLC0415
+    from tests.test_formats_bundle import header  # noqa: PLC0415
+
+    data = encode(header(), [member_added()])
+    path.write_bytes(data)
+    return data
+
+
+@pytest.mark.parametrize(
+    "name", ["toledot-report.json", "toledot-manifest.json", "toledot-changes.csv"]
+)
+@pytest.mark.parametrize("kind", ["same path", "dotdot", "symlink", "hardlink"])
+def test_a_report_never_replaces_an_input_even_with_force(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], name: str, kind: str
+) -> None:
+    out = tmp_path / "out"
+    out.mkdir()
+    evidence = tmp_path / "evidence.jsonl"
+    data = _events_file(evidence)
+    target = out / name
+    given = evidence
+    try:
+        if kind == "symlink":
+            target.symlink_to(evidence)
+        elif kind == "hardlink":
+            os.link(evidence, target)
+        elif kind == "dotdot":
+            data = _events_file(target)
+            given = out / ".." / "out" / name
+        else:
+            data = _events_file(target)
+            given = target
+    except (OSError, NotImplementedError):
+        pytest.skip(f"{kind}s are not available here")
+    before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+    code = main(["report", str(given), "-o", str(out), "--force", "--fail-on", "never"])
+    assert code == ExitCode.INPUT_ERROR
+    assert "same file as the input file" in capsys.readouterr().err
+    after = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+    assert after == before
+    assert (given if kind not in {"symlink", "hardlink"} else evidence).read_bytes() == data
+    assert not list(out.glob(".toledot-*"))
+    assert sorted(p.name for p in out.iterdir()) == [name]  # nothing else was published
+
+
+def test_a_report_into_the_inputs_own_folder_still_works_when_no_name_collides(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "events.jsonl"
+    data = _events_file(evidence)
+    assert main(["report", str(evidence), "-o", str(tmp_path), "--fail-on", "never"]) == ExitCode.OK
+    assert evidence.read_bytes() == data

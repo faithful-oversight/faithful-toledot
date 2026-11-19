@@ -93,7 +93,7 @@ A record that cannot be read does not stop the run. toledot lists it as a proble
 | `toledot-changes.csv` | One row per detail of each change. |
 | `toledot-manifest.json` | The size and SHA-256 of every file listed and of every input. Written last. |
 
-Files are written in that order whatever order you give to `--format`. They are readable only by your user account on Linux and macOS. Without `--force`, toledot never replaces an existing file, even one created while it runs. With `--force`, it moves the old files aside first and puts them back if anything fails, so the folder holds either the old set or the new set.
+Files are written in that order whatever order you give to `--format`. They are readable only by your user account on Linux and macOS. Without `--force`, toledot never replaces an existing file, even one created while it runs. With or without `--force`, toledot refuses to write a report file that is the same file as one of the inputs, however the path is spelled and through any symbolic or hard link, and it changes nothing. With `--force`, it moves the old files aside first and puts them back if anything fails, so the folder holds either the old set or the new set.
 
 Run one toledot at a time per output folder. Only a crash or power loss while writing can leave a partial file, a mix of old and new files, or `.toledot-old-*` backup files. The manifest lists the size and SHA-256 of every file from its run, so either case is detectable. See [Reports and output](output.md#manifest).
 

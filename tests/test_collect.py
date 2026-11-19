@@ -726,3 +726,58 @@ def test_collector_writes_the_script(tmp_path: Path, capsys: pytest.CaptureFixtu
     assert "-OutFile dc01-events.jsonl" in capsys.readouterr().out
     assert main(["collector", "-o", str(out)]) == ExitCode.INPUT_ERROR
     assert main(["collector", "-o", str(out), "--force"]) == ExitCode.OK
+
+
+@pytest.mark.parametrize("what", ["ca", "secret"])
+def test_collect_never_replaces_the_files_it_reads_even_with_force(
+    tmp_path: Path,
+    fetched: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    what: str,
+) -> None:
+    sentinel = tmp_path / "input.pem"
+    sentinel.write_bytes(b"precious bytes")
+    monkeypatch.setattr(remote, "collect", lambda *_a, **_k: pytest.fail("must not collect"))
+    extra = (
+        ["--ca-file", str(sentinel)]
+        if what == "ca"
+        else ["--username", "CORP\\auditor", "--secret", f"file:{sentinel}"]
+    )
+    assert main(collect_args(sentinel, *extra, "--force")) == ExitCode.INPUT_ERROR
+    assert "same file as" in capsys.readouterr().err
+    assert sentinel.read_bytes() == b"precious bytes"
+    assert fetched == []
+
+
+def test_collect_refuses_a_destination_that_is_the_ca_file(tmp_path: Path, fake: Remote) -> None:
+    ca = tmp_path / "ca.pem"
+    ca.write_bytes(b"ca bytes")
+    target = replace(TARGET, ca_file=ca)
+    with pytest.raises(CollectionError, match="same file as the CA file"):
+        collect(target, "script", {"ToPipeline": True}, ca, force=True)
+    assert ca.read_bytes() == b"ca bytes"
+    assert fake.script == ""  # refused before connecting
+    assert leftovers(tmp_path) == []
+
+
+@pytest.mark.usefixtures("fake")
+def test_collect_checks_the_ca_file_again_just_before_publishing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ca = tmp_path / "ca.pem"
+    ca.write_bytes(b"ca bytes")
+    out = tmp_path / "events.jsonl"
+    finish = remote._Sink.finish  # noqa: SLF001 - wrapped to act during the long collection
+
+    def alias_then_finish(self: remote._Sink) -> Any:
+        result = finish(self)
+        os.link(ca, out)  # the destination becomes another name for the CA file
+        return result
+
+    monkeypatch.setattr(remote._Sink, "finish", alias_then_finish)  # noqa: SLF001
+    with pytest.raises(CollectionError, match="same file as the CA file"):
+        collect(replace(TARGET, ca_file=ca), "script", {"ToPipeline": True}, out, force=True)
+    assert ca.read_bytes() == b"ca bytes"
+    assert out.read_bytes() == b"ca bytes"
+    assert leftovers(tmp_path) == []

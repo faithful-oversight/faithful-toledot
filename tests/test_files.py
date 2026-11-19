@@ -125,3 +125,49 @@ def test_copy_fallback_never_removes_a_file_it_did_not_create(
             write_files(tmp_path, FILES, force=False)
     assert [p.name for p in tmp_path.iterdir()] == ["b.txt"]
     assert (tmp_path / "b.txt").read_text(encoding="utf-8") == "someone else"
+
+
+# --- an output is never a file toledot was told to read (the PAK-1 / MER-1 class) -------------
+
+
+@pytest.mark.parametrize("kind", ["same path", "dotdot", "symlink", "hardlink"])
+@pytest.mark.parametrize("force", [False, True])
+def test_a_target_that_is_a_protected_file_is_refused_even_with_force(
+    tmp_path: Path, kind: str, *, force: bool
+) -> None:
+    out = tmp_path / "out"
+    out.mkdir()
+    target = out / "a.txt"
+    evidence = tmp_path / "evidence.evtx"
+    evidence.write_bytes(b"evidence bytes")
+    given = evidence
+    try:
+        if kind == "symlink":
+            target.symlink_to(evidence)
+        elif kind == "hardlink":
+            os.link(evidence, target)
+        else:  # the evidence itself sits at the name a report file would take
+            target.write_bytes(b"evidence bytes")
+            given = target if kind == "same path" else out / ".." / "out" / "a.txt"
+    except (OSError, NotImplementedError):
+        pytest.skip(f"{kind}s are not available here")
+    before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+    with pytest.raises(ToledotError, match="same file as the input file"):
+        write_files(out, FILES, force=force, protect=[("input file", given)])
+    after = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+    assert after == before  # the evidence, the aliases, and every other file are untouched
+    assert not list(tmp_path.rglob(".toledot-*"))
+
+
+def test_files_that_are_not_protected_are_still_written_with_force(tmp_path: Path) -> None:
+    other = tmp_path / "other.evtx"
+    other.write_bytes(b"x")
+    (tmp_path / "a.txt").write_text("old")
+    write_files(tmp_path, FILES, force=True, protect=[("input file", other)])
+    assert (tmp_path / "a.txt").read_text() == FILES["a.txt"]
+    assert other.read_bytes() == b"x"
+
+
+def test_a_protected_file_that_does_not_exist_protects_nothing(tmp_path: Path) -> None:
+    write_files(tmp_path, FILES, force=False, protect=[("input file", tmp_path / "missing")])
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["a.txt", "b.txt"]

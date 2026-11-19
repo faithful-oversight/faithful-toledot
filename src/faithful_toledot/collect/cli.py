@@ -11,7 +11,7 @@ from faithful_toledot.arguments import bounded, moment
 from faithful_toledot.collect import names, remote, script, secrets
 from faithful_toledot.console import say
 from faithful_toledot.errors import UsageError
-from faithful_toledot.outputs.files import write_files
+from faithful_toledot.outputs.files import refuse_aliases, write_files
 from faithful_toledot.outputs.safety import command_line, terminal
 
 if TYPE_CHECKING:
@@ -103,6 +103,8 @@ def run_collect(args: argparse.Namespace) -> int:
         idle_timeout=args.timeout,
     )
     remote.settings(target)  # refuse a bad combination before the secret is read
+    # The files this command reads are never the file it writes, even with --force.
+    refuse_aliases([args.output], _read_files(args))
     if args.secret:
         target = remote.Target(**{**vars(target), "secret": secrets.resolve(args.secret)})
     channels = args.channel or ["Security", "System"]
@@ -114,6 +116,17 @@ def run_collect(args: argparse.Namespace) -> int:
     command = command_line("toledot", "report", str(result.path), "-o", "report")
     say(terminal(f"Write the account with: {command}"))
     return 0
+
+
+def _read_files(args: argparse.Namespace) -> list[tuple[str, Path]]:
+    """The files ``collect`` reads, by role: the CA file and a ``file:`` secret."""
+    found: list[tuple[str, Path]] = []
+    if args.ca_file:
+        found.append(("CA file", args.ca_file))
+    provider, _, location = (args.secret or "").partition(":")
+    if provider == "file" and location:
+        found.append(("secret file", Path(location)))
+    return found
 
 
 def run_collector(args: argparse.Namespace) -> int:

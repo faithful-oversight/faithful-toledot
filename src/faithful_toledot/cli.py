@@ -182,7 +182,13 @@ def _report(args: argparse.Namespace) -> int:
         generated_at=_now(),
         version=__version__,
     )
-    written = outputs.write_reports(args.output, document, args.format, force=args.force)
+    written = outputs.write_reports(
+        args.output,
+        document,
+        args.format,
+        force=args.force,
+        protect=[("input file", path) for path in args.inputs],
+    )
     # Decide the exit code first: nothing printed after this can change it.
     failing = {"unconfirmed": {"unconfirmed", "incomplete"}, "incomplete": {"incomplete"}}
     code = (
