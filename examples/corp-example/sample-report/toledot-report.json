@@ -126,6 +126,7 @@
       "missing_count": 412,
       "scope": "filtered",
       "overwritten_before": null,
+      "unnumbered": 0,
       "checked": true,
       "statement": "412 record numbers between the first and the last are absent. The input says it holds chosen events only, so this is expected and does not show whether any chosen event is missing."
     },
@@ -142,6 +143,7 @@
       "missing_count": 0,
       "scope": "filtered",
       "overwritten_before": "2026-11-05T08:00:00Z",
+      "unnumbered": 0,
       "checked": true,
       "statement": "Every record number between the first and the last is present. Events before the first or after the last are outside this input. The collection asked for earlier events, but the log's oldest record is from 2026-11-05 08:00:00 UTC: earlier events had been overwritten and are missing."
     }

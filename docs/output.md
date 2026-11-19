@@ -50,10 +50,10 @@ The account is **incomplete** when any of these is true:
 
 Otherwise the account is **unconfirmed** when no log was read, or when any log is not `checked`. A log is `checked` when the input gives positive evidence about it:
 
-- Every record number between its first and its last is present. Continuous record numbers show that nothing between the first and the last is absent, even when the scope is `unknown`.
+- Every record number between its first and its last is present, and every event has a record number. Continuous record numbers show that nothing between the first and the last is absent, even when the scope is `unknown`.
 - Or its scope is `filtered` or `unfiltered`, so toledot knows what the input should hold. A collection that asked only for chosen events accounts for its own gaps.
 
-Absent record numbers in a log of `unknown` scope, and an export with no record numbers, leave toledot unable to tell. Such a log is not `checked`.
+Absent record numbers in a log of `unknown` scope, and an export with no record numbers, leave toledot unable to tell. Such a log is not `checked`. Neither is a log in which any event has no record number, whatever its scope.
 
 Otherwise the account is **complete**.
 
@@ -202,7 +202,8 @@ Coverage has one entry for each computer and log in the input. It says what the 
 | `events` | How many events were read from it. |
 | `first`, `last` | The earliest and latest event time. |
 | `first_record`, `last_record` | The lowest and highest record number. |
-| `continuity` | `complete`: every record number between the first and the last is present. `gaps`: some are absent. `unnumbered`: the export kept no record numbers. `empty`: the collector read the log and found none of the events it asked for. |
+| `continuity` | `complete`: every record number between the first and the last is present, and every event has one. `gaps`: some are absent. `partly-numbered`: the numbered events have no gaps, but some events carry no record number. `unnumbered`: the export kept no record numbers. `empty`: the collector read the log and found none of the events it asked for. |
+| `unnumbered` | How many events carry no record number. Any such event makes the log not `checked`, whatever the scope: toledot cannot tell whether events are missing around it, so the account is not confirmed and `--fail-on unconfirmed` exits 1. |
 | `missing`, `missing_count` | The absent record-number ranges and how many numbers they hold. The JSON report lists at most 1,000 ranges. The Markdown and HTML reports write out 10. |
 | `scope` | `unfiltered`: you stated with `--whole-logs` that the input is a whole log, or a collection file says it holds whole logs. `filtered`: a collection file says it holds chosen events only. `unknown`: toledot cannot tell. |
 | `overwritten_before` | Set when a collector asked for events from an earlier time than the log's oldest record. Events before this time were already gone when the log was read. Otherwise `null`. |

@@ -877,6 +877,7 @@ def test_coverage_handles_any_order_overlaps_and_unnumbered_events() -> None:
     (log,) = result.coverage
     assert log.missing == ((2, 2), (6, 8))
     assert "1 events carry no record number" in log.statement
+    assert (log.unnumbered, log.checked) == (1, False)
     assert result.counts["other"] == 7
     assert result.other_ids == {("Security", 4688): 7}
     whole = account(*numbered(1, 2, 3))
@@ -884,6 +885,20 @@ def test_coverage_handles_any_order_overlaps_and_unnumbered_events() -> None:
     assert whole.coverage[0].missing_count == 0
     single = account(*numbered(1, 3)).coverage[0]
     assert "1 record number between the first and the last is absent" in single.statement
+
+
+def test_any_unnumbered_event_leaves_a_log_unchecked_whatever_its_scope() -> None:
+    for scope in ("unfiltered", "filtered", "unknown"):
+        mixed = account(*numbered(1, 2, 3, None), scope=scope)
+        (log,) = mixed.coverage
+        assert (log.continuity, log.unnumbered, log.checked) == ("partly-numbered", 1, False)
+        assert "cannot tell whether events are missing around them" in log.statement
+        assert mixed.completeness == "unconfirmed"
+        gaps = account(*numbered(1, 3, None), scope=scope).coverage[0]
+        assert (gaps.continuity, gaps.checked) == ("gaps", False)
+    # absent numbers in a whole log are still missing events, which is worse than unconfirmed
+    assert account(*numbered(1, 3, None), scope="unfiltered").completeness == "incomplete"
+    assert account(*numbered(1, 2, 3), scope="unfiltered").completeness == "complete"
 
 
 def test_logs_are_tracked_per_computer_and_channel() -> None:

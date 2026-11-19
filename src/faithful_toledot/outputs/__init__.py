@@ -258,6 +258,7 @@ def build_report(
                 "missing_count": c.missing_count,
                 "scope": c.scope,
                 "overwritten_before": _time(c.overwritten_before),
+                "unnumbered": c.unnumbered,
                 "checked": c.checked,
                 "statement": c.statement,
             }

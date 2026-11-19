@@ -1146,6 +1146,8 @@ def _coverage(log: _Log) -> Coverage:
         continuity = "unnumbered"
     elif gaps:
         continuity = "gaps"
+    elif log.unnumbered:
+        continuity = "partly-numbered"
     else:
         continuity = "complete"
     return Coverage(
@@ -1163,4 +1165,5 @@ def _coverage(log: _Log) -> Coverage:
         statement=narrative.coverage_statement(continuity, scope, missing, log.unnumbered)
         + narrative.overwritten_statement(log.overwritten_before),
         overwritten_before=log.overwritten_before,
+        unnumbered=log.unnumbered,
     )

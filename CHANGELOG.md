@@ -18,6 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A closed pipe, or an output that cannot show a non-ASCII path, no longer turns a finished run into exit code 4. The exit code is decided before the summary is printed.
 - Linking changes to logon sessions no longer slows down quadratically when one logon ID repeats many times.
 - A logon or logoff that shares a change's timestamp now counts only when its record number, in the same log, is lower than the change's, for logoffs as well as logons. A change made at the same second as a logon or logoff of its session that cannot be ordered gets the origin status `unordered` and no address, instead of an address from a logon that may have come later or a session that had already ended.
+- A log in which any event has no record number is now never `checked` and never `complete`, even when the numbered events are continuous: the report's coverage says `partly-numbered` and counts the unnumbered events (new `unnumbered` property in the JSON report), the account is `unconfirmed`, and `--fail-on unconfirmed` exits 1. Before, one numbered subset with no gaps made the whole log read as complete and the gate exit 0.
 - The `.evtx` reader numbers unnamed `Data` elements by position among all of them, as the XML reader does.
 - `toledot collect --help` shows the Vault form `vault:MOUNT/PATH#FIELD`.
 - Errors about an unreadable input name the path as you typed it.

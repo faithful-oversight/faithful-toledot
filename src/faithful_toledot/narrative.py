@@ -166,7 +166,8 @@ def overwritten_statement(before: datetime | None) -> str:
 def coverage_statement(continuity: str, scope: str, missing: int, unnumbered: int) -> str:
     """Say what the record numbers do and do not show about completeness."""
     extra = (
-        f" {unnumbered} events carry no record number and are not part of this check."
+        f" {unnumbered} events carry no record number, so toledot cannot tell whether "
+        "events are missing around them: this log is not confirmed complete."
         if unnumbered and continuity != "unnumbered"
         else ""
     )
@@ -176,7 +177,7 @@ def coverage_statement(continuity: str, scope: str, missing: int, unnumbered: in
         return (
             "The export kept no record numbers, so toledot cannot tell whether events are missing."
         )
-    if continuity == "complete":
+    if continuity in {"complete", "partly-numbered"}:
         return (
             "Every record number between the first and the last is present. Events before "
             "the first or after the last are outside this input." + extra

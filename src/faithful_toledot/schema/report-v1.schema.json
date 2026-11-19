@@ -279,6 +279,7 @@
           "missing_count",
           "scope",
           "overwritten_before",
+          "unnumbered",
           "checked",
           "statement"
         ],
@@ -316,6 +317,7 @@
             "enum": [
               "complete",
               "gaps",
+              "partly-numbered",
               "unnumbered",
               "empty"
             ]
@@ -351,9 +353,13 @@
           "overwritten_before": {
             "$ref": "#/$defs/timeOrNull"
           },
+          "unnumbered": {
+            "$ref": "#/$defs/count",
+            "description": "How many events carry no record number. Any such event makes checked false."
+          },
           "checked": {
             "type": "boolean",
-            "description": "Whether the input gives evidence about this log's completeness."
+            "description": "Whether the input gives evidence about this log's completeness. False when any event carries no record number."
           },
           "statement": {
             "type": "string"

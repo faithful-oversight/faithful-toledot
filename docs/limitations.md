@@ -97,7 +97,7 @@ toledot checks record numbers to find missing events. That works for a whole log
 
 - A collection file states whether it holds whole logs or chosen events only. A file from the collector's default query holds chosen events only, so its gaps are expected. A file written with `-All` or `--all` holds whole logs.
 - For a native `.evtx`, XML, JSON, or CSV file, toledot cannot tell. It reports absent record numbers in the coverage table and calls the account not confirmed. It does not call it incomplete, because the gaps may be expected. Pass `--whole-logs` when every input is a whole log. See [Command reference](usage.md#whole-logs).
-- An export with no record numbers cannot be checked at all. The account is not confirmed.
+- An export with no record numbers cannot be checked at all. The account is not confirmed. One event without a record number is enough: the numbered events may be continuous, but nothing shows whether events are missing around the one that has no number, so the log is `partly-numbered`, not `checked`, and the account is not confirmed.
 
 ## Event Viewer CSV
 

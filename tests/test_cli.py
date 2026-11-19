@@ -13,7 +13,7 @@ import subprocess
 import sys
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from hypothesis import given
@@ -461,3 +461,57 @@ def test_the_secret_help_names_the_vault_form_the_docs_and_errors_use(
 def test_the_events_command_explains_the_catalog(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["events", "--help"]) == ExitCode.OK
     assert "catalog" in " ".join(capsys.readouterr().out.split())
+
+
+# --- review finding TOL-2: one unnumbered event leaves a log unconfirmed -----------------------
+
+
+def _run_numbered(
+    tmp_path: Path, numbers: list[int | None], *flags: str
+) -> tuple[int, dict[str, Any]]:
+    from tests.test_formats_json import record  # noqa: PLC0415
+
+    path = tmp_path / "events.json"
+    path.write_text(
+        json.dumps([record(RecordId=number, Id=4720) for number in numbers]), encoding="utf-8"
+    )
+    out = tmp_path / "out"
+    code = main(["report", str(path), "-o", str(out), "-f", "json", *flags])
+    report = json.loads((out / "toledot-report.json").read_text(encoding="utf-8"))
+    return code, report
+
+
+@pytest.mark.parametrize(
+    ("numbers", "code", "completeness", "continuity", "unnumbered"),
+    [
+        ([100, 101], ExitCode.OK, "complete", "complete", 0),
+        ([None, None], ExitCode.FINDINGS, "unconfirmed", "unnumbered", 2),
+        ([100, None], ExitCode.FINDINGS, "unconfirmed", "partly-numbered", 1),
+        ([100, 101, None, None], ExitCode.FINDINGS, "unconfirmed", "partly-numbered", 2),
+    ],
+)
+def test_one_event_without_a_record_number_fails_the_unconfirmed_gate(  # noqa: PLR0913, PLR0917 - one argument per column of the case
+    tmp_path: Path,
+    numbers: list[int | None],
+    code: int,
+    completeness: str,
+    continuity: str,
+    unnumbered: int,
+) -> None:
+    exit_code, report = _run_numbered(tmp_path, numbers, "--whole-logs")
+    assert exit_code == code
+    assert report["summary"]["completeness"] == completeness
+    assert report["summary"]["complete"] is (completeness == "complete")
+    (log,) = report["coverage"]
+    assert (log["continuity"], log["unnumbered"], log["checked"]) == (
+        continuity,
+        unnumbered,
+        completeness == "complete",
+    )
+    assert ("cannot tell" in log["statement"]) is (unnumbered > 0)
+
+
+def test_unnumbered_events_are_not_incomplete_only_unconfirmed(tmp_path: Path) -> None:
+    code, report = _run_numbered(tmp_path, [100, None], "--whole-logs", "--fail-on", "incomplete")
+    assert code == ExitCode.OK
+    assert report["summary"]["completeness"] == "unconfirmed"
