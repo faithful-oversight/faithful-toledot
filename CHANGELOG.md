@@ -51,6 +51,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Dependabot groups minor and patch updates of runtime dependencies into one pull request.
 - `CONTRIBUTING.md` lists every tool a clean machine needs and which checks need network access or a token.
 - The releasing guide covers the first PyPI publish, a failed PyPI step, scheduled checks that stop after 60 idle days, both SBOM files, and the pinned tools.
+- CI on a private repository tests Python 3.11 and 3.14 on pull requests and runs macOS only on schedule and before releases, to save metered Actions minutes; a public repository keeps the full matrix.
 
 ### Security
 

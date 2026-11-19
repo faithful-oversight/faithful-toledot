@@ -54,13 +54,25 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python: ["3.11", "3.12", "3.13", "3.14"]
+        # Actions minutes are free on public repositories and metered on private
+        # ones. A pull request in a private repository tests the oldest and newest
+        # supported Python; every other run tests all four.
+        python: >-
+          ${{ fromJSON(
+            github.event.repository.private
+            && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+            && '["3.11", "3.14"]'
+            || '["3.11", "3.12", "3.13", "3.14"]'
+          ) }}
         # Windows on every run. macOS minutes cost ten times Linux minutes on
-        # private repositories, so macOS runs on main, on schedule, and before
-        # releases, but not on pull requests.
+        # private repositories, so macOS never runs on pull requests, and on a
+        # private repository it runs only on schedule and before releases
+        # (Release calls this workflow by workflow_dispatch). A public repository
+        # also runs macOS on every push to main.
         include: >-
           ${{ fromJSON(
-            (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+            (github.event_name == 'pull_request' || github.event_name == 'merge_group'
+              || (github.event.repository.private && github.event_name == 'push'))
             && '[{"os": "windows-latest", "python": "3.13"}]'
             || '[{"os": "windows-latest", "python": "3.13"}, {"os": "macos-latest", "python": "3.13"}]'
           ) }}
