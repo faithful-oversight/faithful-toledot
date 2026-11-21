@@ -891,9 +891,21 @@ wheels = [
 ]
 
 [[package]]
+name = "faithful-core"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fe/3d/903219f78fdd4a7eeac69c978dc8d159241585fa64a40c9dbf942b9bc405/faithful_core-0.1.0.tar.gz", hash = "sha256:a9d6f38991635a85dde8e0e804ec38146ed405aed515f62e54f2b88473895791", size = 117817, upload-time = "2026-11-21T23:04:17.087Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8d/d3/853579ce8b1ca92dc356be0d7de938ecc13abb135d270493668f312da262/faithful_core-0.1.0-py3-none-any.whl", hash = "sha256:da69af97621c97ffba442e273423e79e450927d7881461de468241b1594f958f", size = 35053, upload-time = "2026-11-21T23:04:15.882Z" },
+]
+
+[[package]]
 name = "faithful-toledot"
 version = "0.1.1"
 source = { editable = "." }
+dependencies = [
+    { name = "faithful-core" },
+]
 
 [package.optional-dependencies]
 aws = [
@@ -946,6 +958,7 @@ requires-dist = [
     { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.19" },
     { name = "azure-keyvault-secrets", marker = "extra == 'azure'", specifier = ">=4.9" },
     { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.35" },
+    { name = "faithful-core", specifier = "==0.1.0" },
     { name = "hvac", marker = "extra == 'vault'", specifier = ">=2.3" },
     { name = "keyring", marker = "extra == 'keyring'", specifier = ">=25" },
     { name = "pypsrp", marker = "extra == 'live'", specifier = ">=0.8" },
