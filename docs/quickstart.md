@@ -5,12 +5,12 @@ This walk-through takes about ten minutes. It starts with synthetic data, so not
 ## 1. Install
 
 ```shell
-pipx install git+https://github.com/faithful-oversight/faithful-toledot
+pipx install faithful-toledot
 pipx ensurepath
 toledot --version
 ```
 
-PyPI publishing is being set up; until a PyPI release exists, install from GitHub as shown. For a fixed version, add a tag, as in `git+https://github.com/faithful-oversight/faithful-toledot@v0.1.1`. `pipx ensurepath` puts pipx's tools on your PATH; run it once and open a new terminal.
+`pipx ensurepath` puts pipx's tools on your PATH; run it once and open a new terminal. With pip, use `pip install faithful-toledot`. For a fixed version, use `faithful-toledot==0.1.1`. To try the development version, install from GitHub: `pipx install git+https://github.com/faithful-oversight/faithful-toledot`.
 
 toledot runs on Windows, macOS, and Linux with Python 3.11 or newer. Reading files needs nothing else. Remote collection needs an extra, which [Collecting events](collecting.md#remote-collection) explains.
 
@@ -103,7 +103,7 @@ Run the script on every domain controller. toledot reports only on the logs it i
 `toledot collect` runs the same script on a controller over PowerShell remoting (WinRM), so you install nothing on it. It needs the `live` extra:
 
 ```shell
-pipx install --force "faithful-toledot[live] @ git+https://github.com/faithful-oversight/faithful-toledot"
+pipx install --force "faithful-toledot[live]"
 export TOLEDOT_PASSWORD='...'
 toledot collect --server dc01.corp.example --auth ntlm --username 'CORP\auditor' \
   --secret env:TOLEDOT_PASSWORD --ca-file corp-root-ca.pem --days 30 -o dc01-events.jsonl

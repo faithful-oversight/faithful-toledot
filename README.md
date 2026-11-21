@@ -3,9 +3,10 @@
 **AD Change Narrative.** Turns exported Active Directory change events into a plain-language account of who changed what, when, and from where. It says plainly where that account is incomplete.
 
 [![CI](https://github.com/faithful-oversight/faithful-toledot/actions/workflows/ci.yml/badge.svg)](https://github.com/faithful-oversight/faithful-toledot/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/faithful-toledot)](https://pypi.org/project/faithful-toledot/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-> **Status: version 0.1.1, beta.** toledot reads exported logs end to end and is tested on synthetic data and on files built from the published format documentation. The two collectors, the PowerShell script and `toledot collect`, have not yet been run against a real domain controller or a real WinRM endpoint. Treat the first runs in your environment as a pilot. See [Limitations](docs/limitations.md) and the [documentation](docs/).
+> **Status: version 0.1.1, beta, available on PyPI.** toledot reads exported logs end to end and is tested on synthetic data and on files built from the published format documentation. The two collectors, the PowerShell script and `toledot collect`, have not yet been run against a real domain controller or a real WinRM endpoint. Treat the first runs in your environment as a pilot. See [Limitations](docs/limitations.md) and the [documentation site](https://faithful-oversight.github.io/faithful-toledot/).
 
 **How it differs from existing tools.** Event Viewer filters and `Get-WinEvent` scripts show you events and leave the reading to you. Log search and SIEM queries find events across many systems, and their answer is only as complete as what was forwarded. toledot works on files you give it, links each change to the logon session behind it, writes the result in sentences with the source record for each, and states in every report what it could not see, such as a cleared log, absent record numbers, or inputs that cannot show whether events are missing. It does not monitor, alert, or judge whether a change was authorized.
 
@@ -52,13 +53,15 @@ toledot:
 toledot needs Python 3.11 or newer. Reading files needs no other packages.
 
 ```shell
-pipx install git+https://github.com/faithful-oversight/faithful-toledot
+pipx install faithful-toledot
 pipx ensurepath
 ```
 
-`pipx ensurepath` puts pipx's tool folder on your PATH; run it once and open a new terminal. For a fixed version, add a tag: `git+https://github.com/faithful-oversight/faithful-toledot@v0.1.1`.
+`pipx ensurepath` puts pipx's tool folder on your PATH; run it once and open a new terminal. With pip, use `pip install faithful-toledot`. For a fixed version, use `faithful-toledot==0.1.1`.
 
-PyPI publishing is being set up; until a PyPI release exists, install from GitHub as shown. Remote collection needs the `live` extra. Each secret provider has its own extra:
+To try the development version from GitHub, run `pipx install git+https://github.com/faithful-oversight/faithful-toledot`.
+
+Remote collection needs the `live` extra. Each secret provider has its own extra:
 
 | Extra | Adds | Needed for |
 | --- | --- | --- |
@@ -69,16 +72,16 @@ PyPI publishing is being set up; until a PyPI release exists, install from GitHu
 | `azure` | `azure-identity`, `azure-keyvault-secrets` | `--secret azure:...` |
 
 ```shell
-pipx install "faithful-toledot[live] @ git+https://github.com/faithful-oversight/faithful-toledot"
-pipx install "faithful-toledot[live,vault] @ git+https://github.com/faithful-oversight/faithful-toledot"
+pipx install "faithful-toledot[live]"
+pipx install "faithful-toledot[live,vault]"
 ```
 
-If toledot is already installed, add `--force` to add an extra: `pipx install --force "faithful-toledot[live] @ git+https://github.com/faithful-oversight/faithful-toledot"`.
+If toledot is already installed, add `--force` to add an extra: `pipx install --force "faithful-toledot[live]"`. With pip, use `pip install "faithful-toledot[live]"`.
 
 ## Quick start
 
 ```shell
-pipx install git+https://github.com/faithful-oversight/faithful-toledot
+pipx install faithful-toledot
 toledot example ./toledot-demo
 toledot report ./toledot-demo/dc01-events.jsonl ./toledot-demo/dc02-events.jsonl -o ./toledot-demo/report
 ```
