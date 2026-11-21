@@ -140,7 +140,9 @@ stage_reuse()     { run reuse lint; }
 stage_build() {
   rm -rf dist
   # Build with the pinned, hash-verified backend in requirements-build.txt.
-  uv build --build-constraint requirements-build.txt --require-hashes
+  # uv writes dist/.gitignore by default; SHA256SUMS names only the release files,
+  # and verify_artifacts.sh rejects any file it does not name.
+  uv build --no-create-gitignore --build-constraint requirements-build.txt --require-hashes
   run twine check --strict dist/*
   scripts/smoke_test.sh dist
   # The source distribution must carry everything its own tests need. Unpack it
@@ -157,12 +159,15 @@ stage_build() {
   # draft only if every byte comes out the same. Prove that on every change.
   local again=build/rebuild
   rm -rf "$again"
-  uv build --quiet --build-constraint requirements-build.txt --require-hashes --out-dir "$again"
+  uv build --quiet --no-create-gitignore --build-constraint requirements-build.txt --require-hashes --out-dir "$again"
   scripts/release_evidence.sh "$again"
   if ! diff dist/SHA256SUMS "$again/SHA256SUMS" >&2; then
     echo "a second build gave different bytes; releases could not resume" >&2
     return 1
   fi
+  # The release jobs check dist with this script before they attest, upload, or
+  # publish. Run the same check on every build so a failure shows on the PR.
+  scripts/verify_artifacts.sh dist
 }
 
 ALL=(format lint types test docs site config workflows secrets deps licenses reuse build)
