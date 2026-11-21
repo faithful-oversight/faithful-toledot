@@ -22,6 +22,9 @@ concurrency:
 
 env:
   UV_LOCKED: "1"
+  # The one pinned uv release for this workflow. setup-uv checks its checksum.
+  # Change it with every workflow and docs/releasing.md in the same pull request.
+  FO_UV_VERSION: "0.11.32"
 
 jobs:
   static:
@@ -36,6 +39,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
+          version: ${{ env.FO_UV_VERSION }}
           enable-cache: false
       - run: uv sync --locked
       - run: scripts/check.sh format lint types
@@ -50,13 +54,25 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python: ["3.11", "3.12", "3.13", "3.14"]
+        # Actions minutes are free on public repositories and metered on private
+        # ones. A pull request in a private repository tests the oldest and newest
+        # supported Python; every other run tests all four.
+        python: >-
+          ${{ fromJSON(
+            github.event.repository.private
+            && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+            && '["3.11", "3.14"]'
+            || '["3.11", "3.12", "3.13", "3.14"]'
+          ) }}
         # Windows on every run. macOS minutes cost ten times Linux minutes on
-        # private repositories, so macOS runs on main, on schedule, and before
-        # releases, but not on pull requests.
+        # private repositories, so macOS never runs on pull requests, and on a
+        # private repository it runs only on schedule and before releases
+        # (Release calls this workflow by workflow_dispatch). A public repository
+        # also runs macOS on every push to main.
         include: >-
           ${{ fromJSON(
-            (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+            (github.event_name == 'pull_request' || github.event_name == 'merge_group'
+              || (github.event.repository.private && github.event_name == 'push'))
             && '[{"os": "windows-latest", "python": "3.13"}]'
             || '[{"os": "windows-latest", "python": "3.13"}, {"os": "macos-latest", "python": "3.13"}]'
           ) }}
@@ -69,6 +85,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
+          version: ${{ env.FO_UV_VERSION }}
           enable-cache: false
           python-version: ${{ matrix.python }}
       # The live extra lets the real pypsrp transport tests run. GitHub's runners
@@ -92,9 +109,12 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
+          version: ${{ env.FO_UV_VERSION }}
           enable-cache: false
       - run: uv sync --locked
       - run: scripts/check.sh docs site config reuse
+        env:
+          TOLEDOT_REQUIRE_PWSH: "1"
       - run: scripts/check.sh workflows
         env:
           # Only zizmor sees the token. It lets zizmor run its online audits,
@@ -137,6 +157,7 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
+          version: ${{ env.FO_UV_VERSION }}
           enable-cache: false
       - run: |
           scripts/install_gitleaks.sh "$HOME/.local/bin"
@@ -156,6 +177,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
+          version: ${{ env.FO_UV_VERSION }}
           enable-cache: false
       - run: uv sync --locked
       - run: scripts/check.sh build
@@ -193,12 +215,16 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Dependabot commits are exempt only on a pull request Dependabot opened.
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: scripts/check_dco.sh "$BASE_SHA" "$HEAD_SHA"
 
   dependency-review:
     name: Dependency review
-    # Needs GitHub code security features, which are free once the repository is public.
-    if: github.event_name == 'pull_request' && vars.FO_PUBLIC == 'true'
+    # Needs GitHub code security features, which are free once the repository is
+    # public. The condition reads the repository's real visibility, not the
+    # FO_PUBLIC variable, so a wrong variable cannot switch the review off.
+    if: github.event_name == 'pull_request' && github.event.repository.private == false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -224,9 +250,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Require success from core jobs; allow only intended skips
-        # Core jobs must succeed. Only these may be skipped: pull-request (runs on
-        # pull requests only) and dependency-review (needs a public repository).
+      - name: Require success from every job; allow only intended skips
+        # Every job in scripts/check_needs.py must be present and succeed. Only
+        # pull-request (pull requests only) and dependency-review (pull requests in
+        # a public repository) may be skipped, and only on the events that skip them.
         env:
           NEEDS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
+          REPO_PRIVATE: ${{ github.event.repository.private }}
         run: python3 scripts/check_needs.py

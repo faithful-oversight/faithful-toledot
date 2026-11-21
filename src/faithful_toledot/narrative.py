@@ -26,7 +26,7 @@ _NOUNS = {
     "trust": "trust",
     "rights": "account",
 }
-_VERBS = {
+VERBS = {
     "created": "created the {noun} {target}",
     "deleted": "deleted the {noun} {target}",
     "enabled": "enabled the {noun} {target}",
@@ -37,11 +37,16 @@ _VERBS = {
     "restored": "restored the deleted {noun} {target}",
     "member-added": "added {member} to the group {target}",
     "member-removed": "removed {member} from the group {target}",
-    "password-changed": "attempted to change the password of {target}",
-    "password-reset": "attempted to reset the password of {target}",
-    "locked": "locked out the {noun} {target}",
+    "password-changed": "changed the password of {target}",
+    "password-change-failed": "attempted, unsuccessfully, to change the password of {target}",
+    "password-reset": "reset the password of {target}",
+    "password-reset-failed": "attempted, unsuccessfully, to reset the password of {target}",
+    "password-change-attempted": "attempted to change the password of {target}",
+    "password-reset-attempted": "attempted to reset the password of {target}",
+    "locked": "recorded that the {noun} {target} was locked out{caller}",
     "unlocked": "unlocked the {noun} {target}",
     "sid-history-added": "added SID history to the {noun} {target}",
+    "sid-history-failed": "attempted, unsuccessfully, to add SID history to the {noun} {target}",
     "permissions-changed": "changed permissions on {target}",
     "audit-settings-changed": "changed the auditing settings on {target}",
     "policy-changed": "changed policy on {computer} ({title})",
@@ -90,6 +95,11 @@ _UNLINKED = {
         "The input holds two different logons for session {id} at the same moment, so "
         "where this change came from is not known."
     ),
+    "unordered": (
+        "The input cannot show whether the logon or logoff of session {id} that shares this "
+        "change's timestamp came before or after it, so where this change came from is "
+        "not known."
+    ),
     "other-account": (
         "The logon recorded for session {id} was for a different account from the one "
         "that made this change, so it is not taken as where the change came from."
@@ -127,11 +137,13 @@ def origin(where: Origin) -> str:
 
 def sentence(change: Change) -> str:
     """Describe one change in a sentence: who did what to what."""
-    template = _VERBS.get(change.action, "made a change ({title}) to {target}")
+    template = VERBS.get(change.action, "made a change ({title}) to {target}")
     noun = _NOUNS.get(change.category, "object")
     if change.category == "directory" and change.target.object_class:
         noun = f"{change.target.object_class} object"
+    caller = next((d.new for d in change.details if d.label == "caller computer" and d.new), None)
     text = template.format(
+        caller=f" (caller computer {caller})" if caller else "",
         noun=noun,
         target=party(change.target, nothing=f"a {noun} the event does not name"),
         member=party(change.member),
@@ -154,7 +166,8 @@ def overwritten_statement(before: datetime | None) -> str:
 def coverage_statement(continuity: str, scope: str, missing: int, unnumbered: int) -> str:
     """Say what the record numbers do and do not show about completeness."""
     extra = (
-        f" {unnumbered} events carry no record number and are not part of this check."
+        f" {unnumbered} events carry no record number, so toledot cannot tell whether "
+        "events are missing around them: this log is not confirmed complete."
         if unnumbered and continuity != "unnumbered"
         else ""
     )
@@ -164,7 +177,7 @@ def coverage_statement(continuity: str, scope: str, missing: int, unnumbered: in
         return (
             "The export kept no record numbers, so toledot cannot tell whether events are missing."
         )
-    if continuity == "complete":
+    if continuity in {"complete", "partly-numbered"}:
         return (
             "Every record number between the first and the last is present. Events before "
             "the first or after the last are outside this input." + extra

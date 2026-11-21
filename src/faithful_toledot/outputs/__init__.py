@@ -258,6 +258,7 @@ def build_report(
                 "missing_count": c.missing_count,
                 "scope": c.scope,
                 "overwritten_before": _time(c.overwritten_before),
+                "unnumbered": c.unnumbered,
                 "checked": c.checked,
                 "statement": c.statement,
             }
@@ -311,7 +312,12 @@ def _manifest(report: Report, outputs: Mapping[str, str]) -> str:
 
 
 def write_reports(
-    directory: Path, report: Report, formats: Sequence[str], *, force: bool
+    directory: Path,
+    report: Report,
+    formats: Sequence[str],
+    *,
+    force: bool,
+    protect: Sequence[tuple[str, Path]] = (),
 ) -> list[Path]:
     """Write the chosen formats and a manifest, all together or not at all.
 
@@ -325,7 +331,9 @@ def write_reports(
 
     Raises:
         ToledotError: No format was chosen, a format is unknown, a file exists and
-            ``force`` is false, or writing failed. Nothing is left half written.
+            ``force`` is false, a file to write is one of the ``protect`` files (the
+            inputs; refused even with ``force``), or writing failed. Nothing is left
+            half written.
     """
     unknown = sorted(set(formats) - FILE_NAMES.keys())
     if unknown:
@@ -345,4 +353,4 @@ def write_reports(
     }
     outputs = {FILE_NAMES[f]: renderers[f](report) for f in FILE_NAMES if f in formats}
     outputs[MANIFEST_NAME] = _manifest(report, outputs)
-    return write_files(directory, outputs, force=force)
+    return write_files(directory, outputs, force=force, protect=protect)

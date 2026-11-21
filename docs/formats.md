@@ -152,6 +152,8 @@ Windows security messages hold a label and a value on each line, grouped in sect
 
 toledot maps `Section/Label`, such as `Subject/Security ID`, to the event's field name using its catalog. A label with no mapping keeps the `Section/Label` text as its name, so nothing is lost. A message with no field lines at all, for example because the tabs were lost in the export, is a problem for that row.
 
+A genuine Windows message never repeats a label inside a section, or a section header. When a mapped `Section/Label` or a section header appears twice in one message, toledot makes that row a problem ("the message is ambiguous") and uses none of its fields. It does not choose the first or the last copy. A directory attribute such as `info` or `description` can hold line breaks, so a value can imitate the message's own labels and sections. A message-only CSV is therefore weaker evidence than `.evtx`, XML, JSON, or a collection file, which keep each field apart. toledot cannot detect an imitated label that the genuine message does not carry at all. Prefer the other formats when the log may hold values written by someone you do not trust.
+
 Because of this recovery, a change built from a CSV can show some details under a label such as `Subject/Logon ID` where an XML export shows the field name. The facts are the same.
 
 ### CSV limits
@@ -177,7 +179,7 @@ The first line starts, byte for byte, with `{"toledot_events":`. That marker is 
 ```json
 {
   "toledot_events": 1,
-  "collector": {"name": "Collect-ToledotEvents.ps1", "version": "0.1.0", "method": "powershell"},
+  "collector": {"name": "Collect-ToledotEvents.ps1", "version": "0.1.1", "method": "powershell"},
   "collected_at": "2026-11-09T08:00:00.0000000Z",
   "computer": "DC01.corp.example",
   "operator": "CORP\\auditor",
@@ -222,7 +224,7 @@ A time in a collection file is a UTC time with a `Z` suffix and up to seven frac
 Each event is one line with exactly these properties:
 
 ```json
-{"record_id":48212,"event_id":4720,"version":0,"time":"2026-11-02T08:06:00.0000000Z","computer":"DC01.corp.example","channel":"Security","provider":"Microsoft-Windows-Security-Auditing","system":{},"data":{"TargetUserName":"dana.whitfield","TargetDomainName":"CORP"}}
+{"record_id":48212,"event_id":4720,"version":0,"time":"2026-11-02T08:06:00.0000000Z","computer":"DC01.corp.example","channel":"Security","provider":"Microsoft-Windows-Security-Auditing","system":{},"data":{"TargetUserName":"avery.example","TargetDomainName":"CORP"}}
 ```
 
 | Property | Meaning |
@@ -235,7 +237,7 @@ Each event is one line with exactly these properties:
 | `system` | Other `System` fields, by name, as text: `Keywords`, `Level`, `Task`, `Opcode`, `ActivityID`, `ProcessID`, `ThreadID`, and `UserID`. |
 | `data` | The `EventData` (or `UserData`) fields, in order, each exactly as the event's XML holds it, as text. `%%1794` stays `%%1794` and a SID stays a SID. |
 
-A repeated field name keeps the first under its name and stores later ones as `name#2`, `name#3`.
+A repeated field name keeps the first under its name and stores later ones as `name#2`, `name#3`. A `Data` element with no name is called `param` followed by its position among all `Data` elements of the event, named or not (`param2` is the second one). The native, XML, and collection readers all number them this way. The collector does not copy the `RelatedActivityID` attribute that the XML and native readers keep in `system`; toledot does not use it.
 
 ### Trailer
 
@@ -252,13 +254,13 @@ The last line says the file is whole:
 | `sha256` | The SHA-256 of every byte before the trailer line. That is the header line and every event line, each with its `\n`. |
 | `gaps` | What the collector could not read, and why. Each gap has an `area` and a `reason`. |
 
-A gap is a sentence the collector wrote, such as the area `the Security log` and a reason from Windows. The collector records a log it cannot read as a gap and carries on. It does not fail.
+A gap is a sentence the collector wrote, such as the area `the Security log` and a reason from Windows. The collector records a log it cannot read as a gap and carries on. It does not fail. The list holds at most 1000 gaps. If more fail, the collector ends the list with one gap that counts the rest, and a reader that meets a longer list keeps the first 1000, reports the rest as one problem, and still checks the count and the hash.
 
 The hash detects a file that was cut short or damaged. It does not prove who wrote the file. Anyone who edits a file can recompute the hash. See the [threat model](threat-model.md).
 
 ### How toledot reads it
 
-toledot reads the file line by line, so its size is not limited by memory. It reports each of these as a problem, and the account is incomplete:
+toledot reads the file line by line, but it keeps every change it builds in memory until the reports are written, so memory grows with the number of changes (see [Size limits](limitations.md#size-and-memory)). It reports each of these as a problem, and the account is incomplete:
 
 - A file that ends without its trailer. It was cut short, or collection did not finish. Every event before the cut is still read.
 - A trailer whose event count or SHA-256 does not match what toledot read.
@@ -267,7 +269,7 @@ toledot reads the file line by line, so its size is not limited by memory. It re
 - Anything after the trailer.
 - Every entry in `gaps`, worded as `The collector could not read AREA: REASON`.
 
-A first line that is not a valid header stops the run with exit code `3`.
+A first line that is not a valid header stops the run with exit code `3`. A valid header meets every constraint of the published schema (`toledot schema events`), not only the ones toledot reads: `toledot_events` must be the whole number `1` (not `2`, text, or a Boolean), `collector` must be an object with `name`, `version`, and a `method` of `powershell` or `psrp`, and `query` and each entry of `logs` must have exactly the properties the schema lists, with their types, ranges, and allowed values. `toledot collect` applies the same check before it publishes a stream.
 
 toledot is strict about what a line holds: a repeated property name, `NaN`, an unpaired surrogate, nesting deeper than 8 levels, or more than 256 fields is refused. A name is at most 255 characters, and a value at most 1 MiB.
 

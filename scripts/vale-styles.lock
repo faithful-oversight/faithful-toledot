@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Faithful Oversight, LLC
+# SPDX-License-Identifier: Apache-2.0
+#
+# The Vale style packages the docs check uses, each pinned to one release and
+# the SHA-256 of its zip. scripts/install_vale_styles.sh installs exactly these;
+# `vale sync` is not used, because it fetches the newest release of each package
+# with no checksum.
+#
+# Format: <name> <url> <sha256>
+# To update, download the new release zip, run `sha256sum` on it, change the
+# version in the URL and the digest here in one pull request, and run
+# `scripts/check.sh docs`.
+Google https://github.com/errata-ai/Google/releases/download/v0.7.2/Google.zip c1f61ae1c4cee3f2c2ffb2912fbbdff48a02c0e47e114dfd6435b15438171d97
+write-good https://github.com/errata-ai/write-good/releases/download/v0.4.1/write-good.zip 2960ef10861ddc7dc76292a4967eb3789bf05ca24f862042f6d15f53332887f0

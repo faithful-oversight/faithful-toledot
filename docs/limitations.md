@@ -54,12 +54,15 @@ toledot understands 84 events: 83 in the Security log and event 104 (log cleared
 - **Where this matters.** A `.evtx`, XML, or collection file carries each event's own field names, so a doubtful catalog detail affects little. A JSON export names values by position from the catalog, and a CSV export names them by the labels the catalog maps. For those two, check any result built from an event marked partly inferred against the event in Event Viewer.
 - **Codes.** A `%%NNNN` code in event data is decoded from the catalog. A meaning that Microsoft's documentation does not confirm is marked `[code meaning not documented by Microsoft]` in the report.
 
+- **No affiliation.** toledot is not affiliated with or endorsed by Microsoft. The catalog uses event IDs and field names from Microsoft's public documentation and cites the page for each entry.
+
 ## How toledot links events
 
 Each rule below is chosen so that toledot never says more than the events do.
 
 - **One event is one change.** The exception is directory service changes (5136). Windows writes one event for each value, so toledot joins the events that share a correlation ID and an object on one computer. It pairs a deleted and an added value of one attribute as one change of that value. A 5136 event with no correlation ID, or with no object name, stands alone.
 - **From where follows the logon ID.** A change names its actor's logon session. toledot looks for the latest logon event with that logon ID, on the same computer, at or before the change. If a logoff for that session comes after the logon and before the change, the logon no longer counts. The logon event gives the address, port, workstation name, and logon type.
+- **Events with the same timestamp are ordered by record number, or not at all.** Event Viewer exports round times to the second, so a logon, a logoff, and a change can share a timestamp. Record numbers order them only within one log. When the order cannot be established and the possible orders would give different answers, the origin is `unordered` and no address is named. toledot never assumes that a logon came first or that a logoff came last.
 - **A logon from before a restart is not used.** Microsoft documents logon IDs as unique only between reboots. When Windows started (4608) or the log service stopped (1100) on the computer between the logon and the change, the origin says so instead of naming the earlier logon. A restart that left neither event in the input cannot be seen, and then an old logon with a reused ID could still be linked.
 - **Contradictory evidence gives no origin.** Two different logons for one session at the same moment, or a logon for a different account from the change's actor, give an origin that says why it is not known rather than a guess.
 - **A logon on another controller is not linked.** toledot matches logon IDs within one computer. If the logon event is on another domain controller, the report says that the logon event is not in the input, even when you gave toledot that controller's log. Where it came from is then not known. toledot says so and does not guess.
@@ -68,10 +71,16 @@ Each rule below is chosen so that toledot never says more than the events do.
 - **Names are shown only when every event agrees.** The report always shows the name the change event recorded. It adds "named X in other events" for a SID only when every event that names the SID gives the same X. If events disagree, it adds nothing.
 - **Well-known relative identifiers are worded with care.** A relative identifier such as 512 means Domain Admins only under a domain SID. The same number under a computer's own SID is another account. toledot writes `well-known: Domain Admins, if this is a domain SID`. toledot knows 40 well-known SIDs and 21 well-known relative identifiers.
 - **Old values exist only where Windows recorded them.** Directory service change events record the value that changed. Most other events record only the new value.
-- **Password events are attempts.** Windows records events 4723 and 4724 as attempts, so the report words them as attempts.
+- **A lockout names the computer that recorded it.** Event 4740 is written by the domain controller, so the report words it as the controller's account recording that the account was locked out, and shows the caller computer (the computer the bad passwords came from) as its own detail. Microsoft's sample puts the caller computer in the field that other events use for the account's domain, so toledot does not show a domain for the locked account and does not learn names for the account from this event. That mapping is an inference and the entry is marked partly inferred.
+- **Password events use the outcome the event records.** Windows logs events 4723, 4724, and 4794 for success and for failure. toledot reads the event's `Keywords` audit bits (Audit Success `0x0020000000000000`, Audit Failure `0x0010000000000000`, as in Microsoft's `StandardEventKeywords`). With exactly one bit set, the report says the password was changed or reset (`password-changed`, `password-reset`) or that the attempt was unsuccessful (`password-change-failed`, `password-reset-failed`). Event Viewer CSV has no mask, so its `Level` text (`Audit Success`, `Audit Failure`) is used. When the mask is absent, unreadable, or sets both or neither bit, the report words it as an attempt (`password-change-attempted`, `password-reset-attempted`) and does not guess. Get-WinEvent's `KeywordsDisplayNames` is not read; its numeric `Keywords` is. A failed attempt that Windows did not audit leaves no event. Event 4724 is not written when the caller is refused access, per Microsoft. When several copies of one event are read, the outcome is what the copies say together. A copy with no outcome evidence (no mask, an unreadable or contradictory mask, or a CSV level that is neither word) fills in nothing and takes nothing away: the copy that has the evidence decides, whatever order the inputs are read in. Two copies that each state a different outcome are a problem and the one kept event is worded as an attempt, because neither export is trusted over the other.
+- **A failed SID history attempt is never an add.** Event 4766 means that an attempt to add SID history failed. The report words it as an unsuccessful attempt and counts it as `sid-history-failed`. Only event 4765 is worded and counted as SID history added.
 - **Related changes are a hint.** Changes by one session, on one computer, within two seconds of each other are marked as related. They are probably parts of one administrative action. They may not be.
 - **Times are UTC, as each computer's own clock recorded them.** toledot does not correct clocks that disagree. The order of changes on different computers is only as good as their clocks.
-- **The same record is counted once.** A catalogued event that two inputs both hold counts once. Two copies of one record with different content are a problem, and toledot keeps the first.
+- **The same record is counted once.** A catalogued event that two inputs both hold counts once. Two copies of one record with different content are a problem, and toledot keeps both copies as separate changes so that neither is hidden. Copies that differ only in their stated success or failure are one event with a problem and no stated outcome.
+
+## Size and memory
+
+- **Memory grows with the number of changes.** The readers stream a file one record at a time, but toledot keeps every event it uses and every change it builds until the reports are written, and the JSON report is built whole before it is written. A test with 150,000 synthetic changes used about 1.5 GB at its peak, which is roughly 10 KB per change. A log with a million directory changes (event 5136 can be that numerous) would need about 10 GB. Use `--since` and `--until`, or collect shorter periods, when a log is large. Writing the reports in a streaming way is planned work, not done.
 
 ## Log overwrite and clearing
 
@@ -88,7 +97,7 @@ toledot checks record numbers to find missing events. That works for a whole log
 
 - A collection file states whether it holds whole logs or chosen events only. A file from the collector's default query holds chosen events only, so its gaps are expected. A file written with `-All` or `--all` holds whole logs.
 - For a native `.evtx`, XML, JSON, or CSV file, toledot cannot tell. It reports absent record numbers in the coverage table and calls the account not confirmed. It does not call it incomplete, because the gaps may be expected. Pass `--whole-logs` when every input is a whole log. See [Command reference](usage.md#whole-logs).
-- An export with no record numbers cannot be checked at all. The account is not confirmed.
+- An export with no record numbers cannot be checked at all. The account is not confirmed. One event without a record number is enough: the numbered events may be continuous, but nothing shows whether events are missing around the one that has no number, so the log is `partly-numbered`, not `checked`, and the account is not confirmed.
 
 ## Event Viewer CSV
 
@@ -98,6 +107,7 @@ Event Viewer's "Save All Events As" CSV keeps the least. See [Input formats](for
 - It has no computer name and no log name. toledot treats every such file as coming from one computer, so do not mix files from different computers in one run.
 - Times have no UTC offset, so you must pass `--local-offset`, and `--date-order` for some dates. A fixed offset is wrong across a daylight saving change.
 - The reader needs English header names and message text.
+- It holds only the rendered message, so a value with line breaks can imitate labels. toledot refuses a message in which a mapped label or a section repeats, and reports the row as a problem. It cannot detect an imitated label that the real message does not carry. See [Input formats](formats.md#how-fields-are-recovered-from-the-message).
 
 ## Collectors
 

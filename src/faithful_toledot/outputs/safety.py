@@ -25,17 +25,39 @@ Includes the full-width forms, which some spreadsheet programs also accept.
 
 _CANDIDATE = re.compile("[^\x20-\x7e\t\n\r]")
 """Every character that might need escaping; printable ASCII, tab, and line breaks never do."""
-_HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp"})
+_HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp", "Zs"})
 """Controls, format characters (zero width, bidirectional, joiners, soft hyphen, BOM),
-lone surrogates, and the line and paragraph separators."""
-_FILLERS = frozenset({0x034F, 0x115F, 0x1160, 0x180E, 0x3164, 0xFFA0})
+lone surrogates, the line and paragraph separators, and every space other than the
+ASCII space (no-break, en, em, thin, ideographic, and the rest of category Zs), which
+would otherwise make two different values look the same."""
+_FILLERS = frozenset(
+    {
+        0x034F,
+        0x115F,
+        0x1160,
+        0x17B4,
+        0x17B5,
+        0x180B,
+        0x180C,
+        0x180D,
+        0x180E,
+        0x180F,
+        0x2800,
+        0x3164,
+        0xFFA0,
+    }
+)
 """Characters that draw nothing but are not in the categories above (U+180E was one
-until Unicode 6.3, so it is listed in case the running Unicode data is older)."""
+until Unicode 6.3, so it is listed in case the running Unicode data is older; U+2800
+is the blank braille pattern; U+17B4 and U+17B5 are Khmer vowels that draw nothing, and
+U+180B to U+180D and U+180F are the Mongolian variation selectors)."""
+_PLAIN_NEGATIVE = re.compile(r"-[0-9]+(\.[0-9]+)?")
+"""A negative number in ASCII digits, which a spreadsheet reads as a number."""
 _RANGES = ((0xE0000, 0xE007F), (0xFE00, 0xFE0F), (0xE0100, 0xE01EF))
 """The tag block, and the variation selectors, which change how a neighbour is drawn."""
 _BMP_MAX = 0xFFFF
 _MD_SPECIAL = re.compile(r"([\\`*_\[\]<>|~&])")
-_AUTOLINK = re.compile(r"(?i)(://|www\.|@)")
+_AUTOLINK = re.compile(r"(?i)(://|www\.|@|#(?=[0-9]))")
 _WORD_JOINER = "\u2060"
 
 
@@ -71,7 +93,11 @@ def neutralize_formula(value: str) -> str:
 
     A value that starts with a formula trigger gets a leading apostrophe, which
     spreadsheets display as plain text. Applying this twice changes nothing more.
+    A plain negative number such as ``-1`` or ``-0.5`` is left alone: it is a
+    number, not a formula, and a tool reading the file should get the number.
     """
+    if _PLAIN_NEGATIVE.fullmatch(value):
+        return value
     if value.startswith(FORMULA_TRIGGERS):
         return "'" + value
     return value
@@ -88,9 +114,9 @@ def escape_markdown(value: str) -> str:
     Backslash-escapes the characters that can change meaning inside a table cell
     or after a list marker: emphasis, code, links, table pipes, entities, and
     ``<`` and ``>`` so the text cannot open an HTML tag. A word joiner after
-    ``://``, ``www.``, and ``@`` stops automatic linking of URLs and email
-    addresses from the input. Line breaks become a visible arrow, so a value
-    cannot start a new block.
+    ``://``, ``www.``, ``@``, and a ``#`` before a digit stops automatic linking of
+    URLs, email addresses, and issue references such as ``#123`` from the input.
+    Line breaks become a visible arrow, so a value cannot start a new block.
     """
     value = visible(value)
     value = value.replace("\r\n", "\n").replace("\r", "\n").replace("\n", " \u21b5 ")
@@ -117,3 +143,15 @@ def command_line(*parts: str) -> str:
     if os.name == "nt":
         return subprocess.list2cmdline(parts)
     return shlex.join(parts)
+
+
+def terminal_line(value: str) -> str:
+    r"""Make an untrusted value safe to put inside one line of terminal output.
+
+    Everything ``terminal`` does, and a line feed also becomes a visible ``\n``.
+    Use it for every name, path, or message that comes from a file or a command
+    line and is placed into text that toledot lays out in lines of its own, so the
+    value can never add, replace, or imitate a line of that text. ``terminal``
+    alone keeps line feeds, which is only right for text toledot itself wrote.
+    """
+    return terminal(value).replace("\n", "\\n")

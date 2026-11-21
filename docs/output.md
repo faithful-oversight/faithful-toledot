@@ -50,10 +50,10 @@ The account is **incomplete** when any of these is true:
 
 Otherwise the account is **unconfirmed** when no log was read, or when any log is not `checked`. A log is `checked` when the input gives positive evidence about it:
 
-- Every record number between its first and its last is present. Continuous record numbers show that nothing between the first and the last is absent, even when the scope is `unknown`.
+- Every record number between its first and its last is present, and every event has a record number. Continuous record numbers show that nothing between the first and the last is absent, even when the scope is `unknown`.
 - Or its scope is `filtered` or `unfiltered`, so toledot knows what the input should hold. A collection that asked only for chosen events accounts for its own gaps.
 
-Absent record numbers in a log of `unknown` scope, and an export with no record numbers, leave toledot unable to tell. Such a log is not `checked`.
+Absent record numbers in a log of `unknown` scope, and an export with no record numbers, leave toledot unable to tell. Such a log is not `checked`. Neither is a log in which any event has no record number, whatever its scope.
 
 Otherwise the account is **complete**.
 
@@ -78,7 +78,7 @@ Each change is one sentence, followed by its details. This change comes from the
   "category": "user",
   "action": "created",
   "title": "User account created",
-  "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) created the user account CORP\\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).",
+  "sentence": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) created the user account CORP\\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207).",
   "actor": {
     "sid": "S-1-5-21-1111111111-2222222222-3333333333-1150",
     "name": "svc_provision",
@@ -90,10 +90,10 @@ Each change is one sentence, followed by its details. This change comes from the
     "known_as": null,
     "display": "CORP\\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150)"
   },
-  "target": {"sid": "S-1-5-21-1111111111-2222222222-3333333333-1207", "name": "dana.whitfield", "...": "..."},
+  "target": {"sid": "S-1-5-21-1111111111-2222222222-3333333333-1207", "name": "avery.example", "...": "..."},
   "member": null,
   "details": [
-    {"label": "SAM account name", "kind": "initial", "old": null, "new": "dana.whitfield",
+    {"label": "SAM account name", "kind": "initial", "old": null, "new": "avery.example",
      "meaning": null, "attribute": "SamAccountName"}
   ],
   "origin": {
@@ -141,7 +141,7 @@ An actor, target, or member holds what the event recorded: `sid`, `name`, `domai
 
 Two properties add information from outside the event. toledot shows each apart from the recorded name, so you can tell them apart:
 
-- `known_as` is a name that other events in the input give for the same SID. toledot sets it only when every event that names the SID agrees on one name, and only when that name differs from the recorded one. After an account rename (4781) the account has had two names, so toledot shows no `known_as` for it. The sentence reads "named CORP\\omar.reyes in other events".
+- `known_as` is a name that other events in the input give for the same SID. toledot sets it only when every event that names the SID agrees on one name, and only when that name differs from the recorded one. After an account rename (4781) the account has had two names, so toledot shows no `known_as` for it. The sentence reads "named CORP\\blake.sample in other events".
 - `well_known` is the name of a well-known SID, such as `S-1-5-18`, or of a well-known relative identifier (RID) under a domain SID, such as 512 for Domain Admins. A RID means that group only in a domain, so toledot words it `Domain Admins, if this is a domain SID`.
 
 ### Details
@@ -175,6 +175,7 @@ Directory service change events (5136) record one event for each value. toledot 
 | `not-in-input` | The change names a session, but the input holds no logon or logoff event for it before the change. Where it came from is not known. |
 | `restarted` | The latest logon for the session is not clearly after Windows started (4608) or the log service stopped (1100) on that computer. Events with the same timestamp are ordered by record number when they are in the same log; when they cannot be ordered, the logon is not trusted. Logon IDs are only unique between restarts, so that logon is not used. |
 | `conflicting` | The input holds two different logons for the session at the same moment, or two copies of one logon record that disagree in any way, including their time. toledot does not choose one. |
+| `unordered` | A logon or logoff of the session has the same timestamp as the change, and the input cannot show which came first: record numbers order events only within one log, and an export may have none. The two orders would give different answers (a session that started, replaced, or ended at that moment), so toledot does not choose. The same is reported when more than 64 entries of one session share the change's timestamp. |
 | `other-account` | The logon was for a different account from the one that made the change, so it is not used. |
 | `none` | The change event names no session. |
 
@@ -201,7 +202,8 @@ Coverage has one entry for each computer and log in the input. It says what the 
 | `events` | How many events were read from it. |
 | `first`, `last` | The earliest and latest event time. |
 | `first_record`, `last_record` | The lowest and highest record number. |
-| `continuity` | `complete`: every record number between the first and the last is present. `gaps`: some are absent. `unnumbered`: the export kept no record numbers. `empty`: the collector read the log and found none of the events it asked for. |
+| `continuity` | `complete`: every record number between the first and the last is present, and every event has one. `gaps`: some are absent. `partly-numbered`: the numbered events have no gaps, but some events carry no record number. `unnumbered`: the export kept no record numbers. `empty`: the collector read the log and found none of the events it asked for. |
+| `unnumbered` | How many events carry no record number. Any such event makes the log not `checked`, whatever the scope: toledot cannot tell whether events are missing around it, so the account is not confirmed and `--fail-on unconfirmed` exits 1. |
 | `missing`, `missing_count` | The absent record-number ranges and how many numbers they hold. The JSON report lists at most 1,000 ranges. The Markdown and HTML reports write out 10. |
 | `scope` | `unfiltered`: you stated with `--whole-logs` that the input is a whole log, or a collection file says it holds whole logs. `filtered`: a collection file says it holds chosen events only. `unknown`: toledot cannot tell. |
 | `overwritten_before` | Set when a collector asked for events from an earlier time than the log's oldest record. Events before this time were already gone when the log was read. Otherwise `null`. |
@@ -217,13 +219,13 @@ Here are the two rows from the example:
 | DC01.corp.example | Security | gaps | filtered | 48227–48638 | 412 record numbers between the first and the last are absent. The input says it holds chosen events only, so this is expected and does not show whether any chosen event is missing. |
 | DC02.corp.example | Security | complete | filtered | none | Every record number between the first and the last is present. Events before the first or after the last are outside this input. The collection asked for earlier events, but the log's oldest record dates 2026-11-05 08:00:00 UTC. Earlier events had been overwritten and are missing. |
 
-An event that two inputs both hold is counted once. If the two copies of one record disagree, toledot keeps the first and reports a problem.
+An event that two inputs both hold is counted once. If the two copies of one record disagree, toledot keeps both copies and reports a problem. If the copies are the same event but one says it succeeded and another says it failed (password events 4723, 4724, and 4794), toledot keeps one event, words it as an attempt, adds a note to it, and reports a problem.
 
 ## Problems
 
 A problem is a record or file part that toledot could not read, or a conflict. A problem never stops the rest of a file from being read, but the account is incomplete, because any change that record held is not in it. A problem has the `file`, the `position`, the `record_id` when known, and a `reason`. The reason does not repeat the record's content.
 
-These produce problems: an event that fails its format's rules, a damaged or cut-short file, a collection file whose end line is missing or does not match, every gap a collector recorded, and two copies of a record number with different content. toledot keeps both copies. toledot keeps the first 10,000 problems and adds one problem that says how many more it dropped.
+These produce problems: an event that fails its format's rules, a damaged or cut-short file, a collection file whose end line is missing or does not match, every gap a collector recorded, two copies of a record number with different content (toledot keeps both copies), and copies of one password event that state different outcomes (toledot keeps one event and does not state the outcome). toledot keeps the first 10,000 problems and adds one problem that says how many more it dropped.
 
 ## Other events read
 
@@ -267,7 +269,7 @@ Every run writes `toledot-manifest.json`, after every other file. It lists each 
 {
   "$schema": "https://faithful-oversight.github.io/faithful-toledot/schema/manifest-v1.schema.json",
   "schema_version": "1.0",
-  "tool": {"name": "toledot", "version": "0.1.0"},
+  "tool": {"name": "toledot", "version": "0.1.1"},
   "generated_at": "2026-11-11T13:23:06Z",
   "files": [
     {"name": "toledot-report.json", "size": 40607, "sha256": "5128031a..."}

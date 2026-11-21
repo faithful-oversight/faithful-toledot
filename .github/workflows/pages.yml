@@ -16,6 +16,11 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  # The one pinned uv release for this workflow. setup-uv checks its checksum.
+  # Change it with every workflow and docs/releasing.md in the same pull request.
+  FO_UV_VERSION: "0.11.32"
+
 jobs:
   build:
     name: Build site
@@ -35,6 +40,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
+          version: ${{ env.FO_UV_VERSION }}
           enable-cache: false
       - run: uv sync --locked
       - run: scripts/check.sh site

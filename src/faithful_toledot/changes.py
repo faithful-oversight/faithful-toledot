@@ -69,6 +69,9 @@ class Origin:
             the logon and the change: logon IDs are unique only between reboots;
             ``conflicting`` when the input holds two different logons for the session
             at the same moment;
+            ``unordered`` when a logon or logoff of the session shares the change's
+            timestamp and the input cannot show, by record number in one log, which
+            came first, and the two orders would say different things;
             ``other-account`` when the logon was for a different account from the one
             that made the change;
             ``none`` when the change event names no session.
@@ -212,15 +215,19 @@ class Coverage:
         last: The latest event time.
         first_record: The lowest record number, when records are numbered.
         last_record: The highest record number.
-        continuity: ``complete`` when every record number in the range is present;
-            ``gaps`` when some are absent; ``unnumbered`` when the export kept no
-            record numbers; ``empty`` when no event was read.
+        continuity: ``complete`` when every record number in the range is present
+            and every event has one; ``gaps`` when some are absent;
+            ``partly-numbered`` when the numbered events have no gaps but some events
+            carry no record number, which no check can cover; ``unnumbered`` when the
+            export kept no record numbers; ``empty`` when no event was read.
         missing: The absent record-number ranges, first and last inclusive.
         missing_count: How many record numbers are absent.
         scope: ``unfiltered`` when the user stated the input is the whole log,
             ``filtered`` when the input says it holds chosen events only, and
             ``unknown`` otherwise. Absent record numbers mean missing events only in
             an unfiltered log; in a filtered one they are expected.
+        unnumbered: How many events carry no record number. Any such event leaves the
+            log unchecked: toledot cannot tell whether events are missing around it.
         overwritten_before: Set when a collector asked for events from an earlier
             time than the log's oldest record: events before this time were already
             gone from the log when it was read.
@@ -240,6 +247,7 @@ class Coverage:
     scope: str
     statement: str
     overwritten_before: datetime | None = None
+    unnumbered: int = 0
 
     @property
     def missing_events(self) -> bool:
@@ -255,8 +263,12 @@ class Coverage:
         Continuous record numbers show nothing between the first and the last is
         absent. A collection states what it asked the log for, so its expected gaps
         are accounted for. Absent numbers in an input of unknown scope, and an export
-        with no record numbers, leave toledot unable to tell.
+        with no record numbers, leave toledot unable to tell. So does any single event
+        without a record number: the numbered events being contiguous says nothing
+        about it, or about events that would sit beside it.
         """
+        if self.unnumbered:
+            return False
         if self.continuity == "complete":
             return True
         return self.scope in {"filtered", "unfiltered"} and self.continuity in {"gaps", "empty"}

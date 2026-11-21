@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 import pytest
 
-from faithful_toledot.collect import secrets
+from faithful_toledot.collect import names, secrets
 from faithful_toledot.errors import CollectionError
 
 if TYPE_CHECKING:
@@ -125,8 +125,7 @@ def test_missing_provider_package_names_the_extra(
     hide(monkeypatch, *modules)
     module = modules[0]
     assert resolve_error(reference) == (
-        f"this secret provider needs {module}; "
-        f'install it with: pip install "faithful-toledot[{extra}]"'
+        f"this secret provider needs {module}; install it with: {names.install_hint('live', extra)}"
     )
 
 

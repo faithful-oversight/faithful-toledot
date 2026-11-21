@@ -14,7 +14,8 @@ The rules, each chosen so that toledot never says more than the events do:
   "not in the input", never a guess.
 * A SID is named from other events only when every event that names it agrees.
 * The same record read from two inputs is counted once. Two inputs that disagree
-  about one record are a problem, and the first is kept.
+  about one record are a problem, and the first is kept. Copies that disagree only
+  about success or failure are one event with a problem and no stated outcome.
 * Record numbers that are absent are reported. They mean missing events only when
   the input is the whole log, which toledot cannot tell by itself.
 """
@@ -54,6 +55,9 @@ CLOCK_SYNC_LIMIT = timedelta(minutes=5)
 """Changes by one session this close together are marked as related."""
 MAX_MISSING_RANGES = 1000
 """Absent record ranges listed per log; beyond this only the count is kept."""
+MAX_TIED = 64
+"""Most entries of one session examined at a change's own moment; beyond it, the answer is
+that the order is unknown."""
 MAX_PROBLEMS = 10_000
 """Problems kept in full. Further ones are counted, and one problem says so."""
 
@@ -151,6 +155,29 @@ class _Logon:
     """The log and record number, to order events that share a timestamp."""
 
 
+@dataclass(frozen=True, slots=True)
+class _Entry:
+    """A logon or a logoff of one session: its time, its place in its log, and the logon."""
+
+    time: datetime
+    place: tuple[str, int | None]
+    """The log and record number, to order events that share a timestamp."""
+    source: Source
+    logon: _Logon | None
+    """The logon, or ``None`` for a logoff."""
+
+
+@dataclass
+class _Slot:
+    """What the copies of one event logged on success and failure say about its outcome."""
+
+    own: str
+    """What the first copy that made this slot said: ``unknown``, ``success`` or ``failure``."""
+    input_number: int
+    effective: str
+    """What every copy says together: ``conflict`` when two known outcomes disagree."""
+
+
 @dataclass
 class _State:
     catalog: Catalog
@@ -158,9 +185,7 @@ class _State:
     logs: dict[tuple[str, str], _Log] = field(default_factory=dict)
     kept: dict[tuple[str, str, int], bytes] = field(default_factory=dict)
     events: list[tuple[Event, EventInfo]] = field(default_factory=list)
-    sessions: dict[tuple[str, int], list[tuple[datetime, int, _Logon | None]]] = field(
-        default_factory=dict
-    )
+    sessions: dict[tuple[str, int], list[_Entry]] = field(default_factory=dict)
     names: dict[str, set[str]] = field(default_factory=dict)
     dropped_problems: int = 0
     unnumbered: dict[tuple[str, str, bytes], int] = field(default_factory=dict)
@@ -168,7 +193,11 @@ class _State:
     disputed: set[tuple[str, str, int]] = field(default_factory=set)
     """Records read more than once with different content (computer, log, number)."""
     disputed_sessions: set[tuple[str, int]] = field(default_factory=set)
+    slots: dict[tuple[object, ...], list[_Slot]] = field(default_factory=dict)
+    """Per event (record, or content when unnumbered): what its copies say about its outcome."""
     input_number: int = 0
+    latest: dict[tuple[tuple[str, int], int], _Verdict] = field(default_factory=dict)
+    """Per session and moment: what the session's latest entry at that moment says."""
 
     def problem(self, problem: Problem) -> None:
         if len(self.account.problems) < MAX_PROBLEMS:
@@ -307,6 +336,7 @@ def _take(state: _State, event: Event, scope: str) -> None:
         seen = state.kept.get(key)
         if seen is not None:
             if seen == digest:
+                _merge_outcome(state, event, info, (*key, digest))
                 state.count("duplicates")
                 return
             text = (
@@ -319,14 +349,17 @@ def _take(state: _State, event: Event, scope: str) -> None:
             state.disputed.add(key)
         else:
             state.kept[key] = digest
+        _register_outcome(state, event, info, (*key, digest))
     elif info is not None:
         # With no record number, the same event from two overlapping exports can only
         # be recognised by its content. Within one export, identical rows are kept.
         key_unnumbered = (computer, event.channel.casefold(), _fingerprint(event))
         first = state.unnumbered.setdefault(key_unnumbered, state.input_number)
         if first != state.input_number:
+            _merge_outcome(state, event, info, key_unnumbered)
             state.count("duplicates")
             return
+        _register_outcome(state, event, info, key_unnumbered)
     log = state.logs.setdefault(
         (computer, event.channel.casefold()), _Log(event.computer, event.channel)
     )
@@ -364,6 +397,86 @@ def _fingerprint(event: Event) -> bytes:
     return digest.digest()
 
 
+_UNKNOWN, _SUCCESS, _FAILURE, _CONFLICT = "unknown", "success", "failure", "conflict"
+
+
+def _outcome_tag(event: Event, info: EventInfo) -> str | None:
+    """What one copy says about success: ``unknown``, ``success`` or ``failure``.
+
+    ``None`` for an event that is not logged on both success and failure, which has
+    nothing to disagree about. The fingerprint leaves this out on purpose, so that copies
+    from exports that carry less outcome metadata are still recognised as copies.
+    """
+    if info.action not in _OUTCOMES or info.channel != "Security":
+        return None
+    said = _audit_outcome(event)
+    return _UNKNOWN if said is None else _SUCCESS if said else _FAILURE
+
+
+def _register_outcome(
+    state: _State, event: Event, info: EventInfo, base: tuple[object, ...]
+) -> None:
+    """Note what a kept event says about its outcome, as the first of its copies."""
+    tag = _outcome_tag(event, info)
+    if tag is None:
+        return
+    slots = state.slots.setdefault(base, [])
+    if all(slot.own != tag for slot in slots):
+        slots.append(_Slot(tag, state.input_number, tag))
+
+
+def _merge_outcome(state: _State, event: Event, info: EventInfo, base: tuple[object, ...]) -> None:
+    """Fold a later copy's outcome into the event it copies, whatever order they arrive in.
+
+    A copy that says nothing changes nothing, and one that says more fills in what an
+    earlier copy left out. Two known outcomes that differ leave the event's outcome
+    unstated and are a problem: neither export is trusted over the other.
+    """
+    said = _outcome_tag(event, info)
+    candidates = state.slots.get(base, [])
+    if said in {None, _UNKNOWN} or not candidates:
+        return
+    slot = next(
+        (
+            candidate
+            for wanted in (said, _UNKNOWN, _CONFLICT)
+            for candidate in candidates
+            if candidate.effective == wanted
+        ),
+        candidates[0],
+    )
+    if slot.effective in {said, _CONFLICT}:
+        return
+    if slot.effective == _UNKNOWN:
+        slot.effective = said or _UNKNOWN
+        return
+    slot.effective = _CONFLICT
+    which = (
+        f"Record {event.record_id} of the {event.channel} log on {event.computer}"
+        if event.record_id is not None
+        else f"An unnumbered event {event.event_id} on {event.computer} at {event.time.isoformat()}"
+    )
+    text = (
+        f"{which} is in the input more than once, and the copies disagree about whether the "
+        "attempt succeeded or failed. One event is kept and its outcome is not stated."
+    )
+    state.problem(Problem(event.source, text, event.record_id))
+
+
+def _outcome_of(state: _State, event: Event, info: EventInfo) -> str | None:
+    """What every copy of an event says about its outcome, or ``None`` if it has no outcome."""
+    own = _outcome_tag(event, info)
+    if own is None:
+        return None
+    computer, channel = event.computer.casefold(), event.channel.casefold()
+    base = (
+        (computer, channel, event.record_id, _fingerprint(event))
+        if event.record_id is not None
+        else (computer, channel, _fingerprint(event))
+    )
+    return next((slot.effective for slot in state.slots.get(base, []) if slot.own == own), own)
+
+
 def _text(event: Event, info: EventInfo, role: str) -> str | None:
     """A role's recorded value, or ``None`` when absent or a placeholder."""
     name = info.roles.get(role)
@@ -390,6 +503,10 @@ def _learn_names(state: _State, event: Event, info: EventInfo) -> None:
         name = _text(event, info, f"{prefix}_name")
         if sid is None or name is None or not sid.startswith("S-1-"):
             continue
+        if f"{prefix}_domain" not in info.roles:
+            # No domain is recorded (event 4740 holds a computer name where the domain
+            # would be), so a bare name could disagree with the real one for the same SID.
+            continue
         domain = _text(event, info, f"{prefix}_domain")
         names = state.names.setdefault(sid, set())
         names.add(f"{domain}\\{name}" if domain else name)
@@ -404,13 +521,13 @@ def _note_session(state: _State, event: Event, info: EventInfo) -> None:
     computer = event.computer.casefold()
     if info.action == "logon":
         number = _number_of(_text(event, info, "logon_id"))
-        kind = 1
+        is_logon = True
     elif info.action == "logoff":
         # Logoff events name the ended session in their target fields.
         number = _number_of(_text(event, info, "logon_id") or _text(event, info, "actor_logon_id"))
         if number is None:
             number = _number_of(event.data.get("TargetLogonId"))
-        kind = 0
+        is_logon = False
     else:
         return
     if number is None:
@@ -419,8 +536,9 @@ def _note_session(state: _State, event: Event, info: EventInfo) -> None:
         # Copies of one logon record disagree, perhaps only on the time: no copy of that
         # session can be trusted to say where it came from.
         state.disputed_sessions.add((computer, number))
+    place = (event.channel.casefold(), event.record_id)
     held = None
-    if kind:
+    if is_logon:
         held = _Logon(
             event.record_id,
             event.time,
@@ -430,17 +548,138 @@ def _note_session(state: _State, event: Event, info: EventInfo) -> None:
             _text(event, info, "logon_type"),
             event.source,
             _text(event, info, "target_sid"),
-            (event.channel.casefold(), event.record_id),
+            place,
         )
-    state.sessions.setdefault((computer, number), []).append((event.time, kind, held))
+    state.sessions.setdefault((computer, number), []).append(
+        _Entry(event.time, place, event.source, held)
+    )
+
+
+def _entry_order(entry: _Entry) -> tuple[datetime, str, bool, int, str, str]:
+    """Sort by time, then by log and record number, so the order never depends on the input."""
+    channel, number = entry.place
+    return (
+        entry.time,
+        channel,
+        number is None,
+        number or 0,
+        entry.source.file,
+        entry.source.position,
+    )
 
 
 def _finish_sessions(state: _State) -> None:
-    """Put each session's logons and logoffs in time order; a logoff sorts first."""
+    """Put each session's logons and logoffs in time order."""
     for entries in state.sessions.values():
-        entries.sort(key=lambda entry: (entry[0], entry[1]))
+        entries.sort(key=_entry_order)
     for moments in state.boundaries.values():
         moments.sort(key=lambda moment: moment[0])
+
+
+_Verdict = tuple[str, "_Logon | None"]
+"""What a session's entries say: ``("none", None)`` when there are none, ``("ended", None)``
+after a logoff, ``("session", logon)`` after a logon, or ``("conflicting" | "unordered",
+None)`` when the entries cannot be reduced to one of those."""
+
+
+def _effect(entry: _Entry) -> tuple[str, tuple[str | None, ...]]:
+    """What one entry does to a session, comparable between entries."""
+    if entry.logon is None:
+        return ("ended", ())
+    return ("session", _session_facts(entry.logon))
+
+
+def _verdict_effect(verdict: _Verdict) -> tuple[str, tuple[str | None, ...]]:
+    logon = verdict[1]
+    return (verdict[0], _session_facts(logon) if logon is not None else ())
+
+
+def _order_against(entry: _Entry, place: tuple[str, int | None]) -> int | None:
+    """Whether an entry of the change's own moment came before (-1) or after (1) the change.
+
+    Record numbers order two events only within one log. ``None`` means the input cannot say.
+    """
+    channel, number = entry.place
+    if channel != place[0] or number is None or place[1] is None or number == place[1]:
+        return None
+    return -1 if number < place[1] else 1
+
+
+def _latest_of(entries: list[_Entry]) -> _Verdict:
+    """What the latest of entries that share one time says.
+
+    Record numbers order entries of one log. Entries that cannot be ordered, because
+    they are in different logs or lack a record number, are each possibly the latest;
+    they give an answer only when they agree. Two different logons are ``conflicting``;
+    any other disagreement is ``unordered``.
+    """
+    by_log: dict[str, list[_Entry]] = {}
+    for entry in entries:
+        by_log.setdefault(entry.place[0], []).append(entry)
+    last: list[_Entry] = []
+    for group in by_log.values():
+        if any(entry.place[1] is None for entry in group):
+            last += group
+        else:
+            top = max(entry.place[1] or 0 for entry in group)
+            last += [entry for entry in group if entry.place[1] == top]
+    effects = {_effect(entry) for entry in last}
+    if len(effects) > 1:
+        both_logons = all(entry.logon is not None for entry in last)
+        return ("conflicting" if both_logons else "unordered", None)
+    first = min(last, key=_entry_order)
+    if first.logon is None:
+        return ("ended", None)
+    return ("session", first.logon)
+
+
+def _before_moment(
+    state: _State, key: tuple[str, int], entries: list[_Entry], index: int
+) -> _Verdict:
+    """What the session says after every entry up to index, which ends a moment."""
+    if index < 0:
+        return ("none", None)
+    moment = entries[index].time
+    start = bisect.bisect_left(entries, moment, key=lambda entry: entry.time)
+    place = (key, start)
+    found = state.latest.get(place)
+    if found is None:
+        found = state.latest[place] = _latest_of(entries[start : index + 1])
+    return found
+
+
+def _session_at(
+    state: _State, key: tuple[str, int], when: datetime, place: tuple[str, int | None]
+) -> _Verdict:
+    """What a session says at a change, using record numbers to order entries that tie.
+
+    Entries earlier than the change count. An entry stamped with the change's own time
+    counts only when it is in the change's log and has a lower record number; one that
+    cannot be ordered against the change might be before or after it. If any of those
+    would say something other than what the ordered entries say, the answer is
+    ``unordered``: toledot does not choose.
+    """
+    entries = state.sessions.get(key, [])
+    first = bisect.bisect_left(entries, when, key=lambda entry: entry.time)
+    last = bisect.bisect_right(entries, when, key=lambda entry: entry.time)
+    earlier = _before_moment(state, key, entries, first - 1)
+    tied = entries[first:last]
+    if not tied:
+        return earlier
+    if len(tied) > MAX_TIED:
+        # A session with this many entries in one moment is not a real one; each change
+        # would otherwise cost the whole block. The block is not ordered.
+        ordered, unknown = [], tied
+    else:
+        orders = [(entry, _order_against(entry, place)) for entry in tied]
+        ordered = [entry for entry, order in orders if order == -1]
+        unknown = [entry for entry, order in orders if order is None]
+    base = _latest_of(ordered) if ordered else earlier
+    if base[0] in {"conflicting", "unordered"}:
+        return base
+    if all(_effect(entry) == _verdict_effect(base) for entry in unknown):
+        return base
+    return ("unordered", None)
 
 
 def _origin(state: _State, event: Event, info: EventInfo) -> Origin:
@@ -450,16 +689,11 @@ def _origin(state: _State, event: Event, info: EventInfo) -> Origin:
         return Origin("none")
     if number in _SYSTEM_SESSIONS:
         return Origin("local", logon_id=recorded)
-    entries = state.sessions.get((event.computer.casefold(), number), [])
-    index = bisect.bisect_right(entries, event.time, key=lambda entry: entry[0])
-    # A logoff stamped with the change's own time may have come just after it.
-    before = [entry for entry in entries[:index] if entry[0] < event.time or entry[1]]
-    if not before:
-        return Origin("not-in-input", logon_id=recorded)
-    logon = before[-1][2]
-    if logon is None:
-        return Origin("ended", logon_id=recorded)
-    doubt = _doubt(state, event, info, logon, before)
+    key = (event.computer.casefold(), number)
+    status, logon = _session_at(state, key, event.time, (event.channel.casefold(), event.record_id))
+    if logon is None:  # no entry, a logoff, or entries that cannot be reduced to one logon
+        return Origin("not-in-input" if status == "none" else status, logon_id=recorded)
+    doubt = _doubt(state, event, info, logon)
     if doubt is not None:
         return Origin(doubt, logon_id=recorded, logon_time=logon.time)
     return Origin(
@@ -475,24 +709,13 @@ def _origin(state: _State, event: Event, info: EventInfo) -> Origin:
     )
 
 
-def _doubt(
-    state: _State,
-    event: Event,
-    info: EventInfo,
-    logon: _Logon,
-    before: list[tuple[datetime, int, _Logon | None]],
-) -> str | None:
+def _doubt(state: _State, event: Event, info: EventInfo, logon: _Logon) -> str | None:
     """Why the latest logon for a change's session cannot be taken as its origin, if it can't."""
     number = _number_of(_text(event, info, "actor_logon_id"))
     if (event.computer.casefold(), number) in state.disputed_sessions:
         return "conflicting"
     if _restarted_between(state, event, logon):
         return "restarted"
-    rivals = {_session_facts(e[2]) for e in before if e[0] == logon.time and e[2] is not None}
-    if len(rivals) > 1:
-        # Two different logons for one session at one moment: choosing either would be
-        # a guess that depends on the order the inputs were read.
-        return "conflicting"
     actor = _text(event, info, "actor_sid")
     if logon.account and actor and logon.account.casefold() != actor.casefold():
         return "other-account"
@@ -685,12 +908,17 @@ def _change(state: _State, info: EventInfo, events: list[Event]) -> Change:
             f"The event lacks {', '.join(absent)}, which this event normally records; "
             "the description may be incomplete."
         )
+    if _outcome_of(state, first, info) == _CONFLICT:
+        notes.append(
+            "Copies of this event disagree about whether it succeeded or failed, so the "
+            "outcome is not stated."
+        )
     change = Change(
         id="",
         time=first.time,
         computer=first.computer,
         category=info.category,
-        action=info.action,
+        action=_action_for(state, info, first),
         title=info.title,
         actor=_party(state, first, info, "actor"),
         target=_target(state, first, info),
@@ -701,6 +929,49 @@ def _change(state: _State, info: EventInfo, events: list[Event]) -> Change:
         notes=tuple(notes),
     )
     return _with(change, sentence=narrative.sentence(change))
+
+
+_AUDIT_FAILURE = 1 << 52
+"""Keywords bit for Audit Failure (0x0010000000000000, Microsoft's StandardEventKeywords)."""
+_AUDIT_SUCCESS = 1 << 53
+"""Keywords bit for Audit Success (0x0020000000000000)."""
+_OUTCOMES = {
+    "password-change-attempted": ("password-changed", "password-change-failed"),
+    "password-reset-attempted": ("password-reset", "password-reset-failed"),
+}
+"""Events Windows logs on success and on failure: action when unknown, then success, failure."""
+
+
+def _audit_outcome(event: Event) -> bool | None:
+    """Whether the event says it succeeded (True) or failed (False); ``None`` if it does not.
+
+    The answer comes only from the event's own Keywords mask (exactly one of the two audit
+    bits), or, for Event Viewer CSV, which has no mask, its Level text. Anything absent,
+    unreadable, or contradictory is ``None``: toledot never guesses.
+    """
+    text = event.system.get("Keywords")
+    if text is not None:
+        try:
+            mask = int(text, 16)
+        except ValueError:
+            return None
+        ok, bad = bool(mask & _AUDIT_SUCCESS), bool(mask & _AUDIT_FAILURE)
+        return ok if ok != bad else None
+    level = event.system.get("LevelDisplayName", "").strip().casefold()
+    return {"audit success": True, "audit failure": False}.get(level)
+
+
+def _action_for(state: _State, info: EventInfo, event: Event) -> str:
+    """The action, using the audit outcome for events logged on success and failure.
+
+    The outcome is what every copy of the event says. Copies that contradict each
+    other leave it unstated.
+    """
+    pair = _OUTCOMES.get(info.action)
+    outcome = _outcome_of(state, event, info)
+    if pair is None or outcome in {None, _UNKNOWN, _CONFLICT}:
+        return info.action
+    return pair[0] if outcome == _SUCCESS else pair[1]
 
 
 def _with(change: Change, **updates: object) -> Change:
@@ -812,6 +1083,11 @@ def _details(state: _State, event: Event, info: EventInfo) -> list[Detail]:
             for right in event.data.get(privileges, "").split()
             if right not in _EMPTY
         ]
+    caller = info.roles.get("workstation")
+    value = event.data.get(caller) if caller and info.category != "logon" else None
+    if value is not None and value not in _EMPTY:
+        label = "caller computer" if info.action == "locked" else "workstation"
+        out.append(Detail(label, "info", new=value, attribute=caller))
     out += _paired_and_other(state, event, used, consumed)
     return out
 
@@ -977,6 +1253,8 @@ def _coverage(log: _Log) -> Coverage:
         continuity = "unnumbered"
     elif gaps:
         continuity = "gaps"
+    elif log.unnumbered:
+        continuity = "partly-numbered"
     else:
         continuity = "complete"
     return Coverage(
@@ -994,4 +1272,5 @@ def _coverage(log: _Log) -> Coverage:
         statement=narrative.coverage_statement(continuity, scope, missing, log.unnumbered)
         + narrative.overwritten_statement(log.overwritten_before),
         overwritten_before=log.overwritten_before,
+        unnumbered=log.unnumbered,
     )

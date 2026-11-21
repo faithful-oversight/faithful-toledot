@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Faithful Oversight, LLC
 # SPDX-License-Identifier: Apache-2.0
 #
-# Event catalog: what each Windows event means, in one place. Read by faithful_toledot.catalog,
+# Event catalog: what each Windows event means, in one place. Not affiliated with or endorsed by Microsoft. Read by faithful_toledot.catalog,
 # which validates every key strictly. Facts only: field names, ids and numeric codes come from Microsoft
 # documentation; titles, labels and notes are written in our own words. Each entry names its source page.
 # confirmed = false means a detail could not be confirmed from a primary source; the note says which.
@@ -190,11 +190,11 @@ channel = "Security"
 provider = "Microsoft-Windows-Security-Auditing"
 title = "Password change attempted"
 category = "user"
-action = "password-changed"
+action = "password-change-attempted"
 source = "https://learn.microsoft.com/windows/security/threat-protection/auditing/event-4723"
 confirmed = true
 labels_complete = true
-notes = "Logged for success and failure; the event itself does not say which. Subject is the account that made the attempt; for a self-service change Subject and Target are the same account."
+notes = "Logged for success and failure. The outcome is the event's Keywords audit bit (Audit Success 0x0020000000000000, Audit Failure 0x0010000000000000); without a readable bit it is worded as an attempt. Subject is the account that made the attempt; for a self-service change Subject and Target are the same account."
 
 [[event.version]]
 version = 0
@@ -225,11 +225,11 @@ channel = "Security"
 provider = "Microsoft-Windows-Security-Auditing"
 title = "Password reset attempted"
 category = "user"
-action = "password-reset"
+action = "password-reset-attempted"
 source = "https://learn.microsoft.com/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4724"
 confirmed = true
 labels_complete = true
-notes = "Logged for success and failure; the event itself does not say which."
+notes = "Logged for success and failure. The outcome is the event's Keywords audit bit (Audit Success 0x0020000000000000, Audit Failure 0x0010000000000000); without a readable bit it is worded as an attempt."
 
 [[event.version]]
 version = 0
@@ -472,7 +472,7 @@ action = "locked"
 source = "https://learn.microsoft.com/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4740"
 confirmed = false
 labels_complete = false
-notes = "Field list is from the sample XML. INFERENCE: the descriptions document a 'Caller Computer Name' that has no element in the sample XML, and the sample's TargetDomainName holds a computer name, so the workstation role and that label map to TargetDomainName. Microsoft does not state the mapping."
+notes = "Field list is from the sample XML. INFERENCE: the descriptions document a 'Caller Computer Name' that has no element in the sample XML, and the sample's TargetDomainName holds a computer name, so the workstation role and that label map to TargetDomainName. Microsoft does not state the mapping. Because that field is a computer name and not the account's domain, this event has no target_domain role: the account is shown without a domain, and its name is not learned as a name for the SID. The caller computer is shown as its own detail. The subject is the computer that recorded the lockout (usually the domain controller's own account), not the person or program that caused it."
 
 [[event.version]]
 version = 0
@@ -484,7 +484,6 @@ actor_name = "SubjectUserName"
 actor_domain = "SubjectDomainName"
 actor_logon_id = "SubjectLogonId"
 target_name = "TargetUserName"
-target_domain = "TargetDomainName"
 target_sid = "TargetSid"
 workstation = "TargetDomainName"
 
@@ -634,11 +633,11 @@ channel = "Security"
 provider = "Microsoft-Windows-Security-Auditing"
 title = "Attempt to add SID History failed"
 category = "user"
-action = "sid-history-added"
+action = "sid-history-failed"
 source = "https://learn.microsoft.com/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4766"
 confirmed = false
 labels_complete = false
-notes = "Failure event. The page has no sample XML. Field order comes from the insertion-string schema (%1..%8); element names are inferred. The schema shows Subject Security ID as the literal text '-' with no placeholder, so no subject SID element is listed here; a real event may carry one."
+notes = "Failure event: Microsoft documents 4766 as 'an attempt to add SID History to an account failed', so it never means SID history was added (event 4765 is the success). It has its own action so it is never narrated or counted as an add. The page has no sample XML. Field order comes from the insertion-string schema (%1..%8); element names are inferred. The schema shows Subject Security ID as the literal text '-' with no placeholder, so no subject SID element is listed here; a real event may carry one."
 
 [[event.version]]
 version = 0
@@ -673,11 +672,11 @@ channel = "Security"
 provider = "Microsoft-Windows-Security-Auditing"
 title = "Directory Services Restore Mode password set attempted"
 category = "user"
-action = "password-reset"
+action = "password-reset-attempted"
 source = "https://learn.microsoft.com/windows/security/threat-protection/auditing/event-4794"
 confirmed = true
 labels_complete = true
-notes = "Logged for success and failure. Status is 0x0 for success. There is no target account element: the target is always the DSRM administrator."
+notes = "Logged for success and failure. The outcome is the event's Keywords audit bit (Audit Success 0x0020000000000000, Audit Failure 0x0010000000000000); without a readable bit it is worded as an attempt. Status is 0x0 for success. There is no target account element: the target is always the DSRM administrator."
 
 [[event.version]]
 version = 0

@@ -261,6 +261,18 @@ def test_gaps_the_collector_recorded_are_returned(tmp_path: Path, fake: Remote) 
     assert run(tmp_path / "e.jsonl").gaps == ("the System log: Access is denied.",)
 
 
+def test_more_gaps_than_the_schema_allows_do_not_discard_the_collection(
+    tmp_path: Path, fake: Remote
+) -> None:
+    gaps = [{"area": f"record {n} of the Security log", "reason": "bad"} for n in range(1500)]
+    fake.batches = [encode(header(), [member_added()], gaps).decode().splitlines()]
+    result = run(tmp_path / "e.jsonl")
+    assert result.events == 1
+    assert len(result.gaps) == 1001
+    assert result.gaps[-1] == "500 further gaps are not listed"
+    assert (tmp_path / "e.jsonl").is_file()
+
+
 def damaged(lines: list[str]) -> list[Sequence[object]]:
     return [list(lines)]
 
@@ -528,8 +540,17 @@ def test_an_unwritable_folder_is_reported(tmp_path: Path) -> None:
 
 def test_pypsrp_missing_says_how_to_install(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "pypsrp.wsman", None)
-    with pytest.raises(CollectionError, match=r'pip install "faithful-toledot\[live\]"'):
+    with pytest.raises(CollectionError) as caught:
         remote._client()  # noqa: SLF001 - the import boundary itself
+    message = str(caught.value)
+    # pipx refuses a plain install over an installed toledot, so the pipx form has --force.
+    assert 'pipx install --force "faithful-toledot[live] @ git+https://github.com/' in message
+    assert 'pip install "faithful-toledot[live] @ git+https://github.com/' in message
+
+
+def test_the_install_hint_names_every_extra_and_the_repository() -> None:
+    hint = names.install_hint("live", "vault")
+    assert "faithful-toledot[live,vault] @ git+https://github.com/faithful-oversight/" in hint
 
 
 def test_the_real_client_classes_load() -> None:
@@ -646,6 +667,32 @@ def test_collect_runs_and_says_what_to_do_next(
     assert "'" in printed or '"' in printed  # the path with a space is quoted
 
 
+@pytest.mark.usefixtures("fetched")
+def test_a_gap_or_path_with_a_line_break_cannot_add_a_terminal_line(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    forged = "Collected 0 events from nowhere."
+    gap = f"the System log: Access is denied.\n{forged}"
+
+    def fake_collect(
+        _target: Target, _text: str, _values: dict[str, Any], out: Path, **_options: Any
+    ) -> remote.Result:
+        return remote.Result(out, 1, (gap,))
+
+    monkeypatch.setattr(remote, "collect", fake_collect)
+    args = collect_args(
+        tmp_path / "e.jsonl", "--username", "auditor@corp.example", "--secret", "env:PW"
+    )
+    assert main(args) == ExitCode.OK
+    lines = capsys.readouterr().out.splitlines()
+    assert forged not in lines
+    assert not any(line.strip().startswith(forged) for line in lines)
+    assert f"  not read: the System log: Access is denied.\\n{forged}" in lines
+    assert len(lines) == 3
+
+
 def test_collect_with_the_current_kerberos_ticket(
     tmp_path: Path, fetched: list[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -705,3 +752,58 @@ def test_collector_writes_the_script(tmp_path: Path, capsys: pytest.CaptureFixtu
     assert "-OutFile dc01-events.jsonl" in capsys.readouterr().out
     assert main(["collector", "-o", str(out)]) == ExitCode.INPUT_ERROR
     assert main(["collector", "-o", str(out), "--force"]) == ExitCode.OK
+
+
+@pytest.mark.parametrize("what", ["ca", "secret"])
+def test_collect_never_replaces_the_files_it_reads_even_with_force(
+    tmp_path: Path,
+    fetched: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    what: str,
+) -> None:
+    sentinel = tmp_path / "input.pem"
+    sentinel.write_bytes(b"precious bytes")
+    monkeypatch.setattr(remote, "collect", lambda *_a, **_k: pytest.fail("must not collect"))
+    extra = (
+        ["--ca-file", str(sentinel)]
+        if what == "ca"
+        else ["--username", "CORP\\auditor", "--secret", f"file:{sentinel}"]
+    )
+    assert main(collect_args(sentinel, *extra, "--force")) == ExitCode.INPUT_ERROR
+    assert "same file as" in capsys.readouterr().err
+    assert sentinel.read_bytes() == b"precious bytes"
+    assert fetched == []
+
+
+def test_collect_refuses_a_destination_that_is_the_ca_file(tmp_path: Path, fake: Remote) -> None:
+    ca = tmp_path / "ca.pem"
+    ca.write_bytes(b"ca bytes")
+    target = replace(TARGET, ca_file=ca)
+    with pytest.raises(CollectionError, match="same file as the CA file"):
+        collect(target, "script", {"ToPipeline": True}, ca, force=True)
+    assert ca.read_bytes() == b"ca bytes"
+    assert fake.script == ""  # refused before connecting
+    assert leftovers(tmp_path) == []
+
+
+@pytest.mark.usefixtures("fake")
+def test_collect_checks_the_ca_file_again_just_before_publishing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ca = tmp_path / "ca.pem"
+    ca.write_bytes(b"ca bytes")
+    out = tmp_path / "events.jsonl"
+    finish = remote._Sink.finish  # noqa: SLF001 - wrapped to act during the long collection
+
+    def alias_then_finish(self: remote._Sink) -> Any:
+        result = finish(self)
+        os.link(ca, out)  # the destination becomes another name for the CA file
+        return result
+
+    monkeypatch.setattr(remote._Sink, "finish", alias_then_finish)  # noqa: SLF001
+    with pytest.raises(CollectionError, match="same file as the CA file"):
+        collect(replace(TARGET, ca_file=ca), "script", {"ToPipeline": True}, out, force=True)
+    assert ca.read_bytes() == b"ca bytes"
+    assert out.read_bytes() == b"ca bytes"
+    assert leftovers(tmp_path) == []

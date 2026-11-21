@@ -52,7 +52,11 @@ The rules, applied line by line:
   is two fields. ``options.labels_for(event_id)`` maps that key to the field name used in
   event XML. **A key it has no mapping for is kept under the ``Section/Label`` text**, so
   nothing is lost; if ``labels_for`` returns ``None`` every key is kept that way.
-  A repeated name becomes ``name#2``, ``name#3``.
+  A repeated name becomes ``name#2``, ``name#3``. **But when ``labels_for`` returns a
+  mapping, a repeated mapped ``Section/Label`` key, or a repeated section header, makes
+  the row a problem (an ambiguous message) and no field of it is used.** A genuine message
+  never repeats them, and a value with a line break inside it can imitate them (see
+  "Message-only CSV can be forged" below).
 * **Multi-line values**: a line indented deeper than the section's field lines, directly
   after a field with no blank line between, continues that field. Its text, with
   indentation removed, is joined to the value with ``\n``. So ``Privileges:`` followed by
@@ -63,6 +67,15 @@ The rules, applied line by line:
 * A message with no field lines at all (for example because tabs were lost in the export
   or the provider's message file was missing) is a problem for that row, as is an
   indented line that is neither a field nor a continuation.
+
+Message-only CSV can be forged
+-------------------------------
+These exports hold only the rendered text. A directory attribute such as ``info`` or
+``description`` may contain line breaks, so a value can carry lines shaped like the
+message's own labels and sections. toledot refuses a message in which a mapped label or a
+section header repeats. It cannot detect a forged label the genuine message does not
+carry at all, so a message-only CSV is weaker evidence than ``.evtx``, XML, JSON, or a
+collection file, which keep each field apart. Prefer those formats.
 
 Times
 -----
@@ -454,6 +467,7 @@ def _parse_message(message: str, labels: Mapping[str, str] | None) -> dict[str, 
         raise _RowError(msg)
     fields: list[tuple[str, list[str]]] = []
     section = ""
+    sections: set[str] = set()
     field_indent = 0
     open_field = False  # whether the previous line was a field, so a deeper line continues it
     for line in lines:
@@ -467,6 +481,7 @@ def _parse_message(message: str, labels: Mapping[str, str] | None) -> dict[str, 
             if body.endswith(":"):
                 section = body[:-1].strip()
                 field_indent = 0
+                _note_section(sections, section, labels)
             continue  # a section header, or free text
         if open_field and indent > field_indent:
             fields[-1][1].append(body)
@@ -491,10 +506,44 @@ def _parse_message(message: str, labels: Mapping[str, str] | None) -> dict[str, 
     return _name_fields(fields, labels)
 
 
+def _note_section(sections: set[str], section: str, labels: Mapping[str, str] | None) -> None:
+    """Record a section header; a mapped event may not repeat one (see below)."""
+    if labels is not None and section in sections:
+        msg = (
+            f"the message is ambiguous: the section {section!r} appears more than once, so "
+            "the text may have been forged by a line break inside a value; no field of it "
+            "is used"
+        )
+        raise _RowError(msg)
+    sections.add(section)
+
+
+def _refuse_repeated_labels(fields: list[tuple[str, list[str]]], labels: Mapping[str, str]) -> None:
+    """Refuse a message that gives one mapped ``Section/Label`` twice.
+
+    A genuine Windows message never repeats a label inside a section. A repeat means a
+    value held a line break followed by text shaped like a label, or the exporter's text
+    was altered. Choosing the first or the last copy would let that text decide the
+    field, so the row becomes a problem instead.
+    """
+    seen: set[str] = set()
+    for key, _ in fields:
+        if key in labels and key in seen:
+            msg = (
+                f"the message is ambiguous: the field {key!r} appears more than once, so "
+                "the text may have been forged by a line break inside a value; no field "
+                "of it is used"
+            )
+            raise _RowError(msg)
+        seen.add(key)
+
+
 def _name_fields(
     fields: list[tuple[str, list[str]]], labels: Mapping[str, str] | None
 ) -> dict[str, str]:
     """Join continuation lines and name each field through ``labels`` if it has a mapping."""
+    if labels is not None:
+        _refuse_repeated_labels(fields, labels)
     data: dict[str, str] = {}
     counts: dict[str, int] = {}
     for key, parts in fields:

@@ -23,7 +23,8 @@ stage_docs() {
   mapfile -t docs < <(git ls-files '*.md' ':!:examples/*/sample-report/*')
   run pymarkdown --config .pymarkdown.json scan "${docs[@]}"
   git ls-files -z | xargs -0 uv run --locked --no-sync codespell --
-  run vale sync >/dev/null
+  # Pinned, checksum-verified styles. `vale sync` would fetch the newest release unchecked.
+  scripts/install_vale_styles.sh >/dev/null
   run vale --minAlertLevel=warning "${docs[@]}"
 }
 stage_site() {
@@ -38,8 +39,13 @@ stage_config() {
 }
 check_powershell() {
   # Parse every PowerShell script with the real PowerShell parser. GitHub's runners
-  # include pwsh; elsewhere the check is skipped with a note.
+  # include pwsh. Elsewhere the check is skipped with a note, unless TOLEDOT_REQUIRE_PWSH=1
+  # (set in CI), which makes a missing pwsh a failure.
   if ! command -v pwsh >/dev/null; then
+    if [[ "${TOLEDOT_REQUIRE_PWSH:-}" == "1" ]]; then
+      echo "TOLEDOT_REQUIRE_PWSH is set but pwsh is not installed" >&2
+      return 1
+    fi
     echo "pwsh not found; skipping the PowerShell syntax check" >&2
     return 0
   fi
@@ -48,7 +54,7 @@ check_powershell() {
     # -Command does not pass extra arguments to the command as $args, so the path goes
     # through the environment.
     # shellcheck disable=SC2016 # $errors and $env: are PowerShell syntax
-    PS_PARSE_PATH="$script" pwsh -NoProfile -NonInteractive -Command '
+    POWERSHELL_TELEMETRY_OPTOUT=1 PS_PARSE_PATH="$script" pwsh -NoProfile -NonInteractive -Command '
       $errors = $null
       $path = (Resolve-Path -LiteralPath $env:PS_PARSE_PATH).Path
       [void][System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errors)
@@ -60,27 +66,67 @@ check_powershell() {
   done < <(git ls-files -z '*.ps1')
 }
 stage_workflows() {
-  # Online audits need a GitHub token; without one, run the offline audits only.
+  # Online audits (known-vulnerable actions, for example) need a valid GitHub
+  # token, which zizmor reads from any of three variables. Without one, run the
+  # offline audits only, and remove the variables: zizmor rejects an empty one
+  # even with --offline.
+  local token="${GH_TOKEN:-${GITHUB_TOKEN:-${ZIZMOR_GITHUB_TOKEN:-}}}"
   local -a mode=()
-  [[ -n "${GH_TOKEN:-}" ]] || mode=(--offline)
-  run zizmor "${mode[@]}" --persona=auditor --min-severity=low .github/workflows
+  local out rc=0
+  [[ -n "$token" ]] || mode=(--offline)
+  out="$(mktemp)"
+  (
+    [[ -n "$token" ]] || unset GH_TOKEN GITHUB_TOKEN ZIZMOR_GITHUB_TOKEN
+    RUST_BACKTRACE=0 run zizmor ${mode[@]+"${mode[@]}"} --persona=auditor --min-severity=low \
+      .github/workflows
+  ) > "$out" 2>&1 || rc=$?
+  if [[ $rc -eq 1 ]]; then
+    # Exit code 1 means zizmor could not finish; findings use higher codes. Show
+    # the cause without the Rust stack trace, and say what to do.
+    sed '/^Stack backtrace:/,$d' "$out" >&2
+    {
+      echo "workflows: zizmor could not finish its online audits. The usual cause is a GH_TOKEN"
+      echo "(or GITHUB_TOKEN) that GitHub rejects, such as an expired token, or no route to"
+      echo "github.com. Fix the token, or unset GH_TOKEN and GITHUB_TOKEN to run only the"
+      echo "offline audits."
+    } >&2
+  else
+    cat "$out"
+  fi
+  rm -f "$out"
+  return "$rc"
 }
 stage_secrets()   { gitleaks git --redact --no-banner --exit-code 1 .; }
 stage_deps() {
   # A private directory for every run. A fixed path in a shared temporary
   # directory could be a symlink planted beforehand, and two checks running at
   # the same time would overwrite each other's input.
-  local work rc=0
+  local work inputs input n rc=0
   work="$(mktemp -d)"
+  inputs="$work/audit"
   # --all-extras puts every optional extra in the audit; without it their pins would never
-  # be checked. The inventory check fails if any package an extra names is absent.
+  # be checked. The export keeps environment markers, and pip-audit would drop every pin
+  # whose marker is false on this host (a Windows-only package, or the version that only
+  # another Python installs). So the pins are rewritten as marker-free files, one version
+  # of each package per file, and every identity in uv.lock is audited on any host.
   uv export --color never --locked --all-groups --all-extras --no-emit-project \
-    --format requirements-txt > "$work/requirements-audit.txt" || rc=$?
+    --format requirements-txt > "$work/export.txt" || rc=$?
   if [[ $rc -eq 0 ]]; then
-    run python scripts/check_audit_inventory.py "$work/requirements-audit.txt" || rc=$?
+    run python scripts/check_audit_inventory.py split "$work/export.txt" "$inputs" \
+      --lock uv.lock || rc=$?
   fi
   if [[ $rc -eq 0 ]]; then
-    run pip-audit --strict --requirement "$work/requirements-audit.txt" --disable-pip || rc=$?
+    for input in "$inputs"/requirements-audit-*.txt; do
+      [[ -e "$input" ]] || continue
+      n="${input##*requirements-audit-}"
+      n="${n%.txt}"
+      run pip-audit --strict --requirement "$input" --disable-pip --progress-spinner off \
+        --format json --output "$inputs/audit-$n.json" || rc=$?
+    done
+    # Read what the auditor reported, not what was sent: every locked identity must be in
+    # its results, none skipped. This also prints each vulnerability found.
+    run python scripts/check_audit_inventory.py verify "$work/export.txt" "$inputs" \
+      --lock uv.lock || rc=$?
   fi
   rm -rf "$work"
   return "$rc"

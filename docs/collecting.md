@@ -108,6 +108,8 @@ A log the script cannot read becomes a gap in the end line, not a failure. The s
 
 `toledot report` shows every gap as a problem, so the account is incomplete.
 
+The end line lists at most 1000 gaps, and each area is at most 255 characters and each reason at most 4096. When more records fail, as when every record of a large log cannot be decoded, the script lists the first 999 and ends the list with one gap that says how many further gaps are not listed. A file that lists more than 1000 gaps is still read: toledot keeps the first 1000, reports one more problem that says how many were not listed, and still compares the event count and the hash. A collection that arrives over `toledot collect` with too many gaps is published, not discarded. This script change has not been run on a real Windows host; its tests run only where PowerShell is installed.
+
 ## Remote collection
 
 `toledot collect` runs the same script on a controller over PowerShell remoting, which uses WinRM. toledot sends the script text to the controller, runs it with `-ToPipeline`, and streams the lines back. Nothing is installed on the controller.
@@ -124,8 +126,10 @@ toledot collect --server dc01.corp.example --auth ntlm --username 'CORP\auditor'
 Install the `live` extra, which adds `pypsrp`:
 
 ```shell
-pipx install "faithful-toledot[live]"
+pipx install --force "faithful-toledot[live] @ git+https://github.com/faithful-oversight/faithful-toledot"
 ```
+
+Add other extras the same way, for example `[live,vault]`. `--force` is needed because pipx refuses to install toledot a second time without it.
 
 You also need:
 
@@ -180,6 +184,7 @@ The lines stream into a private temporary file in the same folder as the output,
 When the script ends, toledot checks the end line against what arrived: the end line must pass the file reader's own checks (`end` is `true`, `events` is a whole number, `sha256` is 64 lower-case hex digits, `gaps` is a well-formed list), and the event count and the SHA-256 of every line before it must match. Only then does it publish the file, so a stream that `toledot report` would refuse is never published and an existing file is left as it was.
 
 - Without `--force`, toledot puts the file in place only if the name is free, so it never replaces a file, even one that appears while collection runs. toledot also checks at the start and refuses early if the file exists.
+- Even with `--force`, toledot refuses an output that is the same file as the `--ca-file` or the `file:` secret it reads, through any path, symbolic link or hard link. It checks before it reads the secret and again just before it publishes.
 - With `--force`, it replaces the file. Where the file system has no hard links, such as FAT, exFAT, and some network shares, toledot creates the output name exclusively and copies the checked file into it. A failed copy removes what it created. A symbolic link at the output name is replaced, not followed.
 - On any failure, toledot deletes the temporary file. A partial file is never left behind.
 - On Linux and macOS, the file is readable only by your user account.

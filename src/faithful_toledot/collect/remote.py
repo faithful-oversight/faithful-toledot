@@ -31,10 +31,11 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from faithful_toledot.collect import names
 from faithful_toledot.collect.secrets import redact, remember
-from faithful_toledot.errors import CollectionError
+from faithful_toledot.errors import CollectionError, ToledotError
 from faithful_toledot.formats import bundle
-from faithful_toledot.outputs.files import _copy_new
+from faithful_toledot.outputs.files import _copy_new, refuse_aliases
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -47,7 +48,7 @@ POLL_SECONDS = 5
 """How long one wait for output lasts before toledot checks the idle timeout."""
 _END = b'{"end":'
 _END_KEY = b'"end"'
-_INSTALL = 'remote collection needs pypsrp; install it with: pip install "faithful-toledot[live]"'
+_INSTALL = f"remote collection needs pypsrp; install it with: {names.install_hint('live')}"
 
 
 @dataclass(frozen=True)
@@ -234,6 +235,8 @@ class _Sink:
             )
             raise CollectionError(msg)
         gaps = tuple(f"{area}: {reason}" for area, reason in trailer.gaps)
+        if trailer.unlisted_gaps:
+            gaps += (f"{trailer.unlisted_gaps} further gaps are not listed",)
         return self.events, gaps
 
     def publish(self, *, force: bool) -> None:
@@ -265,6 +268,16 @@ class _Sink:
             self.temp.unlink()
 
 
+def _keep_read_files(destination: Path, target: Target) -> None:
+    """Refuse a destination that is a file the collection reads, even with ``force``."""
+    if target.ca_file is None:
+        return
+    try:
+        refuse_aliases([destination], [("CA file", target.ca_file)])
+    except ToledotError as exc:
+        raise CollectionError(str(exc)) from None
+
+
 def collect(  # noqa: PLR0913 - one argument per collection choice
     target: Target,
     script: str,
@@ -283,6 +296,7 @@ def collect(  # noqa: PLR0913 - one argument per collection choice
     """
     if target.secret:
         remember(target.secret)
+    _keep_read_files(destination, target)
     if destination.exists() and not force:
         msg = f"{destination} already exists; pass --force to replace it"
         raise CollectionError(msg)
@@ -301,6 +315,7 @@ def collect(  # noqa: PLR0913 - one argument per collection choice
             _drain(shell, sink, running, target.idle_timeout, clock)
             _check_failed(shell, sink, target.server)
         events, gaps = sink.finish()
+        _keep_read_files(destination, target)  # checked again, after the long wait
         sink.publish(force=force)
     except CollectionError as exc:
         sink.discard()

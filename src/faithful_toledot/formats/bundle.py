@@ -58,6 +58,23 @@ _EVENT_KEYS = frozenset(
 _HEADER_KEYS = frozenset(
     {"toledot_events", "collector", "collected_at", "computer", "operator", "query", "logs"}
 )
+_COLLECTOR_KEYS = frozenset({"name", "version", "method"})
+_QUERY_KEYS = frozenset({"channels", "event_ids", "since", "until"})
+_LOG_KEYS = frozenset(
+    {
+        "channel",
+        "oldest_record_id",
+        "oldest_time",
+        "newest_record_id",
+        "record_count",
+        "max_size_bytes",
+        "mode",
+    }
+)
+_METHODS = frozenset({"powershell", "psrp"})
+_MODES = frozenset({"circular", "retain", "autobackup", "unknown"})
+MAX_LOGS = 16
+MAX_EVENT_IDS = 1000
 _TRAILER_KEYS = frozenset({"end", "events", "sha256", "gaps"})
 _GAP_KEYS = frozenset({"area", "reason"})
 _SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -74,12 +91,17 @@ class Trailer(NamedTuple):
     Attributes:
         events: The event count the collector states.
         sha256: The hash it states, 64 lower-case hex digits.
-        gaps: What the collector could not read, as ``(area, reason)`` pairs.
+        gaps: What the collector could not read, as ``(area, reason)`` pairs. At most
+            ``MAX_GAPS`` are kept.
+        unlisted_gaps: How many entries beyond ``MAX_GAPS`` the end line held. The schema
+            allows 1000, so a line with more is not what a toledot collector writes, but
+            its count and hash still decide whether the events arrived whole.
     """
 
     events: int
     sha256: str
     gaps: tuple[tuple[str, str], ...]
+    unlisted_gaps: int = 0
 
 
 def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -213,50 +235,119 @@ def _event(value: dict[str, Any], source: Source) -> Event:
     )
 
 
-def _facts(header: dict[str, Any], name: str) -> list[LogFacts]:
-    """Read the header's facts about each log. A header that breaks the schema raises."""
-    _keys(header, _HEADER_KEYS, _HEADER_KEYS - {"operator"})
-    computer = _string(header["computer"], "computer")
-    _time(header["collected_at"], "collected_at")
-    query = header["query"]
-    logs = header["logs"]
-    if not isinstance(query, dict) or not isinstance(logs, list) or len(logs) > 16:  # noqa: PLR2004
+def _object(value: object, what: str, keys: frozenset[str]) -> dict[str, Any]:
+    """An object with exactly these properties, as the schema's ``additionalProperties`` says."""
+    if not isinstance(value, dict):
+        msg = f"{what} is not an object"
+        raise BadLineError(msg)
+    _keys(value, keys, keys)
+    return value
+
+
+def _check_collector(value: object) -> None:
+    collector = _object(value, "collector", _COLLECTOR_KEYS)
+    _string(collector["name"], "collector.name", limit=200)
+    _string(collector["version"], "collector.version", limit=50)
+    if not isinstance(collector["method"], str) or collector["method"] not in _METHODS:
+        msg = "collector.method is not powershell or psrp"
+        raise BadLineError(msg)
+
+
+def _check_query(value: object) -> datetime | None:
+    """Check the header's query; return the time the collector asked from, if any."""
+    if not isinstance(value, dict):
         msg = "the header's query or logs are not what the schema says"
         raise BadLineError(msg)
-    since = _optional_time(query.get("since"), "query.since")
-    _optional_time(query.get("until"), "query.until")
-    ids = query.get("event_ids")
+    query = _object(value, "query", _QUERY_KEYS)
+    channels = query["channels"]
+    if not isinstance(channels, list) or not 1 <= len(channels) <= MAX_LOGS:
+        msg = f"query.channels is not a list of 1 to {MAX_LOGS} names"
+        raise BadLineError(msg)
+    for channel in channels:
+        _string(channel, "query.channels")
+    ids = query["event_ids"]
     if not isinstance(ids, list):
         msg = "query.event_ids is not a list"
         raise BadLineError(msg)
+    if len(ids) > MAX_EVENT_IDS:
+        msg = f"query.event_ids holds more than {MAX_EVENT_IDS} event IDs"
+        raise BadLineError(msg)
+    for event_id in ids:
+        _integer(event_id, "query.event_ids", high=65535)
+    since = _optional_time(query["since"], "query.since")
+    _optional_time(query["until"], "query.until")
+    return since
+
+
+def _facts(header: dict[str, Any], name: str) -> list[LogFacts]:
+    """Read the header's facts about each log. A header that breaks the schema raises.
+
+    Every constraint of the published ``events-v1`` header is checked, not only the
+    ones toledot reads: a header the schema rejects is not a version 1 collection.
+    """
+    _keys(header, _HEADER_KEYS, _HEADER_KEYS - {"operator"})
+    version = header["toledot_events"]
+    if isinstance(version, bool) or not isinstance(version, int) or version != 1:
+        msg = "toledot_events is not the whole number 1, the only version this toledot reads"
+        raise BadLineError(msg)
+    _check_collector(header["collector"])
+    computer = _string(header["computer"], "computer")
+    _time(header["collected_at"], "collected_at")
+    operator = header.get("operator")
+    if operator is not None:
+        _string(operator, "operator", limit=512, empty=True)
+    since = _check_query(header["query"])
+    logs = header["logs"]
+    if not isinstance(logs, list) or len(logs) > MAX_LOGS:
+        msg = "the header's query or logs are not what the schema says"
+        raise BadLineError(msg)
+    filtered = bool(header["query"]["event_ids"])
     out = []
     for log in logs:
         if not isinstance(log, dict):
             msg = "an entry in logs is not an object"
             raise BadLineError(msg)
         out.append(
-            LogFacts(
-                computer=computer,
-                channel=_string(log.get("channel"), "logs.channel"),
-                source=Source(name, "line 1"),
-                oldest_time=_optional_time(log.get("oldest_time"), "logs.oldest_time"),
-                oldest_record=_integer(
-                    log.get("oldest_record_id"),
-                    "logs.oldest_record_id",
-                    high=2**63 - 1,
-                    optional=True,
-                ),
-                newest_record=_integer(
-                    log.get("newest_record_id"),
-                    "logs.newest_record_id",
-                    high=2**63 - 1,
-                    optional=True,
-                ),
-                asked_since=since,
-                filtered=bool(ids),
+            _log_facts(
+                _object(log, "an entry in logs", _LOG_KEYS),
+                computer,
+                name,
+                since,
+                filtered=filtered,
             )
         )
     return out
+
+
+def _log_facts(
+    log: dict[str, Any],
+    computer: str,
+    name: str,
+    since: datetime | None,
+    *,
+    filtered: bool,
+) -> LogFacts:
+    """Check one entry of the header's ``logs`` and return what it says."""
+    high = 2**63 - 1
+    for key in ("record_count", "max_size_bytes"):
+        _integer(log[key], f"logs.{key}", high=high, optional=True)
+    if not isinstance(log["mode"], str) or log["mode"] not in _MODES:
+        msg = "logs.mode is not circular, retain, autobackup or unknown"
+        raise BadLineError(msg)
+    return LogFacts(
+        computer=computer,
+        channel=_string(log["channel"], "logs.channel"),
+        source=Source(name, "line 1"),
+        oldest_time=_optional_time(log["oldest_time"], "logs.oldest_time"),
+        oldest_record=_integer(
+            log["oldest_record_id"], "logs.oldest_record_id", high=high, optional=True
+        ),
+        newest_record=_integer(
+            log["newest_record_id"], "logs.newest_record_id", high=high, optional=True
+        ),
+        asked_since=since,
+        filtered=filtered,
+    )
 
 
 def check_header(line: bytes, name: str) -> list[LogFacts]:
@@ -296,14 +387,17 @@ def check_end(value: dict[str, Any]) -> Trailer:
     The checks are the schema's: exactly the keys ``end``, ``events``, ``sha256`` and
     ``gaps``; ``end`` is ``true``; ``events`` is a whole number; ``sha256`` is 64 lower-case
     hex digits; ``gaps`` is a list of at most 1000 objects with non-empty ``area`` and
-    ``reason`` text. Whether the count and hash match the events is for the caller.
+    ``reason`` text. Whether the count and hash match the events is for the caller. A list
+    of more than 1000 gaps breaks the schema, but it is not refused here: the first 1000
+    are kept and the rest are counted in ``unlisted_gaps``, so the event count and the hash
+    are still checked and the gaps are not lost.
 
     Raises:
         BadLineError: The line breaks one of those rules.
     """
     _keys(value, _TRAILER_KEYS, _TRAILER_KEYS)
     gaps = value["gaps"]
-    if value["end"] is not True or not isinstance(gaps, list) or len(gaps) > MAX_GAPS:
+    if value["end"] is not True or not isinstance(gaps, list):
         msg = "the end line is not what the schema says"
         raise BadLineError(msg)
     stated = _integer(value["events"], "events", high=2**63 - 1)
@@ -312,7 +406,7 @@ def check_end(value: dict[str, Any]) -> Trailer:
         msg = "sha256 is not 64 lower-case hex digits"
         raise BadLineError(msg)
     pairs = []
-    for gap in gaps:
+    for gap in gaps[:MAX_GAPS]:
         if not isinstance(gap, dict):
             msg = "an entry in gaps is not an object"
             raise BadLineError(msg)
@@ -323,7 +417,7 @@ def check_end(value: dict[str, Any]) -> Trailer:
                 _string(gap["reason"], "gaps.reason", limit=4096),
             )
         )
-    return Trailer(stated, digest, tuple(pairs))
+    return Trailer(stated, digest, tuple(pairs), max(len(gaps) - MAX_GAPS, 0))
 
 
 def is_bundle(start: bytes) -> bool:
@@ -427,6 +521,12 @@ def _trailer(value: dict[str, Any], source: Source, count: int, digest: str) -> 
         yield Problem(source, "The file's contents do not match the hash in its end line.")
     for area, reason in trailer.gaps:
         yield Problem(source, f"The collector could not read {area}: {reason}")
+    if trailer.unlisted_gaps:
+        text = (
+            f"The end line lists {trailer.unlisted_gaps} more gaps than the {MAX_GAPS} a "
+            "collector may write. They are not listed here. Events may be missing."
+        )
+        yield Problem(source, text)
 
 
 def format_time(moment: datetime) -> str:

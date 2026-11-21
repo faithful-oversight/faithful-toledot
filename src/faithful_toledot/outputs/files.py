@@ -21,6 +21,11 @@ Guarantees, stated exactly:
   set.
 - New files are readable only by the current user on Linux and macOS. A
   symbolic link at a target name is replaced, never followed.
+- A target that is the same file as one the caller protects (an input, for
+  instance) is refused, with or without ``force``, before anything is written.
+  "The same file" is decided by the file system after links, ``..`` and case
+  are resolved, so a symbolic link, a hard link, or another spelling of the
+  path does not get around it.
 
 One toledot process at a time may write to an output directory. Two runs writing
 to the same directory at once can remove or restore each other's files.
@@ -41,16 +46,58 @@ from typing import TYPE_CHECKING
 from faithful_toledot.errors import ToledotError
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping, Sequence
 
 
-def write_files(directory: Path, files: Mapping[str, str], *, force: bool) -> list[Path]:
+def refuse_aliases(targets: Iterable[Path], protected: Iterable[tuple[str, Path]]) -> None:
+    """Refuse a target that is the same file as a protected one.
+
+    Args:
+        targets: The paths about to be written.
+        protected: ``(role, path)`` pairs for files that must not be replaced, such as
+            ``("input file", path)``. The role is used in the message.
+
+    Raises:
+        ToledotError: A target and a protected file are one file. A path that does not
+            exist cannot be one.
+    """
+    held = list(protected)
+    for target in targets:
+        for role, path in held:
+            try:
+                same = Path(target).samefile(path)
+            except OSError:
+                continue  # one of them does not exist (or cannot be examined): not an alias
+            if same:
+                msg = (
+                    f"{target} is the same file as the {role} {path}; toledot never replaces "
+                    f"a file it reads, even with --force. Choose another location."
+                )
+                raise ToledotError(msg)
+
+
+def write_files(
+    directory: Path,
+    files: Mapping[str, str],
+    *,
+    force: bool,
+    protect: Sequence[tuple[str, Path]] = (),
+) -> list[Path]:
     """Publish every file, or leave the directory as it was.
+
+    Args:
+        directory: The output directory.
+        files: The text of each file, by name.
+        force: Replace files that exist.
+        protect: ``(role, path)`` pairs for files that must never be replaced; a target
+            that is one of them is refused whether or not ``force`` is set.
 
     Raises:
         ToledotError: A target exists and ``force`` is false, a target is a
-            directory, or writing fails. The directory is left as it was.
+            directory, a target is a protected file, or writing fails. The
+            directory is left as it was.
     """
+    refuse_aliases((directory / name for name in files), protect)
     try:
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     except OSError as exc:

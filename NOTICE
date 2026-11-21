@@ -3,3 +3,7 @@ Copyright 2026 Faithful Oversight, LLC
 
 This product is licensed under the Apache License, Version 2.0.
 See the LICENSE file for the full license text.
+
+toledot is not affiliated with or endorsed by Microsoft. Event IDs and field names in
+its event catalog come from Microsoft's public documentation, which each entry cites.
+Windows, Active Directory, and PowerShell are Microsoft trademarks.

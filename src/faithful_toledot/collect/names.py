@@ -80,3 +80,17 @@ def account_name(username: str | None) -> str | None:
         )
         raise CollectionError(msg)
     return f"{domain}\\{user}"
+
+
+REPOSITORY = "https://github.com/faithful-oversight/faithful-toledot"
+"""Where toledot is installed from until a release is on PyPI."""
+
+
+def install_hint(*extras: str) -> str:
+    """Say how to install toledot with extras, for pipx and for pip.
+
+    ``pipx install faithful-toledot[live]`` is refused when toledot is already installed,
+    so the pipx command carries ``--force``.
+    """
+    spec = f'"faithful-toledot[{",".join(extras)}] @ git+{REPOSITORY}"'
+    return f"pipx install --force {spec} (or, with pip, pip install {spec})"

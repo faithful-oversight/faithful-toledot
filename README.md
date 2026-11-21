@@ -5,15 +5,27 @@
 [![CI](https://github.com/faithful-oversight/faithful-toledot/actions/workflows/ci.yml/badge.svg)](https://github.com/faithful-oversight/faithful-toledot/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-> **Status: first release.** toledot reads exported logs end to end and is tested on synthetic data. The two collectors, the PowerShell script and `toledot collect`, have not yet been run against a real domain controller or a real WinRM endpoint. Treat the first runs in your environment as a pilot. See [Limitations](docs/limitations.md).
+> **Status: version 0.1.1, beta.** toledot reads exported logs end to end and is tested on synthetic data and on files built from the published format documentation. The two collectors, the PowerShell script and `toledot collect`, have not yet been run against a real domain controller or a real WinRM endpoint. Treat the first runs in your environment as a pilot. See [Limitations](docs/limitations.md) and the [documentation](docs/).
+
+**How it differs from existing tools.** Event Viewer filters and `Get-WinEvent` scripts show you events and leave the reading to you. Log search and SIEM queries find events across many systems, and their answer is only as complete as what was forwarded. toledot works on files you give it, links each change to the logon session behind it, writes the result in sentences with the source record for each, and states in every report what it could not see, such as a cleared log, absent record numbers, or inputs that cannot show whether events are missing. It does not monitor, alert, or judge whether a change was authorized.
 
 ## What it does
 
 When someone asks `who added that account to Domain Admins?`, the answer sits in the Security logs of your domain controllers, spread over thousands of events. toledot reads those logs and writes the answer in sentences:
 
-> CORP\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) created the user account CORP\dana.whitfield (S-1-5-21-1111111111-2222222222-3333333333-1207).
+> CORP\svc_provision (S-1-5-21-1111111111-2222222222-3333333333-1150) created the user account CORP\avery.example (S-1-5-21-1111111111-2222222222-3333333333-1207).
 >
 > Session 0x2a51c began at 2026-11-02 08:05:00 UTC as Network from 198.51.100.20 port 49731.
+
+An excerpt of the committed example report ([examples/corp-example](examples/corp-example/)):
+
+```text
+15 changes described, but the account is incomplete: 1 notice, 1 log with missing events.
+  user: 7
+  group: 5
+  directory: 2
+  policy: 1
+```
 
 toledot:
 
@@ -40,10 +52,13 @@ toledot:
 toledot needs Python 3.11 or newer. Reading files needs no other packages.
 
 ```shell
-pipx install faithful-toledot
+pipx install git+https://github.com/faithful-oversight/faithful-toledot
+pipx ensurepath
 ```
 
-Remote collection needs the `live` extra. Each secret provider has its own extra:
+`pipx ensurepath` puts pipx's tool folder on your PATH; run it once and open a new terminal. For a fixed version, add a tag: `git+https://github.com/faithful-oversight/faithful-toledot@v0.1.1`.
+
+PyPI publishing is being set up; until a PyPI release exists, install from GitHub as shown. Remote collection needs the `live` extra. Each secret provider has its own extra:
 
 | Extra | Adds | Needed for |
 | --- | --- | --- |
@@ -54,16 +69,16 @@ Remote collection needs the `live` extra. Each secret provider has its own extra
 | `azure` | `azure-identity`, `azure-keyvault-secrets` | `--secret azure:...` |
 
 ```shell
-pipx install "faithful-toledot[live]"
-pipx install "faithful-toledot[live,vault]"
+pipx install "faithful-toledot[live] @ git+https://github.com/faithful-oversight/faithful-toledot"
+pipx install "faithful-toledot[live,vault] @ git+https://github.com/faithful-oversight/faithful-toledot"
 ```
 
-Until the first release is on PyPI, install the wheel file from a release, or work from source as [CONTRIBUTING.md](CONTRIBUTING.md) describes.
+If toledot is already installed, add `--force` to add an extra: `pipx install --force "faithful-toledot[live] @ git+https://github.com/faithful-oversight/faithful-toledot"`.
 
 ## Quick start
 
 ```shell
-pipx install faithful-toledot
+pipx install git+https://github.com/faithful-oversight/faithful-toledot
 toledot example ./toledot-demo
 toledot report ./toledot-demo/dc01-events.jsonl ./toledot-demo/dc02-events.jsonl -o ./toledot-demo/report
 ```
@@ -115,6 +130,7 @@ The collectors record facts about each log, and what they could not read, so the
 
 ## Documentation
 
+- [All documentation](docs/)
 - [Quickstart](docs/quickstart.md)
 - [Command reference](docs/usage.md)
 - [Input formats](docs/formats.md)
@@ -123,6 +139,10 @@ The collectors record facts about each log, and what they could not read, so the
 - [Limitations](docs/limitations.md)
 - [Architecture](docs/architecture.md) and [threat model](docs/threat-model.md)
 - [Releasing](docs/releasing.md) and [decision records](docs/adr/)
+
+## Not affiliated with Microsoft
+
+toledot is an independent project. It is not affiliated with, endorsed by, or sponsored by Microsoft. Windows, Active Directory, PowerShell, and Event Viewer are Microsoft trademarks. The event catalog's field names and event IDs come from Microsoft's public documentation, which each entry cites, and its titles and notes are written in our own words.
 
 ## Security
 

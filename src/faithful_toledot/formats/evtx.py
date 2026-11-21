@@ -967,12 +967,13 @@ def _unique(data: dict[str, str], key: str) -> str:
 
 
 def _event_data(section: _Node, data: dict[str, str]) -> None:
-    unnamed = 0
+    position = 0
     for child in section.elements():
+        if child.name == "Data":
+            position += 1  # counts every Data element, named or not, as the XML reader does
         name = child.attrs.get("Name")
-        if name is None and child.name == "Data":
-            unnamed += 1
-            name = f"param{unnamed}"
+        if not name and child.name == "Data":
+            name = f"param{position}"
         data[_unique(data, name or child.name)] = child.text()
 
 

@@ -18,11 +18,12 @@ from faithful_toledot import __version__, catalog, example, outputs, pipeline
 from faithful_toledot.arguments import moment
 from faithful_toledot.collect import cli as collect_cli
 from faithful_toledot.collect.secrets import redact
+from faithful_toledot.console import harden_streams, say, stop_stdout
 from faithful_toledot.errors import ToledotError, UsageError
 from faithful_toledot.events import ReadOptions
 from faithful_toledot.outputs import render
 from faithful_toledot.outputs.files import write_files
-from faithful_toledot.outputs.safety import command_line, terminal
+from faithful_toledot.outputs.safety import command_line, terminal_line
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -121,7 +122,13 @@ def build_parser() -> argparse.ArgumentParser:
     report.set_defaults(run=_report)
 
     listing = commands.add_parser(
-        "events", help="list the events toledot understands", description="List the catalog."
+        "events",
+        help="list the events toledot understands",
+        description=(
+            "List the Windows events toledot understands, its catalog, one per line, with "
+            "the log, the event ID, the kind of change, and a title. Events marked "
+            "'partly inferred' have details Microsoft's documentation does not confirm."
+        ),
     )
     listing.set_defaults(run=_events)
 
@@ -175,13 +182,24 @@ def _report(args: argparse.Namespace) -> int:
         generated_at=_now(),
         version=__version__,
     )
-    written = outputs.write_reports(args.output, document, args.format, force=args.force)
-    print(render.terminal_summary(document))  # noqa: T201
-    print(terminal(f"Reports written to {args.output}: {', '.join(p.name for p in written)}"))  # noqa: T201
+    written = outputs.write_reports(
+        args.output,
+        document,
+        args.format,
+        force=args.force,
+        protect=[("input file", path) for path in args.inputs],
+    )
+    # Decide the exit code first: nothing printed after this can change it.
     failing = {"unconfirmed": {"unconfirmed", "incomplete"}, "incomplete": {"incomplete"}}
-    if account.completeness in failing.get(args.fail_on, set()):
-        return int(ExitCode.FINDINGS)
-    return int(ExitCode.OK)
+    code = (
+        ExitCode.FINDINGS
+        if account.completeness in failing.get(args.fail_on, set())
+        else ExitCode.OK
+    )
+    say(render.terminal_summary(document))
+    names = ", ".join(terminal_line(p.name) for p in written)
+    say(f"Reports written to {terminal_line(str(args.output))}: {names}")
+    return int(code)
 
 
 def _events(_: argparse.Namespace) -> int:
@@ -189,13 +207,13 @@ def _events(_: argparse.Namespace) -> int:
     for info in sorted(catalog.load().events, key=lambda e: (e.channel, e.id)):
         mark = "" if info.confirmed else "  [partly inferred; see the catalog notes]"
         lines.append(f"{info.channel:<9}{info.id:<6}{info.category:<10}{info.title}{mark}")
-    print("\n".join(lines))  # noqa: T201
+    say("\n".join(lines))
     return int(ExitCode.OK)
 
 
 def _schema(args: argparse.Namespace) -> int:
     name = f"schema/{SCHEMAS[args.name]}.schema.json"
-    sys.stdout.write(files("faithful_toledot").joinpath(name).read_text(encoding="utf-8"))
+    say(files("faithful_toledot").joinpath(name).read_text(encoding="utf-8"), end="")
     return int(ExitCode.OK)
 
 
@@ -205,7 +223,10 @@ def _example(args: argparse.Namespace) -> int:
     command = command_line(
         "toledot", "report", *map(str, written), "-o", str(args.directory / "report")
     )
-    print(terminal(f"Wrote synthetic events to {args.directory}. Try:\n  {command}"))  # noqa: T201
+    say(
+        f"Wrote synthetic events to {terminal_line(str(args.directory))}. Try:\n"
+        f"  {terminal_line(command)}"
+    )
     return int(ExitCode.OK)
 
 
@@ -223,25 +244,33 @@ def _join_offsets(argv: Sequence[str]) -> list[str]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the command line and return an exit code."""
+    """Run the command line and return an exit code.
+
+    Printing never changes the exit code: the streams cannot fail on an unencodable
+    character, and a closed pipe stops the output and keeps the code already decided.
+    """
+    harden_streams()
     parser = build_parser()
     try:
         args = parser.parse_args(_join_offsets(sys.argv[1:] if argv is None else argv))
     except SystemExit as exc:
         code = exc.code
         return int(code) if isinstance(code, int) else int(ExitCode.USAGE)
+    except OSError:
+        stop_stdout()  # --help or --version printed into a closed pipe (EINVAL on Windows)
+        return int(ExitCode.OK)
     if not getattr(args, "run", None):
         parser.print_help(sys.stderr)
         return int(ExitCode.USAGE)
     try:
         return int(args.run(args))
     except ToledotError as exc:
-        print(f"toledot: error: {terminal(redact(str(exc)))}", file=sys.stderr)  # noqa: T201
+        say(f"toledot: error: {terminal_line(redact(str(exc)))}", error=True)
         return int(ExitCode.USAGE if isinstance(exc, UsageError) else ExitCode.INPUT_ERROR)
     except Exception as exc:  # noqa: BLE001 - last-resort handler keeps crashes distinct
-        print(  # noqa: T201
-            f"toledot: internal error: {type(exc).__name__}: {terminal(redact(str(exc)))}\n"
+        say(
+            f"toledot: internal error: {type(exc).__name__}: {terminal_line(redact(str(exc)))}\n"
             "This is a bug in toledot. Please report it.",
-            file=sys.stderr,
+            error=True,
         )
         return int(ExitCode.INTERNAL_ERROR)

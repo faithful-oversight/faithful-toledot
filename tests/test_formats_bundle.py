@@ -61,6 +61,10 @@ def header(**overrides: Any) -> dict[str, Any]:
     return document
 
 
+LOG = header()["logs"][0]
+QUERY = header()["query"]
+
+
 def write(tmp_path: Path, data: bytes, name: str = "events.jsonl") -> Path:
     path = tmp_path / name
     path.write_bytes(data)
@@ -120,6 +124,42 @@ def test_gaps_the_collector_recorded_become_problems(tmp_path: Path) -> None:
     assert [p.reason for p in problems] == [
         "The collector could not read the System log: Access is denied."
     ]
+
+
+def _with_gaps(count: int, *, tamper: bool = False) -> bytes:
+    """A collection whose end line lists ``count`` gaps, optionally with an event removed."""
+    gaps = [{"area": f"record {n} of the Security log", "reason": "bad"} for n in range(count)]
+    lines = lines_of(encode(header(), EVENTS, gaps))
+    if tamper:
+        del lines[1]
+    return b"".join(lines)
+
+
+@pytest.mark.parametrize("count", [999, 1000, 1001, 5000])
+def test_every_gap_is_a_problem_however_many_the_end_line_lists(tmp_path: Path, count: int) -> None:
+    items = read(write(tmp_path, _with_gaps(count)))
+    reasons = [item.reason for item in items if isinstance(item, Problem)]
+    listed = [r for r in reasons if r.startswith("The collector could not read record")]
+    assert len(listed) == min(count, bundle.MAX_GAPS)
+    over = [r for r in reasons if "more gaps than the" in r]
+    assert len(over) == (1 if count > bundle.MAX_GAPS else 0)
+    if over:
+        assert f"{count - bundle.MAX_GAPS} more gaps" in over[0]
+    assert len(reasons) == len(listed) + len(over)  # the count and the hash both matched
+    assert len([item for item in items if isinstance(item, Event)]) == 2
+
+
+def test_a_tampered_file_with_too_many_gaps_still_fails_the_count_and_the_hash(
+    tmp_path: Path,
+) -> None:
+    reasons = [
+        item.reason
+        for item in read(write(tmp_path, _with_gaps(1001, tamper=True)))
+        if isinstance(item, Problem)
+    ]
+    assert any("counts 2 events but 1 were read" in reason for reason in reasons)
+    assert any("do not match the hash" in reason for reason in reasons)
+    assert any("more gaps than the" in reason for reason in reasons)
 
 
 def test_a_file_cut_short_is_read_and_reported(tmp_path: Path) -> None:
@@ -243,15 +283,6 @@ def test_a_bad_event_keeps_its_record_number_when_readable(tmp_path: Path) -> No
             },
             "unknown property 'extra'",
         ),
-        (
-            {
-                "end": True,
-                "events": 2,
-                "sha256": "0" * 64,
-                "gaps": [{"area": "x", "reason": "y"}] * 1001,
-            },
-            "not what the schema says",
-        ),
         ({"end": True, "events": 2, "sha256": "ABC", "gaps": []}, "sha256 is not 64 lower-case"),
         ({"end": True, "events": 2, "sha256": 7, "gaps": []}, "sha256 is not 64 lower-case"),
     ],
@@ -273,12 +304,12 @@ def test_a_bad_end_line_is_a_problem(tmp_path: Path, trailer: dict[str, Any], re
         ({"query": []}, "query or logs are not what the schema says"),
         ({"logs": [1]}, "an entry in logs is not an object"),
         (
-            {"logs": [{"channel": "Security", "oldest_time": 7}]},
+            {"logs": [{**LOG, "oldest_time": 7}]},
             "logs.oldest_time is not a UTC time",
         ),
-        ({"logs": [{"channel": "Security", "oldest_record_id": "1"}]}, "oldest_record_id is not"),
-        ({"query": {"event_ids": 5}}, "query.event_ids is not a list"),
-        ({"query": {"event_ids": [], "since": "x"}}, "query.since is not a UTC time"),
+        ({"logs": [{**LOG, "oldest_record_id": "1"}]}, "oldest_record_id is not"),
+        ({"query": {**QUERY, "event_ids": 5}}, "query.event_ids is not a list"),
+        ({"query": {**QUERY, "event_ids": [], "since": "x"}}, "query.since is not a UTC time"),
         ({"surprise": 1}, "unknown property 'surprise'"),
         ({"logs": [{}] * 17}, "query or logs are not what the schema says"),
     ],
@@ -374,3 +405,129 @@ def test_times_are_written_with_four_digit_years() -> None:
     assert format_time(datetime(9999, 12, 31, 23, 59, 59, 999999, tzinfo=UTC)) == (
         "9999-12-31T23:59:59.9999990Z"
     )
+
+
+# --- review finding TOL-3: the header is held to every constraint of the published schema -------
+
+
+def _header_validator() -> Any:
+    text = files("faithful_toledot").joinpath("schema/events-v1.schema.json").read_text("utf-8")
+    schema = json.loads(text)
+    return validator_for(schema)(schema)
+
+
+def _mutated(path: list[str | int], value: Any) -> dict[str, Any]:
+    """The valid header with one value replaced, or removed when ``value`` is the marker."""
+    document = header()
+    target: Any = document
+    for step in path[:-1]:
+        target = target[step]
+    if value is _REMOVE:
+        del target[path[-1]]
+    else:
+        target[path[-1]] = value
+    return document
+
+
+_REMOVE = object()
+HEADER_CASES: list[tuple[list[str | int], Any]] = [
+    (["toledot_events"], 2),
+    (["toledot_events"], 0),
+    (["toledot_events"], "bogus"),
+    (["toledot_events"], False),
+    (["toledot_events"], True),
+    (["toledot_events"], None),
+    (["toledot_events"], [1]),
+    (["collector"], "not-an-object"),
+    (["collector"], []),
+    (["collector"], {}),
+    (["collector"], {"name": "x", "version": "1", "method": "powershell", "extra": 1}),
+    (["collector", "name"], ""),
+    (["collector", "name"], "x" * 201),
+    (["collector", "name"], 7),
+    (["collector", "version"], ""),
+    (["collector", "version"], "9" * 51),
+    (["collector", "method"], "ssh"),
+    (["collector", "method"], None),
+    (["collector", "method"], []),
+    (["collector", "method"], {}),
+    (["collector", "method"], _REMOVE),
+    (["operator"], 7),
+    (["operator"], "x" * 513),
+    (["computer"], ""),
+    (["query"], []),
+    (["query", "channels"], []),
+    (["query", "channels"], "Security"),
+    (["query", "channels"], [""]),
+    (["query", "channels"], [7]),
+    (["query", "channels"], ["Security"] * 17),
+    (["query", "event_ids"], [True]),
+    (["query", "event_ids"], [-1]),
+    (["query", "event_ids"], [65536]),
+    (["query", "event_ids"], ["4624"]),
+    (["query", "event_ids"], [1.5]),
+    (["query", "event_ids"], [1] * 1001),
+    (["query", "since"], _REMOVE),
+    (["query", "until"], _REMOVE),
+    (["query", "channels"], _REMOVE),
+    (["query", "extra"], 1),
+    (["logs", 0, "mode"], "rotating"),
+    (["logs", 0, "mode"], []),
+    (["logs", 0, "mode"], {"a": 1}),
+    (["logs", 0, "mode"], _REMOVE),
+    (["logs", 0, "record_count"], -1),
+    (["logs", 0, "record_count"], "5"),
+    (["logs", 0, "record_count"], _REMOVE),
+    (["logs", 0, "max_size_bytes"], True),
+    (["logs", 0, "max_size_bytes"], _REMOVE),
+    (["logs", 0, "oldest_record_id"], -3),
+    (["logs", 0, "oldest_record_id"], _REMOVE),
+    (["logs", 0, "oldest_time"], _REMOVE),
+    (["logs", 0, "newest_record_id"], _REMOVE),
+    (["logs", 0, "channel"], ""),
+    (["logs", 0, "extra"], 1),
+]
+
+
+@pytest.mark.parametrize(("path", "value"), HEADER_CASES)
+def test_a_header_the_published_schema_rejects_is_rejected(
+    path: list[str | int], value: Any
+) -> None:
+    document = _mutated(path, value)
+    assert not _header_validator().is_valid(document), "the case must break the schema"
+    line = json.dumps(document).encode()
+    with pytest.raises(bundle.BadLineError):
+        bundle.check_header(line, "events.jsonl")
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        {**header(), "toledot_events": 2, "collector": "not-an-object"},
+        {**header(), "toledot_events": "bogus", "collector": "not-an-object"},
+        {**header(), "toledot_events": False, "collector": "not-an-object"},
+    ],
+)
+def test_the_reviewers_unsupported_versions_are_not_collections(
+    tmp_path: Path, document: dict[str, Any]
+) -> None:
+    path = write(tmp_path, json.dumps(document).encode() + b"\n")
+    with pytest.raises(InputError, match="is not a toledot collection"):
+        read_bundle(path, OPTIONS).__next__()
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        header(),
+        header(operator=None),
+        {key: value for key, value in header().items() if key != "operator"},
+        header(logs=[]),
+        header(query={**QUERY, "event_ids": [], "since": None}),
+        header(query={**QUERY, "channels": ["Security"] * 16, "event_ids": [0, 65535]}),
+        header(logs=[{**LOG, "oldest_record_id": None, "oldest_time": None, "mode": "unknown"}]),
+    ],
+)
+def test_a_header_the_published_schema_accepts_is_accepted(document: dict[str, Any]) -> None:
+    assert _header_validator().is_valid(document)
+    bundle.check_header(json.dumps(document).encode(), "events.jsonl")

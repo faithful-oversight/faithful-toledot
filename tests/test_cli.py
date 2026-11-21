@@ -9,10 +9,11 @@ import json
 import os
 import runpy
 import shutil
+import subprocess
 import sys
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from hypothesis import given
@@ -349,3 +350,274 @@ def test_names_that_print_the_same_are_refused(
         main(["report", str(hidden), str(literal), "-o", str(sample / "r")]) == ExitCode.INPUT_ERROR
     )
     assert "rename one" in capsys.readouterr().err
+
+
+# --- printing never changes the exit code ------------------------------------------------------
+
+
+class _ClosedPipe:
+    """A stdout whose reader has gone away."""
+
+    def write(self, text: str) -> int:
+        raise BrokenPipeError(32, "Broken pipe")
+
+    def flush(self) -> None:
+        raise BrokenPipeError(32, "Broken pipe")
+
+
+FIVE_FILES = [
+    "toledot-changes.csv",
+    "toledot-manifest.json",
+    "toledot-report.html",
+    "toledot-report.json",
+    "toledot-report.md",
+]
+
+
+def _run_with_stdout(stream: object, monkeypatch: pytest.MonkeyPatch, argv: list[str]) -> int:
+    monkeypatch.setattr(sys, "stdout", stream)
+    return main(argv)
+
+
+def test_a_closed_pipe_keeps_the_real_exit_code_and_complete_files(
+    sample: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "reports"
+    argv = ["report", *files_of(sample), "-o", str(out)]
+    # The example is an incomplete account: exit 1, not 4.
+    assert _run_with_stdout(_ClosedPipe(), monkeypatch, argv) == ExitCode.FINDINGS
+    assert sorted(p.name for p in out.iterdir()) == FIVE_FILES
+    json.loads((out / "toledot-report.json").read_text(encoding="utf-8"))
+    again = tmp_path / "never"
+    assert (
+        _run_with_stdout(_ClosedPipe(), monkeypatch, [*argv[:-1], str(again), "--fail-on", "never"])
+        == ExitCode.OK
+    )
+
+
+@pytest.mark.parametrize("command", [["events"], ["schema", "report"], ["--help"], ["--version"]])
+def test_a_closed_pipe_is_never_an_internal_error(
+    command: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert _run_with_stdout(_ClosedPipe(), monkeypatch, command) == ExitCode.OK
+
+
+def test_example_and_collector_survive_a_closed_pipe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert _run_with_stdout(_ClosedPipe(), monkeypatch, ["example", str(tmp_path / "e")]) == 0
+    assert len(list((tmp_path / "e").iterdir())) == 2
+    argv = ["collector", "-o", str(tmp_path / "c" / "Collect.ps1")]
+    assert _run_with_stdout(_ClosedPipe(), monkeypatch, argv) == 0
+    assert (tmp_path / "c" / "Collect.ps1").is_file()
+
+
+def test_ascii_only_output_with_a_non_ascii_path_keeps_the_exit_code(
+    sample: Path, tmp_path: Path
+) -> None:
+    out = tmp_path / "out-é中"
+    env = {**os.environ, "PYTHONIOENCODING": "ascii", "SOURCE_DATE_EPOCH": "1762905600"}
+    env.pop("PYTHONUTF8", None)
+    run = subprocess.run(  # noqa: S603 - the interpreter running these tests
+        [sys.executable, "-m", "faithful_toledot", "report", *files_of(sample), "-o", str(out)],
+        env=env, capture_output=True, check=False, timeout=120,
+    )  # fmt: skip
+    assert run.returncode == ExitCode.FINDINGS, run.stderr
+    assert b"internal error" not in run.stderr
+    assert b"out-\\xe9\\u4e2d" in run.stdout
+    assert sorted(p.name for p in out.iterdir()) == FIVE_FILES
+
+
+def test_a_closed_pipe_in_a_real_pipeline_is_not_exit_4() -> None:
+    reader, writer = os.pipe()
+    os.close(reader)  # nobody will read: every write fails with a broken pipe
+    run = subprocess.run(
+        [sys.executable, "-m", "faithful_toledot", "events"],
+        stdout=writer, stderr=subprocess.PIPE, check=False, timeout=120,
+    )  # fmt: skip
+    os.close(writer)
+    assert run.returncode == ExitCode.OK, run.stderr
+    assert b"internal error" not in run.stderr
+
+
+def test_an_unreadable_input_is_named_with_the_path_the_user_gave(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    missing = tmp_path / "no" / "such" / "dir" / "a.jsonl"
+    assert main(["report", str(missing), "-o", str(tmp_path / "r")]) == ExitCode.INPUT_ERROR
+    err = capsys.readouterr().err
+    assert str(missing) in err
+    assert "cannot read" in err
+
+
+def test_the_secret_help_names_the_vault_form_the_docs_and_errors_use(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["collect", "--help"]) == ExitCode.OK
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "vault:MOUNT/PATH#FIELD" in help_text
+
+
+def test_the_events_command_explains_the_catalog(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["events", "--help"]) == ExitCode.OK
+    assert "catalog" in " ".join(capsys.readouterr().out.split())
+
+
+# --- review finding TOL-2: one unnumbered event leaves a log unconfirmed -----------------------
+
+
+def _run_numbered(
+    tmp_path: Path, numbers: list[int | None], *flags: str
+) -> tuple[int, dict[str, Any]]:
+    from tests.test_formats_json import record  # noqa: PLC0415
+
+    path = tmp_path / "events.json"
+    path.write_text(
+        json.dumps([record(RecordId=number, Id=4720) for number in numbers]), encoding="utf-8"
+    )
+    out = tmp_path / "out"
+    code = main(["report", str(path), "-o", str(out), "-f", "json", *flags])
+    report = json.loads((out / "toledot-report.json").read_text(encoding="utf-8"))
+    return code, report
+
+
+@pytest.mark.parametrize(
+    ("numbers", "code", "completeness", "continuity", "unnumbered"),
+    [
+        ([100, 101], ExitCode.OK, "complete", "complete", 0),
+        ([None, None], ExitCode.FINDINGS, "unconfirmed", "unnumbered", 2),
+        ([100, None], ExitCode.FINDINGS, "unconfirmed", "partly-numbered", 1),
+        ([100, 101, None, None], ExitCode.FINDINGS, "unconfirmed", "partly-numbered", 2),
+    ],
+)
+def test_one_event_without_a_record_number_fails_the_unconfirmed_gate(  # noqa: PLR0913, PLR0917 - one argument per column of the case
+    tmp_path: Path,
+    numbers: list[int | None],
+    code: int,
+    completeness: str,
+    continuity: str,
+    unnumbered: int,
+) -> None:
+    exit_code, report = _run_numbered(tmp_path, numbers, "--whole-logs")
+    assert exit_code == code
+    assert report["summary"]["completeness"] == completeness
+    assert report["summary"]["complete"] is (completeness == "complete")
+    (log,) = report["coverage"]
+    assert (log["continuity"], log["unnumbered"], log["checked"]) == (
+        continuity,
+        unnumbered,
+        completeness == "complete",
+    )
+    assert ("cannot tell" in log["statement"]) is (unnumbered > 0)
+
+
+def test_unnumbered_events_are_not_incomplete_only_unconfirmed(tmp_path: Path) -> None:
+    code, report = _run_numbered(tmp_path, [100, None], "--whole-logs", "--fail-on", "incomplete")
+    assert code == ExitCode.OK
+    assert report["summary"]["completeness"] == "unconfirmed"
+
+
+# --- an output is never an input (the PAK-1 / MER-1 class) -------------------------------------
+
+
+def _events_file(path: Path) -> bytes:
+    """Write a readable collection file at path and return its bytes."""
+    from tests.helpers import member_added  # noqa: PLC0415
+    from tests.test_formats_bundle import header  # noqa: PLC0415
+
+    data = encode(header(), [member_added()])
+    path.write_bytes(data)
+    return data
+
+
+@pytest.mark.parametrize(
+    "name", ["toledot-report.json", "toledot-manifest.json", "toledot-changes.csv"]
+)
+@pytest.mark.parametrize("kind", ["same path", "dotdot", "symlink", "hardlink"])
+def test_a_report_never_replaces_an_input_even_with_force(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], name: str, kind: str
+) -> None:
+    out = tmp_path / "out"
+    out.mkdir()
+    evidence = tmp_path / "evidence.jsonl"
+    data = _events_file(evidence)
+    target = out / name
+    given = evidence
+    try:
+        if kind == "symlink":
+            target.symlink_to(evidence)
+        elif kind == "hardlink":
+            os.link(evidence, target)
+        elif kind == "dotdot":
+            data = _events_file(target)
+            given = out / ".." / "out" / name
+        else:
+            data = _events_file(target)
+            given = target
+    except (OSError, NotImplementedError):
+        pytest.skip(f"{kind}s are not available here")
+    before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+    code = main(["report", str(given), "-o", str(out), "--force", "--fail-on", "never"])
+    assert code == ExitCode.INPUT_ERROR
+    assert "same file as the input file" in capsys.readouterr().err
+    after = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+    assert after == before
+    assert (given if kind not in {"symlink", "hardlink"} else evidence).read_bytes() == data
+    assert not list(out.glob(".toledot-*"))
+    assert sorted(p.name for p in out.iterdir()) == [name]  # nothing else was published
+
+
+def test_a_report_into_the_inputs_own_folder_still_works_when_no_name_collides(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "events.jsonl"
+    data = _events_file(evidence)
+    assert main(["report", str(evidence), "-o", str(tmp_path), "--fail-on", "never"]) == ExitCode.OK
+    assert evidence.read_bytes() == data
+
+
+# --- a value with a line break cannot add a terminal line ------------------------------------
+
+FORGED = "No changes found in the input."
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows does not allow line breaks in names")
+def test_names_and_messages_with_line_breaks_stay_on_one_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A path, a file name, or an error message is one line, however it is written."""
+    folder = tmp_path / f"d\n{FORGED}"
+    assert main(["example", str(folder)]) == ExitCode.OK
+    lines = capsys.readouterr().out.splitlines()
+    assert FORGED not in lines
+    assert not any(line.strip().startswith(FORGED) for line in lines)
+    assert lines[0].startswith("Wrote synthetic events to ")
+    assert lines[1].startswith("  toledot report ")
+    assert len(lines) == 2
+
+    out = folder / f"r\r\n{FORGED}"
+    assert main(["report", *files_of(folder), "-o", str(out)]) == ExitCode.FINDINGS
+    lines = capsys.readouterr().out.splitlines()
+    assert FORGED not in lines
+    assert not any(line.strip().startswith(FORGED) for line in lines)
+    assert lines[-1].startswith("Reports written to ")
+    assert "\\n" in lines[-1]
+
+    missing = tmp_path / f"m\n{FORGED}.jsonl"
+    assert main(["report", str(missing), "-o", str(tmp_path / "x")]) == ExitCode.INPUT_ERROR
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1
+    assert "\\n" in err
+
+    from faithful_toledot import cli  # noqa: PLC0415
+
+    def boom(_: object) -> int:
+        msg = f"first\n{FORGED}\r\nthird"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(cli, "_events", boom)
+    assert main(["events"]) == ExitCode.INTERNAL_ERROR
+    lines = capsys.readouterr().err.splitlines()
+    assert lines[0] == f"toledot: internal error: RuntimeError: first\\n{FORGED}\\r\\nthird"
+    assert lines[1].startswith("This is a bug in toledot")
+    assert len(lines) == 2

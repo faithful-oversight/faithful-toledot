@@ -9,9 +9,10 @@ from typing import TYPE_CHECKING
 
 from faithful_toledot.arguments import bounded, moment
 from faithful_toledot.collect import names, remote, script, secrets
+from faithful_toledot.console import say
 from faithful_toledot.errors import UsageError
-from faithful_toledot.outputs.files import write_files
-from faithful_toledot.outputs.safety import command_line, terminal
+from faithful_toledot.outputs.files import refuse_aliases, write_files
+from faithful_toledot.outputs.safety import command_line, terminal_line
 
 if TYPE_CHECKING:
     import argparse
@@ -40,7 +41,7 @@ def add_arguments(commands: Any) -> None:
     collect.add_argument(
         "--secret", metavar="REF",
         help="where the password is: env:NAME, file:PATH, keyring:SERVICE/USER, "
-        "vault:PATH#FIELD, aws:SECRET_ID[#FIELD], or azure:VAULT/NAME",
+        "vault:MOUNT/PATH#FIELD, aws:SECRET_ID[#FIELD], or azure:VAULT/NAME",
     )  # fmt: skip
     collect.add_argument("--transport", choices=remote.TRANSPORTS, default="https")
     collect.add_argument("--port", type=_port, help="default: 5986 for https, 5985 for http")
@@ -102,17 +103,33 @@ def run_collect(args: argparse.Namespace) -> int:
         idle_timeout=args.timeout,
     )
     remote.settings(target)  # refuse a bad combination before the secret is read
+    # The files this command reads are never the file it writes, even with --force.
+    refuse_aliases([args.output], _read_files(args))
     if args.secret:
         target = remote.Target(**{**vars(target), "secret": secrets.resolve(args.secret)})
     channels = args.channel or ["Security", "System"]
     values = remote.parameters(args.since, args.until, args.days, channels, every_event=args.all)
     result = remote.collect(target, script.text(), values, args.output, force=args.force)
-    print(terminal(f"Collected {result.events} events from {server} into {result.path}."))  # noqa: T201
+    say(
+        f"Collected {result.events} events from {terminal_line(server)} "
+        f"into {terminal_line(str(result.path))}."
+    )
     for gap in result.gaps:
-        print(terminal(f"  not read: {gap}"))  # noqa: T201
+        say(f"  not read: {terminal_line(gap)}")
     command = command_line("toledot", "report", str(result.path), "-o", "report")
-    print(terminal(f"Write the account with: {command}"))  # noqa: T201
+    say(f"Write the account with: {terminal_line(command)}")
     return 0
+
+
+def _read_files(args: argparse.Namespace) -> list[tuple[str, Path]]:
+    """The files ``collect`` reads, by role: the CA file and a ``file:`` secret."""
+    found: list[tuple[str, Path]] = []
+    if args.ca_file:
+        found.append(("CA file", args.ca_file))
+    provider, _, location = (args.secret or "").partition(":")
+    if provider == "file" and location:
+        found.append(("secret file", Path(location)))
+    return found
 
 
 def run_collector(args: argparse.Namespace) -> int:
@@ -120,6 +137,9 @@ def run_collector(args: argparse.Namespace) -> int:
     path: Path = args.output
     written = write_files(path.parent, {path.name: script.text()}, force=args.force)
     command = f".\\{script.NAME} -OutFile dc01-events.jsonl -Days 30"
-    print(terminal(f"Wrote {written[0]}. On the domain controller, in an elevated PowerShell:"))  # noqa: T201
-    print(terminal(f"  {command}"))  # noqa: T201
+    say(
+        f"Wrote {terminal_line(str(written[0]))}. "
+        "On the domain controller, in an elevated PowerShell:"
+    )
+    say(f"  {command}")
     return 0
