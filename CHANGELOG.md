@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- CI now runs the PowerShell collector's tests under Windows PowerShell 5.1 as well as PowerShell 7.
 - Install instructions and missing-extra messages now point to PyPI (`pipx install faithful-toledot`), with the GitHub install kept as a development-version fallback.
 
 ## [0.1.1] - 2026-11-14
