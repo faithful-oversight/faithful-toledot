@@ -195,9 +195,12 @@ jobs:
           # A rerun skips files PyPI already has; the next step proves they match.
           skip-existing: true
       - name: Verify PyPI holds exactly these bytes
+        # The publish action leaves a *.publish.attestation file beside each upload in
+        # dist/; PyPI keeps those as provenance, not as files, so compare only the
+        # wheel and source archive.
         env:
           VERSION: ${{ needs.preflight.outputs.version }}
-        run: python3 scripts/publish_release.py verify-pypi --project faithful-toledot --version "$VERSION" dist/*
+        run: python3 scripts/publish_release.py verify-pypi --project faithful-toledot --version "$VERSION" dist/*.whl dist/*.tar.gz
 
   github-publish:
     name: Publish GitHub release
