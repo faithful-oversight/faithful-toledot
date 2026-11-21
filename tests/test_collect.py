@@ -544,13 +544,17 @@ def test_pypsrp_missing_says_how_to_install(monkeypatch: pytest.MonkeyPatch) -> 
         remote._client()  # noqa: SLF001 - the import boundary itself
     message = str(caught.value)
     # pipx refuses a plain install over an installed toledot, so the pipx form has --force.
-    assert 'pipx install --force "faithful-toledot[live] @ git+https://github.com/' in message
-    assert 'pip install "faithful-toledot[live] @ git+https://github.com/' in message
+    assert 'pipx install --force "faithful-toledot[live]"' in message
+    assert '(or, with pip, pip install "faithful-toledot[live]")' in message
 
 
-def test_the_install_hint_names_every_extra_and_the_repository() -> None:
+def test_the_install_hint_names_every_extra_and_points_to_pypi() -> None:
     hint = names.install_hint("live", "vault")
-    assert "faithful-toledot[live,vault] @ git+https://github.com/faithful-oversight/" in hint
+    assert hint == (
+        'pipx install --force "faithful-toledot[live,vault]" '
+        '(or, with pip, pip install "faithful-toledot[live,vault]")'
+    )
+    assert "git+" not in hint
 
 
 def test_the_real_client_classes_load() -> None:
