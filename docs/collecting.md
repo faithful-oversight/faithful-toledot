@@ -126,10 +126,10 @@ toledot collect --server dc01.corp.example --auth ntlm --username 'CORP\auditor'
 Install the `live` extra, which adds `pypsrp`:
 
 ```shell
-pipx install --force "faithful-toledot[live] @ git+https://github.com/faithful-oversight/faithful-toledot"
+pipx install --force "faithful-toledot[live]"
 ```
 
-Add other extras the same way, for example `[live,vault]`. `--force` is needed because pipx refuses to install toledot a second time without it.
+With pip, use `pip install "faithful-toledot[live]"`. Add other extras the same way, for example `[live,vault]`. `--force` is needed because pipx refuses to install toledot a second time without it.
 
 You also need:
 
