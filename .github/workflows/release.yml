@@ -200,7 +200,9 @@ jobs:
         # wheel and source archive.
         env:
           VERSION: ${{ needs.preflight.outputs.version }}
-        run: python3 scripts/publish_release.py verify-pypi --project faithful-toledot --version "$VERSION" dist/*.whl dist/*.tar.gz
+        run: >-
+          python3 scripts/publish_release.py verify-pypi --project faithful-toledot
+          --version "$VERSION" dist/*.whl dist/*.tar.gz
 
   github-publish:
     name: Publish GitHub release
