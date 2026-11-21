@@ -29,7 +29,9 @@ The steps that publish are in `scripts/publish_release.py`, which has its own te
 
 ## First publish to PyPI
 
-Until the first PyPI release exists, the package is not on PyPI, and the name `faithful-toledot` is unclaimed: anyone could register it. Set up trusted publishing, then release a new version, as soon as possible.
+This section is the procedure for a product's first PyPI release, kept as the template for new products. For toledot it is done: the first PyPI release, 0.1.1, was published on 2026-11-21, so the name is claimed and the warning below no longer applies here.
+
+Until a product's first PyPI release exists, its package is not on PyPI and its name is unclaimed: anyone could register it. Set up trusted publishing, then release a new version, as soon as possible.
 
 1. On the PyPI website, open **Your account**, then **Publishing**, and add a **pending publisher** with these fields. They must match `.github/workflows/release.yml` exactly.
    - PyPI project name: `faithful-toledot`
