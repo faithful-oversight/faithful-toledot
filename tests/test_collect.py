@@ -19,8 +19,9 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from faithful_core.exitcodes import ExitCode
 
-from faithful_toledot.cli import ExitCode, main
+from faithful_toledot.cli import main
 from faithful_toledot.collect import names, remote, script, secrets
 from faithful_toledot.collect.remote import Target, collect, parameters, settings
 from faithful_toledot.errors import CollectionError

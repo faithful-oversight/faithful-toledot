@@ -7,12 +7,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from faithful_core.console import say
+from faithful_core.safety import command_line, terminal_line
+
 from faithful_toledot.arguments import bounded, moment
 from faithful_toledot.collect import names, remote, script, secrets
-from faithful_toledot.console import say
 from faithful_toledot.errors import UsageError
 from faithful_toledot.outputs.files import refuse_aliases, write_files
-from faithful_toledot.outputs.safety import command_line, terminal_line
 
 if TYPE_CHECKING:
     import argparse

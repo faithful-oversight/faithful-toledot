@@ -16,11 +16,12 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from faithful_core.exitcodes import ExitCode
 from hypothesis import given
 from hypothesis import strategies as st
 
 from faithful_toledot import __version__
-from faithful_toledot.cli import ExitCode, main
+from faithful_toledot.cli import main
 from faithful_toledot.formats.bundle import encode
 
 if TYPE_CHECKING:

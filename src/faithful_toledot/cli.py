@@ -5,25 +5,26 @@
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import sys
-from datetime import UTC, datetime, timedelta
-from enum import IntEnum
+from datetime import timedelta
 from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from faithful_core.clock import now
+from faithful_core.console import finish, prepare, say, stdout_closed
+from faithful_core.exitcodes import ExitCode
+from faithful_core.safety import command_line, terminal_line
 
 from faithful_toledot import __version__, catalog, example, outputs, pipeline
 from faithful_toledot.arguments import moment
 from faithful_toledot.collect import cli as collect_cli
 from faithful_toledot.collect.secrets import redact
-from faithful_toledot.console import harden_streams, say, stop_stdout
 from faithful_toledot.errors import ToledotError, UsageError
 from faithful_toledot.events import ReadOptions
 from faithful_toledot.outputs import render
 from faithful_toledot.outputs.files import write_files
-from faithful_toledot.outputs.safety import command_line, terminal_line
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -32,16 +33,6 @@ FORMATS = ("json", "md", "html", "csv")
 SCHEMAS = {"report": "report-v1", "events": "events-v1", "manifest": "manifest-v1"}
 _OFFSET = re.compile(r"([+-])([0-9]{2}):([0-9]{2})")
 _MAX_OFFSET_HOURS = 14
-
-
-class ExitCode(IntEnum):
-    """Process exit codes. These values are part of the public interface."""
-
-    OK = 0
-    FINDINGS = 1
-    USAGE = 2
-    INPUT_ERROR = 3
-    INTERNAL_ERROR = 4
 
 
 def _offset(text: str) -> timedelta:
@@ -151,17 +142,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _now() -> datetime:
-    """The report time: the clock, or ``SOURCE_DATE_EPOCH`` for a repeatable report."""
-    fixed = os.environ.get("SOURCE_DATE_EPOCH", "")
-    if fixed.isascii() and fixed.isdigit():
-        try:
-            return datetime.fromtimestamp(int(fixed), UTC)
-        except (OverflowError, OSError, ValueError):
-            pass
-    return datetime.now(UTC).replace(microsecond=0)
-
-
 def _report(args: argparse.Namespace) -> int:
     if args.since and args.until and args.since >= args.until:
         msg = "--since must be earlier than --until"
@@ -179,7 +159,7 @@ def _report(args: argparse.Namespace) -> int:
         account,
         inputs=[vars(item) for item in inputs],
         window=(args.since, args.until),
-        generated_at=_now(),
+        generated_at=now(),
         version=__version__,
     )
     written = outputs.write_reports(
@@ -249,7 +229,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     Printing never changes the exit code: the streams cannot fail on an unencodable
     character, and a closed pipe stops the output and keeps the code already decided.
     """
-    harden_streams()
+    prepare()
+    code = _run(argv)
+    finish()
+    return code
+
+
+def _run(argv: Sequence[str] | None) -> int:
     parser = build_parser()
     try:
         args = parser.parse_args(_join_offsets(sys.argv[1:] if argv is None else argv))
@@ -257,7 +243,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         code = exc.code
         return int(code) if isinstance(code, int) else int(ExitCode.USAGE)
     except OSError:
-        stop_stdout()  # --help or --version printed into a closed pipe (EINVAL on Windows)
+        stdout_closed()  # --help or --version printed into a closed pipe (EINVAL on Windows)
         return int(ExitCode.OK)
     if not getattr(args, "run", None):
         parser.print_help(sys.stderr)

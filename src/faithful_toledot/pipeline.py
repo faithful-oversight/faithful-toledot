@@ -9,10 +9,11 @@ import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
+from faithful_core.safety import visible
+
 from faithful_toledot import catalog as catalog_module
 from faithful_toledot import correlate, formats
 from faithful_toledot.errors import InputError
-from faithful_toledot.outputs.safety import visible
 
 if TYPE_CHECKING:
     from datetime import datetime

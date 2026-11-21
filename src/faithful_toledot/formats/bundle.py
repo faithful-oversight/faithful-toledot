@@ -20,7 +20,8 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from faithful_toledot.clock import date_and_time
+from faithful_core.clock import date_and_time
+
 from faithful_toledot.errors import InputError
 from faithful_toledot.events import Event, LogFacts, Problem, Source
 

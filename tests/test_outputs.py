@@ -17,6 +17,7 @@ from importlib.resources import files
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from faithful_core.render import CSP
 from jsonschema import FormatChecker
 from jsonschema.validators import validator_for
 
@@ -856,8 +857,8 @@ def test_html_is_one_self_contained_accessible_page(rich_report: dict[str, Any])
     assert parsed.bad == []
     assert "script" not in parsed.tags
     assert re.search(r"https?://", page) is None
-    assert f'content="{r.CSP}"' in page
-    assert "default-src 'none'" in r.CSP
+    assert f'content="{CSP}"' in page
+    assert "default-src 'none'" in CSP
     assert '<a class="skip" href="#main">' in page
     assert 'id="main"' in page
     assert "prefers-color-scheme:dark" in page
