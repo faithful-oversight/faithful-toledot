@@ -96,6 +96,17 @@ jobs:
         env:
           TOLEDOT_REQUIRE_LIVE: "1"
           TOLEDOT_REQUIRE_PWSH: "1"
+      # The script supports Windows PowerShell 5.1 as well as PowerShell 7, and every
+      # Windows runner has 5.1, so its tests run under 5.1 too. Coverage is measured
+      # by the full run above.
+      - name: Test the PowerShell script under Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        run: |
+          powershell -NoProfile -Command "\$PSVersionTable.PSVersion.ToString()"
+          uv run --locked --no-sync pytest --no-cov tests/test_powershell.py
+        env:
+          TOLEDOT_PWSH: powershell
+          TOLEDOT_REQUIRE_PWSH: "1"
 
   docs:
     name: Docs, config, and workflow security
