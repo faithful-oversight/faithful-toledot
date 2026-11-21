@@ -141,7 +141,7 @@ An actor, target, or member holds what the event recorded: `sid`, `name`, `domai
 
 Two properties add information from outside the event. toledot shows each apart from the recorded name, so you can tell them apart:
 
-- `known_as` is a name that other events in the input give for the same SID. toledot sets it only when every event that names the SID agrees on one name, and only when that name differs from the recorded one. After an account rename (4781) the account has had two names, so toledot shows no `known_as` for it. The sentence reads "named CORP\\blake.sample in other events".
+- `known_as` is a name that other events in the input give for the same SID. toledot sets it only when every event that names the SID agrees on one name, and only when that name differs from the recorded one. After an account rename (4781) the account has had two names, so toledot shows no `known_as` for it. The sentence reads `named CORP\blake.sample in other events`.
 - `well_known` is the name of a well-known SID, such as `S-1-5-18`, or of a well-known relative identifier (RID) under a domain SID, such as 512 for Domain Admins. A RID means that group only in a domain, so toledot words it `Domain Admins, if this is a domain SID`.
 
 ### Details
