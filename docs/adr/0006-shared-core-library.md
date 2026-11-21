@@ -33,4 +33,4 @@ toledot now has one runtime dependency. A compromise of faithful-core would reac
 
 A bug in the library can break toledot. Pinning an exact version means toledot does not pick up a broken release by itself, and a fix needs a new release of the library and a pull request that takes it.
 
-A few messages changed wording where the library unified them. The CHANGELOG lists each one. Messages are for people, and the library's documentation says not to match on their wording.
+A few messages changed wording where the library unified them. The changelog lists each one. Messages are for people, and the library's documentation says not to match on their wording.

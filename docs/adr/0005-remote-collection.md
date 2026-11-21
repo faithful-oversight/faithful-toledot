@@ -9,8 +9,6 @@ Running a script on each domain controller by hand is slow. Many teams want to c
 
 The project rule is that the tool stays read-only and offline unless a decision record says otherwise. Remote collection needs the network, so it needs a record. It also needs a library, and the library must use a license on the allow list in `scripts/check_licenses.py`. The file readers have no runtime dependencies today, and that must stay true for people who never collect remotely.
 
-> Amended by [ADR 6](0006-shared-core-library.md): toledot now depends on `faithful-core`, so the file readers have one runtime dependency.
-
 The credentials matter most. The account that collects can read the Security log of a domain controller. A tool that sends that account's password over a channel it does not verify, or that hands it to a server that has not proved itself, would be a risk.
 
 Options considered:
@@ -24,7 +22,6 @@ Options considered:
 
 - Add `toledot collect`. It sends the packaged collector script to the controller, runs it there with fixed parameters, and streams the lines of the [collection file](0004-collection-file.md) back.
 - Use `pypsrp` for WinRM. Install it as the optional `live` extra, so reading files keeps no runtime dependencies. Import it only when collection runs.
-  - Amended by [ADR 6](0006-shared-core-library.md): reading files needs one runtime dependency, `faithful-core`. `pypsrp` is still only an extra.
 - HTTPS on port 5986 is the default. It always verifies the certificate, against the system's roots or the authorities in the file `--ca-file` names. No option turns verification off.
 - Plain HTTP on port 5985 is allowed only with message encryption required. `--ca-file` is refused with it.
 - Offer only Kerberos (the default), Negotiate, and NTLM. None sends the password to the server. Do not offer Basic, which sends the password itself. Do not offer CredSSP, which delegates the account's reusable credentials to the server, so a compromised controller could keep them.
