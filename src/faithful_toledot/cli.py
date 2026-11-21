@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from faithful_core.clock import now
+from faithful_core.collect.secrets import redact
 from faithful_core.console import finish, prepare, say, stdout_closed
 from faithful_core.exitcodes import ExitCode
 from faithful_core.safety import command_line, terminal_line
@@ -20,7 +21,6 @@ from faithful_core.safety import command_line, terminal_line
 from faithful_toledot import __version__, catalog, example, outputs, pipeline
 from faithful_toledot.arguments import moment
 from faithful_toledot.collect import cli as collect_cli
-from faithful_toledot.collect.secrets import redact
 from faithful_toledot.errors import ToledotError, UsageError
 from faithful_toledot.events import ReadOptions
 from faithful_toledot.outputs import render

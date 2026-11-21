@@ -7,13 +7,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from faithful_core.collect import names, secrets, winrm
 from faithful_core.console import say
+from faithful_core.files import refuse_aliases
 from faithful_core.safety import command_line, terminal_line
 
 from faithful_toledot.arguments import bounded, moment
-from faithful_toledot.collect import names, remote, script, secrets
+from faithful_toledot.collect import remote, script
 from faithful_toledot.errors import UsageError
-from faithful_toledot.outputs.files import refuse_aliases, write_files
+from faithful_toledot.outputs.files import write_files
 
 if TYPE_CHECKING:
     import argparse
@@ -37,14 +39,14 @@ def add_arguments(commands: Any) -> None:
         ),
     )
     collect.add_argument("--server", required=True, help="the controller's DNS name")
-    collect.add_argument("--auth", choices=remote.AUTHS, default="kerberos")
+    collect.add_argument("--auth", choices=winrm.AUTHS, default="kerberos")
     collect.add_argument("--username", help="DOMAIN\\user or user@domain.example")
     collect.add_argument(
         "--secret", metavar="REF",
         help="where the password is: env:NAME, file:PATH, keyring:SERVICE/USER, "
         "vault:MOUNT/PATH#FIELD, aws:SECRET_ID[#FIELD], or azure:VAULT/NAME",
     )  # fmt: skip
-    collect.add_argument("--transport", choices=remote.TRANSPORTS, default="https")
+    collect.add_argument("--transport", choices=winrm.TRANSPORTS, default="https")
     collect.add_argument("--port", type=_port, help="default: 5986 for https, 5985 for http")
     collect.add_argument("--ca-file", type=Path, help="PEM certificate authorities for https")
     collect.add_argument("--since", type=moment, metavar="TIME", help="collect from this time")
@@ -93,7 +95,7 @@ def run_collect(args: argparse.Namespace) -> int:
     if username and not args.secret:
         msg = "--username needs --secret; leave both out to use the current Kerberos ticket"
         raise UsageError(msg)
-    target = remote.Target(
+    target = winrm.Target(
         server=server,
         auth=args.auth,
         username=username,
@@ -103,11 +105,12 @@ def run_collect(args: argparse.Namespace) -> int:
         ca_file=args.ca_file,
         idle_timeout=args.timeout,
     )
-    remote.settings(target)  # refuse a bad combination before the secret is read
+    winrm.settings(target)  # refuse a bad combination before the secret is read
     # The files this command reads are never the file it writes, even with --force.
     refuse_aliases([args.output], _read_files(args))
     if args.secret:
-        target = remote.Target(**{**vars(target), "secret": secrets.resolve(args.secret)})
+        secret = secrets.resolve(args.secret, hint=remote.install_hint, keep=("live",))
+        target = winrm.Target(**{**vars(target), "secret": secret})
     channels = args.channel or ["Security", "System"]
     values = remote.parameters(args.since, args.until, args.days, channels, every_event=args.all)
     result = remote.collect(target, script.text(), values, args.output, force=args.force)
