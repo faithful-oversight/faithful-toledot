@@ -102,7 +102,7 @@ jobs:
       - name: Test the PowerShell script under Windows PowerShell 5.1
         if: runner.os == 'Windows'
         run: |
-          powershell -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+          powershell -NoProfile -Command "\$PSVersionTable.PSVersion.ToString()"
           uv run --locked --no-sync pytest --no-cov tests/test_powershell.py
         env:
           TOLEDOT_PWSH: powershell

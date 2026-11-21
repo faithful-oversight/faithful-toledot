@@ -140,7 +140,8 @@ def functions() -> str:
 def run_pwsh(folder: Path, body: str) -> subprocess.CompletedProcess[str]:
     assert _PWSH is not None
     path = folder / "run.ps1"
-    path.write_text(functions() + "\n" + body, encoding="utf-8")
+    # The BOM makes Windows PowerShell 5.1 read the file as UTF-8, as PowerShell 7 does.
+    path.write_text(functions() + "\n" + body, encoding="utf-8-sig")
     return subprocess.run(  # noqa: S603 - a fixed interpreter and a script built here
         [_PWSH, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(path)],
         capture_output=True,
