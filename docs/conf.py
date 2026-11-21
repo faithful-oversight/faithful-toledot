@@ -57,6 +57,7 @@ NAVIGATION = {
         "0003-documentation-site",
         "0004-collection-file",
         "0005-remote-collection",
+        "0006-shared-core-library",
     ],
 }
 """Page order for the site navigation, keyed by the page that lists them."""

@@ -248,11 +248,11 @@ jobs:
           allow-licenses: >-
             0BSD, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, MIT,
             MIT-0, MPL-2.0, PSF-2.0, Python-2.0, Unlicense, Zlib
-          # Development tools only: these never ship with it. GitHub's scanner
-          # reports their licenses from file contents (GPL test data in docutils, an
-          # LGPL file in Sphinx), or under names missing from the list above. The
-          # licenses stage checks every dependency a user installs, from the locked
-          # package metadata.
+          # Development tools only: these never ship with faithful-toledot. GitHub's
+          # scanner reports their licenses from file contents (GPL test data in
+          # docutils, an LGPL file in Sphinx), or under names missing from the list
+          # above. The licenses stage checks every dependency a user installs, from
+          # the locked package metadata.
           allow-dependencies-licenses: >-
             pkg:pypi/codespell, pkg:pypi/docutils, pkg:pypi/python-debian,
             pkg:pypi/reuse, pkg:pypi/roman-numerals, pkg:pypi/sphinx,
