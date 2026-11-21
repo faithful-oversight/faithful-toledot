@@ -9,6 +9,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - CI now runs the PowerShell collector's tests under Windows PowerShell 5.1 as well as PowerShell 7.
+- Shared code now comes from the `faithful-core` library, pinned to an exact version.
+- The refusal to replace a file the command reads has new wording: `a file that is read is never replaced, even with --force; choose another output location`. When the file system cannot show whether an output is such a file, the command now refuses instead of going on.
+- A refusal because an output file exists now ends `use --force to replace it` (or `them`).
+- `toledot collect` now refuses a dangling symbolic link at its output before it connects, and names the file when `--force` cannot move the finished file into place.
 - Install instructions and missing-extra messages now point to PyPI (`pipx install faithful-toledot`), with the GitHub install kept as a development-version fallback.
 
 ## [0.1.1] - 2026-11-14

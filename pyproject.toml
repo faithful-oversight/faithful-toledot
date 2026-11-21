@@ -31,7 +31,7 @@ classifiers = [
 dependencies = ["faithful-core==0.1.0"]
 
 [project.optional-dependencies]
-# Remote collection over PowerShell remoting. Reading files needs no dependencies.
+# Remote collection over PowerShell remoting. Reading files needs only faithful-core.
 live = ["pypsrp>=0.8"]
 keyring = ["keyring>=25"]
 vault = ["hvac>=2.3"]

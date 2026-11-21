@@ -1,6 +1,6 @@
 # Architecture
 
-toledot is a command-line tool and a Python library with the same core. Reading files needs no runtime dependencies beyond the Python standard library. Remote collection and the secret providers use optional dependencies, installed as extras.
+toledot is a command-line tool and a Python library with the same core. Reading files needs one runtime dependency beyond the Python standard library: [faithful-core](https://github.com/faithful-oversight/faithful-core), the shared foundation library of the Faithful Oversight tools, pinned to an exact version. Remote collection and the secret providers use optional dependencies, installed as extras.
 
 ```text
 domain controller ──► PowerShell collector ──┐
@@ -41,7 +41,7 @@ Both collectors write the same collection file. Nothing after the readers knows 
 | Module | Responsibility |
 | --- | --- |
 | `cli` | The command-line interface, exit codes, and the `report`, `events`, `schema`, and `example` commands. |
-| `errors` | `ToledotError` and its subclasses `InputError` and `CollectionError`. |
+| `errors` | `ToledotError`, which is faithful-core's `FaithfulError`, and the error classes toledot uses: `InputError`, `CollectionError`, `UsageError`, and `OutputError`. |
 | `events` | The one shape every format is read into: `Event`, `Problem`, `LogFacts`, `Source`, and `ReadOptions`. |
 | `formats` | One reader for each input format: `evtx`, `xml`, `json`, `csv`, and `bundle` (the collection file). `detect` picks between them. |
 | `catalog` | Load and strictly validate `data/events.toml`. It says what each event means: field names, roles, labels, `%%` codes, logon types, account control flags, and well-known SIDs. |
@@ -49,8 +49,8 @@ Both collectors write the same collection file. Nothing after the readers knows 
 | `correlate` | Turn events into the `Account`. No file access and no output. |
 | `changes` | The records `correlate` builds: `Account`, `Change`, `Party`, `Origin`, `Detail`, `Notice`, and `Coverage`. |
 | `narrative` | The plain sentences for changes, origins, and coverage. |
-| `outputs` | Build the report document, render each format, write the files all together, and make untrusted text safe. |
-| `collect` | `toledot collect` and `toledot collector`: the remote collection logic, the secret providers, and the checks on names. |
+| `outputs` | Build the report document, render each format, and write the files all together. |
+| `collect` | `toledot collect` and `toledot collector`: the collection file's line checks, the script's parameters, and the commands. |
 | `example` | The synthetic collection files for the `example` command and tests. |
 | `data` | The event catalog `events.toml` and the PowerShell collector `Collect-ToledotEvents.ps1`. |
 | `schema` | JSON Schemas for the report, the collection file, and the manifest. |
@@ -72,12 +72,24 @@ Three things read the catalog:
 | Module | Responsibility |
 | --- | --- |
 | `collect.cli` | Registers `collect` and `collector` and checks their arguments. |
-| `collect.names` | Checks `--server` and `--username` before any secret is read or any connection is made. |
-| `collect.secrets` | Resolves secret references from six providers, and removes every resolved secret from any text before toledot prints it. |
-| `collect.remote` | Sends the script to the controller over WinRM with `pypsrp`, streams the lines into a private file, checks the end line, and publishes the file. `pypsrp` is imported only when collection runs. |
-| `collect.script` | Reads the packaged PowerShell script. |
+| `collect.remote` | Checks each line the controller sends, and its end line, in a private file. It also builds the script's parameters and the result, and hands the connection to faithful-core. |
+| `collect.script` | Names the packaged PowerShell script and reads it through faithful-core. |
 
 Both collection paths run the same script, so there is one format to read and one script to review. See [Collecting events](collecting.md).
+
+## The shared library
+
+faithful-core holds the code that every Faithful Oversight tool needs to behave the same way. toledot uses it for:
+
+- the base error and the exit codes;
+- making untrusted text safe for the terminal, CSV, Markdown, and HTML;
+- the report time and the way times are written;
+- printing that never changes an exit code;
+- publishing a set of files all together, without replacing a file the tool reads;
+- the checks on `--server` and `--username`, the secret providers, and the redaction of every resolved secret;
+- the WinRM connection, its transport rules, and the loop that takes the controller's output.
+
+The library's own pages describe how each of these works. toledot's tests cover them through the commands, and the library's tests cover them directly.
 
 ## Rules the design follows
 
@@ -95,7 +107,7 @@ Both collection paths run the same script, so there is one format to read and on
 
 ## Packaging
 
-- Python package on PyPI: `faithful-toledot`, with the command `toledot`.
+- Python package on PyPI: `faithful-toledot`, with the command `toledot`. Its one runtime dependency is `faithful-core`, pinned to an exact version.
 - Extras: `live` (`pypsrp`), `keyring`, `vault`, `aws`, and `azure`. See the [README](https://github.com/faithful-oversight/faithful-toledot#install).
 - Further formats, such as a standalone executable or a container image, are added only when a decision record justifies them.
 
