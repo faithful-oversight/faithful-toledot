@@ -32,4 +32,5 @@ if [[ "$listed" != "$present" ]]; then
   diff <(echo "$listed") <(echo "$present") >&2 || true
   exit 1
 fi
-echo "verified $(echo "$listed" | wc -l) files against SHA256SUMS"
+# Arithmetic expansion drops the padding BSD wc adds on macOS.
+echo "verified $(( $(printf '%s\n' "$listed" | wc -l) )) files against SHA256SUMS"
