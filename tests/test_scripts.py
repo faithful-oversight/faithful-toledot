@@ -571,6 +571,21 @@ class TestVerifyArtifacts:
         assert result.returncode == 0, result.stderr
         assert "verified 3 files" in result.stdout
 
+    def test_reports_the_count_without_bsd_wc_padding(self, tmp_path: Path) -> None:
+        # macOS wc pads its count with spaces; the message must still read cleanly.
+        tools = tmp_path / "tools"
+        tools.mkdir()
+        wc = tools / "wc"
+        wc.write_text(
+            '#!/usr/bin/env bash\nprintf "       %s\\n" "$(command -p wc "$@" | tr -d " ")"\n',
+            encoding="utf-8",
+        )
+        wc.chmod(0o755)
+        path = f"{tools}{os.pathsep}{os.environ['PATH']}"
+        result = _run_script(VERIFY, str(_dist(tmp_path)), home=tmp_path, PATH=path)
+        assert result.returncode == 0, result.stderr
+        assert "verified 3 files against SHA256SUMS" in result.stdout
+
     def test_rejects_a_changed_file(self, tmp_path: Path) -> None:
         dist = _dist(tmp_path)
         (dist / "pkg-1.0-py3-none-any.whl").write_bytes(b"tampered")
