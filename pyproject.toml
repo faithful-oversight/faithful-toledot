@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "faithful-toledot"
-version = "0.1.1"
+version = "0.1.2"
 description = "AD Change Narrative: Turns exported Active Directory change events into a plain-language account of who changed what, when, and from where."
 readme = "README.md"
 requires-python = ">=3.11"
