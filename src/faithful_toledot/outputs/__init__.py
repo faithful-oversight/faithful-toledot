@@ -16,8 +16,10 @@ from datetime import UTC, datetime
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
+from faithful_core.clock import date_and_time
+from faithful_core.render import json_dump
+
 from faithful_toledot import narrative
-from faithful_toledot.clock import date_and_time
 from faithful_toledot.errors import ToledotError
 from faithful_toledot.outputs.files import write_files
 from faithful_toledot.outputs.render import (
@@ -284,13 +286,7 @@ def build_report(
 
 def render_json(report: Report) -> str:
     """Render the report as indented JSON in its documented key order."""
-    text = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
-    try:
-        text.encode("utf-8")
-    except UnicodeEncodeError:
-        # A lone surrogate cannot be written as UTF-8; JSON escapes keep it exactly.
-        text = json.dumps(report, indent=2, ensure_ascii=True) + "\n"
-    return text
+    return json_dump(report)
 
 
 def _manifest(report: Report, outputs: Mapping[str, str]) -> str:

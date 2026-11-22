@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from faithful_toledot.clock import date_and_time
+from faithful_core.clock import date_and_time
 
 if TYPE_CHECKING:
     from datetime import datetime

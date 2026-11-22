@@ -1,19 +1,26 @@
 # SPDX-FileCopyrightText: 2026 Faithful Oversight, LLC
 # SPDX-License-Identifier: Apache-2.0
-"""Exceptions raised by toledot."""
+"""Exceptions raised by toledot.
 
+The classes come from faithful-core. ``ToledotError`` is its ``FaithfulError``, so
+one ``except ToledotError`` also catches an error raised inside the library.
+"""
 
-class ToledotError(Exception):
-    """Base class for errors toledot reports to the user."""
+from faithful_core.errors import (
+    CollectionError,
+    FaithfulError,
+    InputError,
+    OutputError,
+    UsageError,
+)
 
+__all__ = [
+    "CollectionError",
+    "InputError",
+    "OutputError",
+    "ToledotError",
+    "UsageError",
+]
 
-class InputError(ToledotError):
-    """An input file or configuration cannot be read or has the wrong shape."""
-
-
-class CollectionError(ToledotError):
-    """Live collection could not connect, authenticate, or read what it needs."""
-
-
-class UsageError(ToledotError):
-    """The command's options do not fit together, so nothing was attempted."""
+ToledotError = FaithfulError
+"""Base class for errors toledot reports to the user."""

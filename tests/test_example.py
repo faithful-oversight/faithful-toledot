@@ -10,7 +10,9 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from faithful_toledot.cli import ExitCode, main
+from faithful_core.exitcodes import ExitCode
+
+from faithful_toledot.cli import main
 from faithful_toledot.outputs import MANIFEST_NAME
 
 if TYPE_CHECKING:

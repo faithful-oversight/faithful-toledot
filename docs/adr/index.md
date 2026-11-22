@@ -7,3 +7,4 @@ Each record explains one significant decision: its context, the decision, and it
 - [3. Documentation as code, published with Sphinx](0003-documentation-site.md)
 - [4. The collection file](0004-collection-file.md)
 - [5. Remote collection over WinRM](0005-remote-collection.md)
+- [6. One shared core library for the Faithful Oversight tools](0006-shared-core-library.md)

@@ -18,13 +18,13 @@ is UTF-8 when importing.
 from __future__ import annotations
 
 import csv
-import html
 import io
 import re
 import sys
 from typing import TYPE_CHECKING, Any
 
-from faithful_toledot.outputs.safety import csv_cell, escape_markdown, terminal, visible
+from faithful_core.render import CSP, html_text, md_table, md_text, plural
+from faithful_core.safety import csv_cell, terminal
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -51,18 +51,12 @@ CSV_COLUMNS = (
     "origin_workstation", "logon_type", "logon_id", "event_ids", "record_ids", "files",
     "account_completeness",
 )  # fmt: skip
-CSP = "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'"
-"""Content security policy: no scripts, no network access, no form submission."""
 
 _STATE_WORDS = {"complete": "Complete", "unconfirmed": "Not confirmed", "incomplete": "Incomplete"}
 _ID = re.compile(r"[A-Za-z0-9]{1,20}")
 
 
 # Words ------------------------------------------------------------------------------
-
-
-def _plural(n: int, one: str, many: str | None = None) -> str:
-    return f"{n} {one if n == 1 else many or one + 's'}"
 
 
 def _logs_missing(report: Report) -> int:
@@ -84,7 +78,7 @@ def headline(report: Report) -> tuple[str, str]:
     summary = report["summary"]
     n = summary["changes"]
     state = summary["completeness"]
-    lead = _plural(n, "change") + " described" if n else "No changes found in the input"
+    lead = plural(n, "change") + " described" if n else "No changes found in the input"
     if state == "complete":
         if not n:
             return state, "No changes found in the input."
@@ -92,7 +86,7 @@ def headline(report: Report) -> tuple[str, str]:
     if state == "unconfirmed":
         unchecked = sum(1 for c in report["coverage"] if not c["checked"])
         reason = (
-            f"{_plural(unchecked, 'log')} cannot show whether events are missing"
+            f"{plural(unchecked, 'log')} cannot show whether events are missing"
             if unchecked
             else "no events were read"
         )
@@ -102,11 +96,11 @@ def headline(report: Report) -> tuple[str, str]:
         )
     parts = []
     if summary["notices"]["warning"]:
-        parts.append(_plural(summary["notices"]["warning"], "notice"))
+        parts.append(plural(summary["notices"]["warning"], "notice"))
     if summary["problems"]:
-        parts.append(_plural(summary["problems"], "problem") + " with the input")
+        parts.append(plural(summary["problems"], "problem") + " with the input")
     if missing := _logs_missing(report):
-        parts.append(_plural(missing, "log") + " with missing events")
+        parts.append(plural(missing, "log") + " with missing events")
     why = ": " + ", ".join(parts) if parts else ""
     return "incomplete", f"{lead}, but the account is incomplete{why}."
 
@@ -204,16 +198,6 @@ def _more(total: int, shown: int) -> str:
 # Markdown ---------------------------------------------------------------------------
 
 
-def _md(value: object) -> str:
-    return escape_markdown(str(value))
-
-
-def _md_table(head: tuple[str, ...], rows: Iterable[Iterable[object]]) -> list[str]:
-    lines = ["| " + " | ".join(head) + " |", "|" + " --- |" * len(head)]
-    lines += ["| " + " | ".join(_md(cell) for cell in row) + " |" for row in rows]
-    return lines
-
-
 def _split_notices(report: Report) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     notices = report["notices"]
     return (
@@ -224,15 +208,15 @@ def _split_notices(report: Report) -> tuple[list[dict[str, Any]], list[dict[str,
 
 def _md_notice(n: dict[str, Any], *, shorten: bool) -> str:
     return (
-        f"- {_md(n['time'])} on {_md(n['computer'])}: {_md(n['kind'])}: "
-        f"{_md(_shorten(n['text'], shorten=shorten))} By {_md(n['actor']['display'])}. "
-        f"Evidence: {_md(_evidence(n['event']))}."
+        f"- {md_text(n['time'])} on {md_text(n['computer'])}: {md_text(n['kind'])}: "
+        f"{md_text(_shorten(n['text'], shorten=shorten))} By {md_text(n['actor']['display'])}. "
+        f"Evidence: {md_text(_evidence(n['event']))}."
     )
 
 
 def _md_completeness(report: Report, *, shorten: bool) -> list[str]:
     state, text = headline(report)
-    lines = ["## Completeness", "", f"**{_STATE_WORDS[state]}.** {_md(text)}", ""]
+    lines = ["## Completeness", "", f"**{_STATE_WORDS[state]}.** {md_text(text)}", ""]
     warnings, infos = _split_notices(report)
     if warnings:
         lines += [
@@ -244,7 +228,7 @@ def _md_completeness(report: Report, *, shorten: bool) -> list[str]:
         ]
         lines += [_md_notice(n, shorten=shorten) for n in warnings[: _limit(MAX_LISTED, shorten)]]
         if len(warnings) > _limit(MAX_LISTED, shorten):
-            lines.append(f"- {_md(_more(len(warnings), _limit(MAX_LISTED, shorten)))}")
+            lines.append(f"- {md_text(_more(len(warnings), _limit(MAX_LISTED, shorten)))}")
         lines.append("")
     coverage = report["coverage"]
     lines += ["### What each log holds", ""]
@@ -257,9 +241,9 @@ def _md_completeness(report: Report, *, shorten: bool) -> list[str]:
             )
             for c in coverage[:_limit(MAX_ROWS, shorten)]
         ]  # fmt: skip
-        lines += _md_table(COVERAGE_HEAD, rows)
+        lines += md_table(COVERAGE_HEAD, rows)
         if len(coverage) > _limit(MAX_ROWS, shorten):
-            lines += ["", _md(_more(len(coverage), _limit(MAX_ROWS, shorten)))]
+            lines += ["", md_text(_more(len(coverage), _limit(MAX_ROWS, shorten)))]
     else:
         lines.append("No events were read.")
     lines.append("")
@@ -277,11 +261,11 @@ def _md_completeness(report: Report, *, shorten: bool) -> list[str]:
         for p in problems[: _limit(MAX_LISTED, shorten)]:
             record = f", record {p['record_id']}" if p["record_id"] is not None else ""
             lines.append(
-                f"- {_md(p['file'])}, {_md(p['position'])}{_md(record)}: "
-                f"{_md(_shorten(p['reason'], shorten=shorten))}"
+                f"- {md_text(p['file'])}, {md_text(p['position'])}{md_text(record)}: "
+                f"{md_text(_shorten(p['reason'], shorten=shorten))}"
             )
         if len(problems) > _limit(MAX_LISTED, shorten):
-            lines.append(f"- {_md(_more(len(problems), _limit(MAX_LISTED, shorten)))}")
+            lines.append(f"- {md_text(_more(len(problems), _limit(MAX_LISTED, shorten)))}")
         lines.append("")
     if infos:
         lines += [
@@ -292,7 +276,7 @@ def _md_completeness(report: Report, *, shorten: bool) -> list[str]:
         ]
         lines += [_md_notice(n, shorten=shorten) for n in infos[: _limit(MAX_INFO, shorten)]]
         if len(infos) > _limit(MAX_INFO, shorten):
-            lines.append(f"- {_md(_more(len(infos), _limit(MAX_INFO, shorten)))}")
+            lines.append(f"- {md_text(_more(len(infos), _limit(MAX_INFO, shorten)))}")
         lines.append("")
     return lines
 
@@ -310,9 +294,9 @@ def _md_summary(report: Report, *, shorten: bool) -> list[str]:
         "## Summary",
         "",
         (
-            f"{_plural(s['changes'], 'change')}, "
-            f"{_plural(s['notices']['warning'], 'warning notice')}, "
-            f"{s['notices']['info']} routine log events, {_plural(s['problems'], 'problem')}. "
+            f"{plural(s['changes'], 'change')}, "
+            f"{plural(s['notices']['warning'], 'warning notice')}, "
+            f"{s['notices']['info']} routine log events, {plural(s['problems'], 'problem')}. "
             f"Events read: {ev['changes']} in changes, {ev['context']} as context, "
             f"{ev['notices']} as notices, {ev['other']} not described, "
             f"{ev['duplicates']} duplicates, {ev['outside_window']} outside the period."
@@ -320,15 +304,18 @@ def _md_summary(report: Report, *, shorten: bool) -> list[str]:
         "",
     ]
     if s["changes"]:
-        lines += [f"First change {_md(s['first_change'])}, last {_md(s['last_change'])}.", ""]
-        lines += [*_md_table(("Category", "Changes"), s["by_category"].items()), ""]
-        lines += [*_md_table(("Action", "Changes"), s["by_action"].items()), ""]
+        lines += [
+            f"First change {md_text(s['first_change'])}, last {md_text(s['last_change'])}.",
+            "",
+        ]
+        lines += [*md_table(("Category", "Changes"), s["by_category"].items()), ""]
+        lines += [*md_table(("Action", "Changes"), s["by_action"].items()), ""]
         actors = s["actors"][: _limit(MAX_ACTORS_SHOWN, shorten)]
-        lines += _md_table(
+        lines += md_table(
             ("Actor", "SID", "Changes"), [(a["name"], a["sid"] or "", a["changes"]) for a in actors]
         )
         if len(s["actors"]) > len(actors):
-            lines += ["", _md(_more(len(s["actors"]), len(actors)))]
+            lines += ["", md_text(_more(len(s["actors"]), len(actors)))]
         lines.append("")
     return lines
 
@@ -341,19 +328,26 @@ def _unlisted_related(c: dict[str, Any]) -> str:
 
 def _md_change(c: dict[str, Any], *, shorten: bool) -> list[str]:
     lines = [
-        f"### {_md(c['id'])} · {_md(_clock(c['time']))} · {_md(c['sentence'])}",
+        f"### {md_text(c['id'])} · {md_text(_clock(c['time']))} · {md_text(c['sentence'])}",
         "",
-        f"- Computer: {_md(c['computer'])}. Kind: {_md(c['category'])}, {_md(c['action'])}.",
+        (
+            f"- Computer: {md_text(c['computer'])}. "
+            f"Kind: {md_text(c['category'])}, {md_text(c['action'])}."
+        ),
     ]
     for d in c["details"]:
         attribute = f" [attribute: {d['attribute']}]" if d["attribute"] else ""
-        lines.append(f"- {_md(d['label'])}: {_md(_detail_words(d, shorten=shorten) + attribute)}")
-    lines.append(f"- From where: {_md(c['origin']['statement'])}")
+        lines.append(
+            f"- {md_text(d['label'])}: {md_text(_detail_words(d, shorten=shorten) + attribute)}"
+        )
+    lines.append(f"- From where: {md_text(c['origin']['statement'])}")
     if c["related"]:
-        lines.append(f"- Related changes: {_md(', '.join(c['related']) + _unlisted_related(c))}")
-    lines += [f"- Note: {_md(n)}" for n in c["notes"]]
+        lines.append(
+            f"- Related changes: {md_text(', '.join(c['related']) + _unlisted_related(c))}"
+        )
+    lines += [f"- Note: {md_text(n)}" for n in c["notes"]]
     evidence = "; ".join(_evidence(e) for e in c["events"])
-    lines.append(f"- Evidence: {_md(evidence) if evidence else 'none'}")
+    lines.append(f"- Evidence: {md_text(evidence) if evidence else 'none'}")
     return [*lines, ""]
 
 
@@ -369,11 +363,11 @@ def render_markdown(report: Report, *, shorten: bool = True) -> str:
     lines = [
         f"# {TITLE}",
         "",
-        f"**{_md(text)}**",
+        f"**{md_text(text)}**",
         "",
         (
-            f"Generated {_md(report['generated_at'])} by toledot "
-            f"{_md(report['tool']['version'])}. {_md(_span(report))} All times are UTC."
+            f"Generated {md_text(report['generated_at'])} by toledot "
+            f"{md_text(report['tool']['version'])}. {md_text(_span(report))} All times are UTC."
         ),
         "",
     ]
@@ -383,7 +377,7 @@ def render_markdown(report: Report, *, shorten: bool = True) -> str:
     if not days:
         lines += ["## Changes", "", "No changes were found in the input.", ""]
     for day, changes in days:
-        lines += [f"## Changes on {_md(day)} (UTC): {len(changes)}", ""]
+        lines += [f"## Changes on {md_text(day)} (UTC): {len(changes)}", ""]
         for change in changes:
             lines += _md_change(change, shorten=shorten)
     others = report["other_events"]
@@ -394,20 +388,20 @@ def render_markdown(report: Report, *, shorten: bool = True) -> str:
             "These events were read but are not changes toledot describes.",
             "",
         ]
-        lines += _md_table(
+        lines += md_table(
             ("Log", "Event ID", "Count"),
             [tuple(o.values()) for o in others[: _limit(MAX_ROWS, shorten)]],
         )
         if len(others) > _limit(MAX_ROWS, shorten):
-            lines += ["", _md(_more(len(others), _limit(MAX_ROWS, shorten)))]
+            lines += ["", md_text(_more(len(others), _limit(MAX_ROWS, shorten)))]
         lines.append("")
     lines += ["## Inputs", ""]
-    lines += _md_table(
+    lines += md_table(
         ("File", "Format", "Scope", "Bytes", "SHA-256"),
         [(i["name"], i["format"], i["scope"], i["size"], i["sha256"]) for i in report["inputs"]],
     )
     lines += ["", "## Limitations", ""]
-    lines += [f"- {_md(item)}" for item in report["limitations"]]
+    lines += [f"- {md_text(item)}" for item in report["limitations"]]
     return "\n".join(lines) + "\n"
 
 
@@ -539,12 +533,8 @@ article.change>header{background:none}}
 """
 
 
-def _h(value: object) -> str:
-    return html.escape(visible(str(value)), quote=True)
-
-
 def _hv(value: str | None, *, shorten: bool) -> str:
-    return f'<span class="val">{_h(_shown(value, shorten=shorten))}</span>'
+    return f'<span class="val">{html_text(_shown(value, shorten=shorten))}</span>'
 
 
 def _table(caption: str, head: tuple[str, ...], rows: Iterable[Iterable[str]]) -> str:
@@ -556,7 +546,7 @@ def _table(caption: str, head: tuple[str, ...], rows: Iterable[Iterable[str]]) -
         cells = "".join(f"<td>{cell}</td>" for cell in rest)
         body.append(f'<tr><th scope="row">{first}</th>{cells}</tr>')
     return (
-        f'<div class="tablewrap"><table><caption>{_h(caption)}</caption>'
+        f'<div class="tablewrap"><table><caption>{html_text(caption)}</caption>'
         f"<thead><tr>{heads}</tr></thead><tbody>{''.join(body)}</tbody></table></div>"
     )
 
@@ -580,29 +570,33 @@ def _h_detail(d: dict[str, Any], *, shorten: bool) -> str:
     else:
         value = _hv(d["new"] or d["old"], shorten=shorten)
     if d["meaning"]:
-        value += f' <span class="muted">(meaning: {_h(d["meaning"])})</span>'
+        value += f' <span class="muted">(meaning: {html_text(d["meaning"])})</span>'
     if d["attribute"]:
         value += (
-            f'<br><span class="muted small">attribute: <code>{_h(d["attribute"])}</code></span>'
+            '<br><span class="muted small">attribute: '
+            f"<code>{html_text(d['attribute'])}</code></span>"
         )
-    return f"<dt>{_h(d['label'])}</dt><dd>{value}</dd>"
+    return f"<dt>{html_text(d['label'])}</dt><dd>{value}</dd>"
 
 
 def _h_change(c: dict[str, Any], index: int, anchors: dict[str, str], *, shorten: bool) -> str:
     details = "".join(_h_detail(d, shorten=shorten) for d in c["details"])
     related = ", ".join(
-        f'<a href="#{anchors[r]}">{_h(r)}</a>' if r in anchors else _h(r) for r in c["related"]
-    ) + _h(_unlisted_related(c))
-    notes = "".join(f'<p class="note">{_h(n)}</p>' for n in c["notes"])
-    evidence = "".join(f"<li>{_h(_evidence(e))}</li>" for e in c["events"])
+        f'<a href="#{anchors[r]}">{html_text(r)}</a>' if r in anchors else html_text(r)
+        for r in c["related"]
+    ) + html_text(_unlisted_related(c))
+    notes = "".join(f'<p class="note">{html_text(n)}</p>' for n in c["notes"])
+    evidence = "".join(f"<li>{html_text(_evidence(e))}</li>" for e in c["events"])
     return (
         f'<article class="change" id="c{index}" aria-labelledby="h{index}"><header>'
-        f'<h4 id="h{index}"><span class="id">{_h(c["id"])}</span>{_h(c["sentence"])}</h4>'
-        f'<div class="meta">{_h(_clock(c["time"]))} · {_h(c["computer"])} · '
-        f'<span class="tag">{_h(c["category"])}</span><span class="tag">{_h(c["action"])}</span>'
+        f'<h4 id="h{index}"><span class="id">{html_text(c["id"])}</span>'
+        f"{html_text(c['sentence'])}</h4>"
+        f'<div class="meta">{html_text(_clock(c["time"]))} · {html_text(c["computer"])} · '
+        f'<span class="tag">{html_text(c["category"])}</span>'
+        f'<span class="tag">{html_text(c["action"])}</span>'
         f'</div></header><div class="body">'
         + (f'<dl class="d">{details}</dl>' if details else "")
-        + f"<p>{_h(c['origin']['statement'])}</p>"
+        + f"<p>{html_text(c['origin']['statement'])}</p>"
         + (f'<p class="small"><b>Related changes:</b> {related}</p>' if related else "")
         + notes
         + f"<details><summary>Evidence ({len(c['events'])} events)</summary>"
@@ -613,9 +607,10 @@ def _h_change(c: dict[str, Any], index: int, anchors: dict[str, str], *, shorten
 
 def _h_notice(n: dict[str, Any], *, shorten: bool) -> str:
     return (
-        f"<li><b>{_h(n['kind'])}</b> at {_h(n['time'])} on {_h(n['computer'])}: "
-        f"{_h(_shorten(n['text'], shorten=shorten))} By {_h(n['actor']['display'])}. "
-        f'<span class="muted small">{_h(_evidence(n["event"]))}</span></li>'
+        f"<li><b>{html_text(n['kind'])}</b> at {html_text(n['time'])} "
+        f"on {html_text(n['computer'])}: "
+        f"{html_text(_shorten(n['text'], shorten=shorten))} By {html_text(n['actor']['display'])}. "
+        f'<span class="muted small">{html_text(_evidence(n["event"]))}</span></li>'
     )
 
 
@@ -626,13 +621,13 @@ def _h_completeness(report: Report, *, shorten: bool) -> str:
         '<h2 id="completeness">Completeness</h2>',
         (
             f'<p class="state {state}" role="status"><span class="word">{icon} '
-            f'{_STATE_WORDS[state]}</span><span class="t">{_h(text)}</span></p>'
+            f'{_STATE_WORDS[state]}</span><span class="t">{html_text(text)}</span></p>'
         ),
     ]
     warnings, infos = _split_notices(report)
     if warnings:
         extra = (
-            f"<li>{_h(_more(len(warnings), _limit(MAX_LISTED, shorten)))}</li>"
+            f"<li>{html_text(_more(len(warnings), _limit(MAX_LISTED, shorten)))}</li>"
             if len(warnings) > _limit(MAX_LISTED, shorten)
             else ""
         )
@@ -646,7 +641,7 @@ def _h_completeness(report: Report, *, shorten: bool) -> str:
         )
     if infos:
         extra = (
-            f"<li>{_h(_more(len(infos), _limit(MAX_INFO, shorten)))}</li>"
+            f"<li>{html_text(_more(len(infos), _limit(MAX_INFO, shorten)))}</li>"
             if len(infos) > _limit(MAX_INFO, shorten)
             else ""
         )
@@ -662,33 +657,33 @@ def _h_completeness(report: Report, *, shorten: bool) -> str:
     if coverage:
         rows = [
             (
-                _h(c["computer"]),
-                _h(c["channel"]),
-                _h(c["events"]),
-                _h(f"{c['first'] or ''} to {c['last'] or ''}" if c["first"] else "none"),
-                _h(_records(c)),
-                _h(c["continuity"]),
-                _h(c["scope"]),
-                _h(_ranges(c["missing"])),
-                _h(_shorten(c["statement"], shorten=shorten)),
+                html_text(c["computer"]),
+                html_text(c["channel"]),
+                html_text(c["events"]),
+                html_text(f"{c['first'] or ''} to {c['last'] or ''}" if c["first"] else "none"),
+                html_text(_records(c)),
+                html_text(c["continuity"]),
+                html_text(c["scope"]),
+                html_text(_ranges(c["missing"])),
+                html_text(_shorten(c["statement"], shorten=shorten)),
             )
             for c in coverage[: _limit(MAX_ROWS, shorten)]
         ]
         parts.append(_table("What each log holds", COVERAGE_HEAD_HTML, rows))
         if len(coverage) > _limit(MAX_ROWS, shorten):
-            parts.append(f"<p>{_h(_more(len(coverage), _limit(MAX_ROWS, shorten)))}</p>")
+            parts.append(f"<p>{html_text(_more(len(coverage), _limit(MAX_ROWS, shorten)))}</p>")
     else:
         parts.append("<p>No events were read.</p>")
     problems = report["problems"]
     if problems:
         items = "".join(
-            f"<li><code>{_h(p['file'])}</code>, {_h(p['position'])}"
-            + (f", record {_h(p['record_id'])}" if p["record_id"] is not None else "")
-            + f": {_h(_shorten(p['reason'], shorten=shorten))}</li>"
+            f"<li><code>{html_text(p['file'])}</code>, {html_text(p['position'])}"
+            + (f", record {html_text(p['record_id'])}" if p["record_id"] is not None else "")
+            + f": {html_text(_shorten(p['reason'], shorten=shorten))}</li>"
             for p in problems[: _limit(MAX_LISTED, shorten)]
         )
         extra = (
-            f"<li>{_h(_more(len(problems), _limit(MAX_LISTED, shorten)))}</li>"
+            f"<li>{html_text(_more(len(problems), _limit(MAX_LISTED, shorten)))}</li>"
             if len(problems) > _limit(MAX_LISTED, shorten)
             else ""
         )
@@ -710,7 +705,7 @@ def _h_summary(report: Report, *, shorten: bool) -> str:
     s = report["summary"]
     ev = s["events"]
     cards = "".join(
-        f'<div class="cardn"><b>{_h(n)}</b><span>{_h(label)}</span></div>'
+        f'<div class="cardn"><b>{html_text(n)}</b><span>{html_text(label)}</span></div>'
         for n, label in (
             (s["changes"], "changes"),
             (s["notices"]["warning"], "warning notices"),
@@ -724,21 +719,21 @@ def _h_summary(report: Report, *, shorten: bool) -> str:
     parts = ['<h2 id="summary">Summary</h2>', f'<div class="cards">{cards}</div>']
     if s["changes"]:
         parts.append(
-            f"<p>First change {_h(s['first_change'])}, last {_h(s['last_change'])}. "
-            f"{_h(_span(report))}</p>"
+            f"<p>First change {html_text(s['first_change'])}, last {html_text(s['last_change'])}. "
+            f"{html_text(_span(report))}</p>"
         )
         parts.append(
             _table(
                 "Changes by category",
                 ("Category", "Changes"),
-                [(_h(k), _h(v)) for k, v in s["by_category"].items()],
+                [(html_text(k), html_text(v)) for k, v in s["by_category"].items()],
             )
         )
         parts.append(
             _table(
                 "Changes by action",
                 ("Action", "Changes"),
-                [(_h(k), _h(v)) for k, v in s["by_action"].items()],
+                [(html_text(k), html_text(v)) for k, v in s["by_action"].items()],
             )
         )
         actors = s["actors"][: _limit(MAX_ACTORS_SHOWN, shorten)]
@@ -746,13 +741,16 @@ def _h_summary(report: Report, *, shorten: bool) -> str:
             _table(
                 "Most active actors",
                 ("Actor", "SID", "Changes"),
-                [(_h(a["name"]), _h(a["sid"] or ""), _h(a["changes"])) for a in actors],
+                [
+                    (html_text(a["name"]), html_text(a["sid"] or ""), html_text(a["changes"]))
+                    for a in actors
+                ],
             )
         )
         if len(s["actors"]) > len(actors):
-            parts.append(f"<p>{_h(_more(len(s['actors']), len(actors)))}</p>")
+            parts.append(f"<p>{html_text(_more(len(s['actors']), len(actors)))}</p>")
     else:
-        parts.append(f"<p>{_h(_span(report))}</p>")
+        parts.append(f"<p>{html_text(_span(report))}</p>")
     return "".join(parts)
 
 
@@ -768,7 +766,7 @@ def render_html(report: Report, *, shorten: bool = True) -> str:
     days = _by_day(report)
     if days:
         jump = " ".join(
-            f'<a href="#day{i}">{_h(day)} ({len(items)})</a>'
+            f'<a href="#day{i}">{html_text(day)} ({len(items)})</a>'
             for i, (day, items) in enumerate(days, start=1)
         )
         sections = []
@@ -780,8 +778,8 @@ def render_html(report: Report, *, shorten: bool = True) -> str:
                 cards.append(_h_change(c, counter, anchors, shorten=shorten))
             sections.append(
                 f'<section aria-labelledby="dayh{i}"><h3 id="day{i}"><span id="dayh{i}">'
-                f"{_h(day)} (UTC)</span> "
-                f'<span class="muted small">{_plural(len(items), "change")}</span></h3>'
+                f"{html_text(day)} (UTC)</span> "
+                f'<span class="muted small">{plural(len(items), "change")}</span></h3>'
                 + "".join(cards)
                 + "</section>"
             )
@@ -792,7 +790,7 @@ def render_html(report: Report, *, shorten: bool = True) -> str:
     other = ""
     if others:
         rows = [
-            (_h(o["channel"]), _h(o["event_id"]), _h(o["count"]))
+            (html_text(o["channel"]), html_text(o["event_id"]), html_text(o["count"]))
             for o in others[: _limit(MAX_ROWS, shorten)]
         ]
         other = (
@@ -800,7 +798,7 @@ def render_html(report: Report, *, shorten: bool = True) -> str:
             "changes toledot describes.</p>"
             + _table("Other events read", ("Log", "Event ID", "Count"), rows)
             + (
-                f"<p>{_h(_more(len(others), _limit(MAX_ROWS, shorten)))}</p>"
+                f"<p>{html_text(_more(len(others), _limit(MAX_ROWS, shorten)))}</p>"
                 if len(others) > _limit(MAX_ROWS, shorten)
                 else ""
             )
@@ -810,18 +808,18 @@ def render_html(report: Report, *, shorten: bool = True) -> str:
         ("File", "Format", "Scope", "Bytes", "SHA-256"),
         [
             (
-                _h(i["name"]),
-                _h(i["format"]),
-                _h(i["scope"]),
-                _h(i["size"]),
-                f"<code>{_h(i['sha256'])}</code>",
+                html_text(i["name"]),
+                html_text(i["format"]),
+                html_text(i["scope"]),
+                html_text(i["size"]),
+                f"<code>{html_text(i['sha256'])}</code>",
             )
             for i in report["inputs"]
         ],
     )
-    limits = "".join(f"<li>{_h(item)}</li>" for item in report["limitations"])
+    limits = "".join(f"<li>{html_text(item)}</li>" for item in report["limitations"])
     _, text = headline(report)
-    version = _h(report["tool"]["version"])
+    version = html_text(report["tool"]["version"])
     nav = (
         '<a href="#completeness">Completeness</a><a href="#summary">Summary</a>'
         '<a href="#changes">Changes by day</a>'
@@ -844,8 +842,8 @@ def render_html(report: Report, *, shorten: bool = True) -> str:
 <main id="main">
 <header>
 <h1>{TITLE}</h1>
-<p class="muted">Generated {_h(report["generated_at"])} by toledot {version}. \
-{_h(_span(report))} All times are UTC.</p>
+<p class="muted">Generated {html_text(report["generated_at"])} by toledot {version}. \
+{html_text(_span(report))} All times are UTC.</p>
 </header>
 {_h_completeness(report, shorten=shorten)}
 {_h_summary(report, shorten=shorten)}
@@ -856,7 +854,7 @@ def render_html(report: Report, *, shorten: bool = True) -> str:
 {inputs}
 <h2 id="limitations">Limitations</h2>
 <ul class="list">{limits}</ul>
-<footer class="muted small">{_h(text)}</footer>
+<footer class="muted small">{html_text(text)}</footer>
 </main>
 </body>
 </html>

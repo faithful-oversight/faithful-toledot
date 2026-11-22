@@ -19,7 +19,8 @@ import re
 from datetime import UTC, datetime, timedelta, timezone
 from typing import TYPE_CHECKING, TypeVar
 
-from faithful_toledot.clock import date_and_time
+from faithful_core.clock import date_and_time
+
 from faithful_toledot.errors import InputError
 
 if TYPE_CHECKING:

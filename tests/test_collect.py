@@ -19,10 +19,13 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from faithful_core.collect import secrets, winrm
+from faithful_core.collect.winrm import Target
+from faithful_core.exitcodes import ExitCode
 
-from faithful_toledot.cli import ExitCode, main
-from faithful_toledot.collect import names, remote, script, secrets
-from faithful_toledot.collect.remote import Target, collect, parameters, settings
+from faithful_toledot.cli import main
+from faithful_toledot.collect import remote, script
+from faithful_toledot.collect.remote import collect, parameters
 from faithful_toledot.errors import CollectionError
 from faithful_toledot.events import Event, Problem, ReadOptions
 from faithful_toledot.formats import bundle
@@ -47,88 +50,6 @@ GOOD = encode(
 )
 LINES = GOOD.decode("ascii").splitlines()
 RUNNING, COMPLETED, FAILED = 1, 4, 5
-
-
-# --- names ------------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("server", "problem"),
-    [
-        ("10.0.0.5", "is an IP address"),
-        ("[fe80::1]", "is an IP address"),
-        ("dc01", "not a fully qualified DNS name"),
-        ("dc01.corp.example/x", "not a fully qualified DNS name"),
-        ("u:p@dc01.corp.example", "not a fully qualified DNS name"),
-        ("-dc.corp.example", "not a fully qualified DNS name"),
-        ("dc01.10", "not a fully qualified DNS name"),
-        ("a" * 64 + ".corp.example", "not a fully qualified DNS name"),
-        ("a." * 127 + "example", "not a fully qualified DNS name"),
-    ],
-)
-def test_server_must_be_a_dns_name(server: str, problem: str) -> None:
-    with pytest.raises(CollectionError, match=problem):
-        names.server_name(server)
-
-
-def test_server_names_and_usernames_that_are_accepted() -> None:
-    assert names.server_name("DC01.Corp.Example.") == "DC01.Corp.Example"
-    assert names.account_name("CORP\\auditor") == "CORP\\auditor"
-    assert names.account_name("auditor@corp.example") == "corp.example\\auditor"
-    assert names.account_name(None) is None
-
-
-@pytest.mark.parametrize(
-    "username", ["auditor", "\\auditor", "CORP\\", "@corp.example", "C\\a:b", "C\\u\n"]
-)
-def test_a_username_needs_a_domain(username: str) -> None:
-    with pytest.raises(CollectionError, match="must be DOMAIN"):
-        names.account_name(username)
-
-
-# --- transport settings -----------------------------------------------------------------
-
-
-def test_https_always_verifies_the_certificate(tmp_path: Path) -> None:
-    values = settings(TARGET)
-    assert (values["ssl"], values["port"], values["cert_validation"], values["encryption"]) == (
-        True, 5986, True, "auto",
-    )  # fmt: skip
-    ca = tmp_path / "corp-ca.pem"
-    with_ca = settings(replace(TARGET, ca_file=ca, port=443))
-    assert (with_ca["cert_validation"], with_ca["port"]) == (str(ca), 443)
-
-
-@pytest.mark.parametrize("auth", remote.AUTHS)
-def test_http_is_used_only_with_message_encryption(auth: str) -> None:
-    values = settings(replace(TARGET, auth=auth, transport="http"))
-    assert (values["ssl"], values["port"], values["encryption"]) == (False, 5985, "always")
-
-
-@pytest.mark.parametrize(
-    ("changes", "problem"),
-    [
-        ({"auth": "basic"}, "--auth must be one of"),
-        ({"auth": "credssp"}, "--auth must be one of"),
-        ({"transport": "ftp"}, "--auth must be one of"),
-        ({"transport": "http", "ca_file": "x.pem"}, "--ca-file applies to https only"),
-    ],
-)
-def test_insecure_combinations_are_refused(changes: dict[str, Any], problem: str) -> None:
-    with pytest.raises(CollectionError, match=problem):
-        settings(replace(TARGET, **changes))
-
-
-@pytest.mark.parametrize(("transport", "wrapped"), [("https", False), ("http", True)])
-def test_the_settings_reach_the_real_transport(transport: str, *, wrapped: bool) -> None:
-    """The real pypsrp transport keeps verification on and wraps plain HTTP."""
-    wsman_module = pytest.importorskip("pypsrp.wsman")
-    wsman = wsman_module.WSMan(**settings(replace(TARGET, transport=transport, auth="ntlm")))
-    transport_object = wsman.transport
-    assert transport_object.cert_validation is True
-    assert transport_object.ssl is (transport == "https")
-    assert transport_object.wrap_required is wrapped
-    assert transport_object.endpoint.startswith(f"{transport}://{SERVER}:")
 
 
 def test_script_parameters() -> None:
@@ -203,7 +124,7 @@ class Remote:
                 pass
 
             def poll_invoke(self, timeout: int) -> None:
-                assert timeout == remote.POLL_SECONDS
+                assert timeout == winrm.POLL_SECONDS
                 if remote_side.batches:
                     self.output.extend(remote_side.batches.pop(0))
                 if not remote_side.batches:
@@ -221,7 +142,7 @@ class Remote:
 @pytest.fixture
 def fake(monkeypatch: pytest.MonkeyPatch) -> Remote:
     side = Remote([LINES[:2], [], LINES[2:]])
-    monkeypatch.setattr(remote, "_client", side.classes)
+    monkeypatch.setattr(winrm, "client", lambda _hint: side.classes())
     return side
 
 
@@ -538,31 +459,18 @@ def test_an_unwritable_folder_is_reported(tmp_path: Path) -> None:
         run(tmp_path / "missing" / "e.jsonl")
 
 
-def test_pypsrp_missing_says_how_to_install(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pypsrp_missing_says_how_to_install_toledot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setitem(sys.modules, "pypsrp.wsman", None)
+    out = tmp_path / "e.jsonl"
     with pytest.raises(CollectionError) as caught:
-        remote._client()  # noqa: SLF001 - the import boundary itself
+        run(out)
     message = str(caught.value)
     # pipx refuses a plain install over an installed toledot, so the pipx form has --force.
     assert 'pipx install --force "faithful-toledot[live]"' in message
     assert '(or, with pip, pip install "faithful-toledot[live]")' in message
-
-
-def test_the_install_hint_names_every_extra_and_points_to_pypi() -> None:
-    hint = names.install_hint("live", "vault")
-    assert hint == (
-        'pipx install --force "faithful-toledot[live,vault]" '
-        '(or, with pip, pip install "faithful-toledot[live,vault]")'
-    )
-    assert "git+" not in hint
-
-
-def test_the_real_client_classes_load() -> None:
-    pytest.importorskip("pypsrp")
-    wsman, pool, shell, running = remote._client()  # noqa: SLF001
-    assert (wsman.__name__, pool.__name__, shell.__name__, running) == (
-        "WSMan", "RunspacePool", "PowerShell", RUNNING,
-    )  # fmt: skip
+    assert leftovers(tmp_path) == []
 
 
 # --- the commands -----------------------------------------------------------------------
@@ -576,7 +484,9 @@ def collect_args(out: Path, *extra: str) -> list[str]:
 def fetched(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     calls: list[str] = []
 
-    def resolve(reference: str) -> str:
+    def resolve(reference: str, *, hint: Any, keep: tuple[str, ...] = ()) -> str:
+        assert callable(hint)
+        assert keep == ("live",)
         calls.append(reference)
         return SECRET
 
@@ -669,6 +579,18 @@ def test_collect_runs_and_says_what_to_do_next(
     assert "not read: the System log: Access is denied." in printed
     assert "toledot report" in printed
     assert "'" in printed or '"' in printed  # the path with a space is quoted
+
+
+def test_a_missing_secret_provider_package_says_how_to_install_toledot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setitem(sys.modules, "keyring", None)
+    args = collect_args(
+        tmp_path / "e.jsonl", "--username", "CORP\\auditor", "--secret", "keyring:svc/auditor"
+    )
+    assert main(args) == ExitCode.INPUT_ERROR
+    # The hint keeps the extra remote collection needs, or pipx --force would drop it.
+    assert 'pipx install --force "faithful-toledot[live,keyring]"' in capsys.readouterr().err
 
 
 @pytest.mark.usefixtures("fetched")

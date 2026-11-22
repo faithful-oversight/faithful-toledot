@@ -21,6 +21,13 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 uv venv --quiet "$work/venv"
+# The wheel's own runtime dependencies come from the lock file, with their hashes, so the
+# smoke test runs what the checks locked and not whatever the index holds today. The wheel
+# itself is then installed without resolving anything.
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+uv export --quiet --locked --no-dev --no-emit-project --format requirements-txt \
+  --project "$root" > "$work/runtime.txt"
+uv pip install --quiet --python "$work/venv" --require-hashes -r "$work/runtime.txt"
 uv pip install --quiet --python "$work/venv" --no-deps "${wheels[0]}"
 if [[ -x "$work/venv/bin/toledot" ]]; then
   tool="$work/venv/bin/toledot"
