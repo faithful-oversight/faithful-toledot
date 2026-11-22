@@ -901,7 +901,7 @@ wheels = [
 
 [[package]]
 name = "faithful-toledot"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "faithful-core" },
