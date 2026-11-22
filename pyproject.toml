@@ -28,7 +28,7 @@ classifiers = [
   "Topic :: System :: Systems Administration",
   "Typing :: Typed",
 ]
-dependencies = ["faithful-core==0.1.0"]
+dependencies = ["faithful-core==0.1.1"]
 
 [project.optional-dependencies]
 # Remote collection over PowerShell remoting. Reading files needs only faithful-core.

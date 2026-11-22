@@ -892,11 +892,11 @@ wheels = [
 
 [[package]]
 name = "faithful-core"
-version = "0.1.0"
+version = "0.1.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/fe/3d/903219f78fdd4a7eeac69c978dc8d159241585fa64a40c9dbf942b9bc405/faithful_core-0.1.0.tar.gz", hash = "sha256:a9d6f38991635a85dde8e0e804ec38146ed405aed515f62e54f2b88473895791", size = 117817, upload-time = "2026-11-21T23:04:17.087Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cc/e9/aab9aab1c9f1be08072259ec5231e7c8695ac5e4064e1bcb759c593a9d30/faithful_core-0.1.1.tar.gz", hash = "sha256:ce6b8394d3f420fd89e6f0fdfb58ff67a7c9e0a269dce43d45c58ff844b45e73", size = 118753, upload-time = "2026-11-22T01:11:27.973Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8d/d3/853579ce8b1ca92dc356be0d7de938ecc13abb135d270493668f312da262/faithful_core-0.1.0-py3-none-any.whl", hash = "sha256:da69af97621c97ffba442e273423e79e450927d7881461de468241b1594f958f", size = 35053, upload-time = "2026-11-21T23:04:15.882Z" },
+    { url = "https://files.pythonhosted.org/packages/e7/90/9c9b5809b72ebdb979e91013dd2801160ff70c76849f641c032a2e4d90bb/faithful_core-0.1.1-py3-none-any.whl", hash = "sha256:cee47156e836319002d043bc9d6d4ba2a8cb8f49cd39438a1381cadb183efddd", size = 35281, upload-time = "2026-11-22T01:11:26.846Z" },
 ]
 
 [[package]]
@@ -958,7 +958,7 @@ requires-dist = [
     { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.19" },
     { name = "azure-keyvault-secrets", marker = "extra == 'azure'", specifier = ">=4.9" },
     { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.35" },
-    { name = "faithful-core", specifier = "==0.1.0" },
+    { name = "faithful-core", specifier = "==0.1.1" },
     { name = "hvac", marker = "extra == 'vault'", specifier = ">=2.3" },
     { name = "keyring", marker = "extra == 'keyring'", specifier = ">=25" },
     { name = "pypsrp", marker = "extra == 'live'", specifier = ">=0.8" },
