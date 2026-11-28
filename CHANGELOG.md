@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- `AGENTS.md` now names Grok as a second independent reviewer beside ChatGPT, with its own finding IDs (`G<round>`). It also says a pull request is ready when the owner is satisfied with the results of the review waves.
+
 ## [0.1.2] - 2026-11-21
 
 ### Changed
